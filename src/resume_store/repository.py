@@ -187,6 +187,19 @@ class ResumeRepository:
         resume = ResumeSchema.from_mongodb_dict(doc)
         return self._to_response(resume)
 
+    def find_by_filename(self, file_name: str):
+        """通过文件名查找简历（用于 pipeline 脚本）"""
+        from typing import Optional as _Opt
+        collection = self._get_collection()
+        doc = collection.find_one({
+            "source_file_name": file_name,
+            "status": ResumeStatus.ACTIVE.value,
+        })
+        if not doc:
+            return None
+        resume = ResumeSchema.from_mongodb_dict(doc)
+        return self._to_response(resume)
+
     def list(
         self,
         user_id: str,

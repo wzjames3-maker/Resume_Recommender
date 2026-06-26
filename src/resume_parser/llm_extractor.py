@@ -22,7 +22,7 @@ from src.resume_store.models import (
 logger = get_logger("llm_extractor")
 
 DEFAULT_TIMEOUT = 60
-MAX_RETRIES = 2
+MAX_RETRIES = 0
 RETRY_DELAY = 2
 
 
@@ -73,7 +73,7 @@ _EXTRACT_JSON_SCHEMA = """{
      "description": "描述", "tech_stack": ["技术"]}
   ],
   "skill_list": [
-    {"name": "技能名", "level": "精通/熟练/了解", "years": 3, "category": "分类"}
+    {"name": "技能名", "proficiency": "精通/熟练/了解", "years_of_experience": 3, "category": "分类"}
   ],
   "confidence_score": 0.8
 }"""
@@ -194,7 +194,7 @@ class LLMExtractor:
         edus = [EducationEntry(**e) for e in raw.get("education_list", [])]
         exps = [ExperienceEntry(**e) for e in raw.get("experience_list", [])]
         projs = [ProjectEntry(**p) for p in raw.get("project_list", [])]
-        skills = [SkillEntry(**s) for s in raw.get("skill_list", [])]
+        skills = [SkillEntry(**{("years_of_experience" if k == "years" else "proficiency" if k == "level" else k): v for k, v in s.items()}) for s in raw.get("skill_list", [])]
         return ResumeStructured(
             personal_info=pi, education_list=edus, experience_list=exps,
             project_list=projs, skill_list=skills,

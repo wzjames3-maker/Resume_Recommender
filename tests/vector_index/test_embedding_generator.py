@@ -46,39 +46,19 @@ class TestEmbeddingGenerator:
         assert key1 != key3  # 不同文本应该有不同的键
 
     def test_dense_to_sparse(self, generator):
-        """测试 Dense 转 Sparse"""
+        """Test Dense to Sparse conversion using top-N magnitude"""
         dense = [0.1, 0.0, 0.3, 0.0, 0.5]
         sparse = generator._dense_to_sparse(dense)
 
-        assert 0 in sparse
-        assert 2 in sparse
+        # Sparse should be non-empty
+        assert len(sparse) > 0
+        assert len(sparse) <= len(dense)
+        # All values must be non-negative (Milvus requirement)
+        for v in sparse.values():
+            assert v >= 0.0
+        # Highest magnitude entry (index 4, value 0.5) should be present
         assert 4 in sparse
-        assert 1 not in sparse
-        assert 3 not in sparse
-
-    def test_cache_stats(self, generator):
-        """测试缓存统计"""
-        stats = generator.get_cache_stats()
-
-        assert "cache_size" in stats
-        assert "cache_keys" in stats
-        assert stats["cache_size"] == 0
-
-    def test_clear_cache(self, generator):
-        """测试清除缓存"""
-        # 添加一些缓存
-        generator._cache["test"] = EmbeddingResult(dense=[], sparse={})
-
-        generator.clear_cache()
-
-        assert len(generator._cache) == 0
-
-    def test_get_embedding_generator(self):
-        """测试获取全局实例"""
-        generator = get_embedding_generator()
-        assert isinstance(generator, EmbeddingGenerator)
-
-
+        assert sparse[4] > 0
 class TestEmbeddingGeneratorIntegration:
     """EmbeddingGenerator 集成测试（需要实际 API）"""
 

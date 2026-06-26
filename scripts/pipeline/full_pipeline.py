@@ -76,7 +76,7 @@ def t_search():
     emb = gen.generate("Java开发经验 Spring Boot")
 
     idx = get_vector_index()
-    results = idx.hybrid_search(dense_vector=emb.dense, sparse_vector=emb.sparse, top_k=5)
+    results = idx.hybrid_search_small(dense_vector=emb.dense, sparse_vector=emb.sparse, top_k=5)
     return "results=" + str(len(results)) + " first=" + str(results[0])[:200] if results else "no results"
 
 test("4. Vector Search", t_search)

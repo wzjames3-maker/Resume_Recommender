@@ -1,0 +1,645 @@
+{
+  "generated_at": "2026-06-26T16:49:03.735850",
+  "total_queries": 21,
+  "aggregate_metrics": {
+    "avg_recall@1": 0.1429,
+    "max_recall@1": 1.0,
+    "avg_precision@1": 0.1429,
+    "max_precision@1": 1.0,
+    "avg_recall@3": 0.2381,
+    "max_recall@3": 1.0,
+    "avg_precision@3": 0.0794,
+    "max_precision@3": 0.3333,
+    "avg_recall@5": 0.3333,
+    "max_recall@5": 1.0,
+    "avg_precision@5": 0.0667,
+    "max_precision@5": 0.2,
+    "avg_recall@10": 0.4762,
+    "max_recall@10": 1.0,
+    "avg_precision@10": 0.0487,
+    "max_precision@10": 0.1111,
+    "avg_recall@20": 0.5238,
+    "max_recall@20": 1.0,
+    "avg_precision@20": 0.0441,
+    "max_precision@20": 0.1111,
+    "avg_mrr": 0.2282,
+    "max_mrr": 1.0,
+    "avg_ndcg@10": 0.3247,
+    "max_ndcg@10": 1.0
+  },
+  "by_query_type": {
+    "years_only": {
+      "count": 8,
+      "avg_recall@5": 0.375,
+      "avg_recall@10": 0.625,
+      "avg_mrr": 0.2156,
+      "avg_ndcg@10": 0.3513
+    },
+    "skill": {
+      "count": 7,
+      "avg_recall@5": 0.5714,
+      "avg_recall@10": 0.5714,
+      "avg_mrr": 0.4048,
+      "avg_ndcg@10": 0.4835
+    },
+    "skill+years": {
+      "count": 3,
+      "avg_recall@5": 0.0,
+      "avg_recall@10": 0.3333,
+      "avg_mrr": 0.0779,
+      "avg_ndcg@10": 0.1353
+    },
+    "job_title": {
+      "count": 1,
+      "avg_recall@5": 0.0,
+      "avg_recall@10": 0.0,
+      "avg_mrr": 0.0,
+      "avg_ndcg@10": 0.082
+    },
+    "job_title+city": {
+      "count": 1,
+      "avg_recall@5": 0.0,
+      "avg_recall@10": 0.0,
+      "avg_mrr": 0.0,
+      "avg_ndcg@10": 0.082
+    },
+    "combined": {
+      "count": 1,
+      "avg_recall@5": 0.0,
+      "avg_recall@10": 0.0,
+      "avg_mrr": 0.0,
+      "avg_ndcg@10": 0.0551
+    }
+  },
+  "per_query": [
+    {
+      "query": "找5年工作经验",
+      "retrieved": [
+        "0d0ce106c131",
+        "t5-resume",
+        "0c0a2519adff",
+        "0a2df74bbc31",
+        "0ac186229aa0",
+        "0dbadf51adb4",
+        "0dedfe53f7ac",
+        "0ebd6cfd45fa",
+        "0d099f8b9a7a",
+        "0a795895e08a"
+      ],
+      "relevant": [
+        [
+          "0a2df74bbc31",
+          1.0
+        ],
+        [
+          "0a795895e08a",
+          0.2
+        ],
+        [
+          "0d0ce106c131",
+          0.2
+        ],
+        [
+          "0f5198167eeb",
+          0.1
+        ]
+      ]
+    },
+    {
+      "query": "找5年工作经验",
+      "retrieved": [
+        "0d0ce106c131",
+        "t5-resume",
+        "0c0a2519adff",
+        "0a2df74bbc31",
+        "0ac186229aa0",
+        "0dbadf51adb4",
+        "0dedfe53f7ac",
+        "0ebd6cfd45fa",
+        "0d099f8b9a7a",
+        "0a795895e08a"
+      ],
+      "relevant": [
+        [
+          "0a795895e08a",
+          1.0
+        ],
+        [
+          "0a2df74bbc31",
+          0.2
+        ],
+        [
+          "0d0ce106c131",
+          0.2
+        ],
+        [
+          "0f5198167eeb",
+          0.1
+        ]
+      ]
+    },
+    {
+      "query": "找会全国计算机二级(C语言) 大学英语4级（CET4） 信息安全工程师（软考中级）的候选人",
+      "retrieved": [
+        "0c8b004b8b4b",
+        "0b3915da3907",
+        "0e19830f79a6",
+        "0d099f8b9a7a",
+        "0c9c7d0b1170",
+        "0dbadf51adb4",
+        "0dedfe53f7ac",
+        "0c0a2519adff",
+        "0ac186229aa0"
+      ],
+      "relevant": [
+        [
+          "0b3915da3907",
+          1.0
+        ],
+        [
+          "0e19830f79a6",
+          0.3
+        ]
+      ]
+    },
+    {
+      "query": "找会视频拍摄 视频剪辑 特效合成的候选人",
+      "retrieved": [
+        "0ba6300a26c5",
+        "0c9c7d0b1170",
+        "0d099f8b9a7a",
+        "0ac186229aa0",
+        "0c0a2519adff",
+        "0dedfe53f7ac",
+        "0dbadf51adb4",
+        "0a2df74bbc31",
+        "t5-resume",
+        "0a795895e08a"
+      ],
+      "relevant": [
+        [
+          "0ba6300a26c5",
+          1.0
+        ]
+      ]
+    },
+    {
+      "query": "找8年以上视频拍摄 视频剪辑 特效合成经验",
+      "retrieved": [
+        "0c9c7d0b1170",
+        "0cefc2f0cccf",
+        "0c0d1adb4698",
+        "0ebd6cfd45fa",
+        "0d28f1a59e01",
+        "0e338a49c435",
+        "0ba6300a26c5",
+        "0f5198167eeb",
+        "0d0ce106c131",
+        "0cb1f40caf07"
+      ],
+      "relevant": [
+        [
+          "0ba6300a26c5",
+          1.0
+        ]
+      ]
+    },
+    {
+      "query": "找8年工作经验",
+      "retrieved": [
+        "0d0ce106c131",
+        "0c0a2519adff",
+        "0a2df74bbc31",
+        "t5-resume",
+        "0ac186229aa0",
+        "0dbadf51adb4",
+        "0dedfe53f7ac",
+        "0ebd6cfd45fa",
+        "0c9c7d0b1170",
+        "0d2cce6f0de6"
+      ],
+      "relevant": [
+        [
+          "0ba6300a26c5",
+          1.0
+        ]
+      ]
+    },
+    {
+      "query": "找会Python Java SQL的候选人",
+      "retrieved": [
+        "0c0a2519adff",
+        "0dbadf51adb4",
+        "0ac186229aa0",
+        "0d0ce106c131",
+        "0dedfe53f7ac",
+        "0d099f8b9a7a",
+        "0a2df74bbc31",
+        "t5-resume",
+        "0a795895e08a",
+        "0c9c7d0b1170"
+      ],
+      "relevant": [
+        [
+          "0c0d1adb4698",
+          1.0
+        ],
+        [
+          "0f5198167eeb",
+          0.14
+        ]
+      ]
+    },
+    {
+      "query": "找13年以上Python Java SQL经验",
+      "retrieved": [
+        "0d0ce106c131",
+        "0e19830f79a6",
+        "t5-resume",
+        "0a2df74bbc31",
+        "0ebd6cfd45fa",
+        "0dedfe53f7ac",
+        "0d6efd507554",
+        "0ac4e25ad645",
+        "0bc0a0dc8a03",
+        "0cefc2f0cccf"
+      ],
+      "relevant": [
+        [
+          "0c0d1adb4698",
+          1.0
+        ],
+        [
+          "0f5198167eeb",
+          0.14
+        ]
+      ]
+    },
+    {
+      "query": "找13年工作经验",
+      "retrieved": [
+        "0d0ce106c131",
+        "t5-resume",
+        "0c0a2519adff",
+        "0a2df74bbc31",
+        "0ac186229aa0",
+        "0dedfe53f7ac",
+        "0dbadf51adb4",
+        "0ebd6cfd45fa",
+        "0b5233e7a638",
+        "0bc0a0dc8a03"
+      ],
+      "relevant": [
+        [
+          "0c0d1adb4698",
+          1.0
+        ],
+        [
+          "0f5198167eeb",
+          0.14
+        ]
+      ]
+    },
+    {
+      "query": "找会全国计算机等级考试 数据库简单维护 软件开发工程师证的候选人",
+      "retrieved": [
+        "0d099f8b9a7a",
+        "0c8b004b8b4b",
+        "0b3915da3907",
+        "0e19830f79a6",
+        "0c0a2519adff",
+        "0dbadf51adb4",
+        "0ac186229aa0",
+        "0dedfe53f7ac",
+        "0d0ce106c131",
+        "t5-resume"
+      ],
+      "relevant": [
+        [
+          "0d099f8b9a7a",
+          1.0
+        ],
+        [
+          "0d578da00cfb",
+          0.3
+        ]
+      ]
+    },
+    {
+      "query": "找5年工作经验",
+      "retrieved": [
+        "0d0ce106c131",
+        "t5-resume",
+        "0c0a2519adff",
+        "0a2df74bbc31",
+        "0ac186229aa0",
+        "0dbadf51adb4",
+        "0dedfe53f7ac",
+        "0ebd6cfd45fa",
+        "0d099f8b9a7a",
+        "0a795895e08a"
+      ],
+      "relevant": [
+        [
+          "0d0ce106c131",
+          1.0
+        ],
+        [
+          "0a2df74bbc31",
+          0.2
+        ],
+        [
+          "0a795895e08a",
+          0.2
+        ],
+        [
+          "0f5198167eeb",
+          0.1
+        ]
+      ]
+    },
+    {
+      "query": "找会全国计算机等级考试 数据库简单维护 软件开发工程师证的候选人",
+      "retrieved": [
+        "0d099f8b9a7a",
+        "0c8b004b8b4b",
+        "0b3915da3907",
+        "0e19830f79a6",
+        "0c0a2519adff",
+        "0dbadf51adb4",
+        "0ac186229aa0",
+        "0dedfe53f7ac",
+        "0d0ce106c131",
+        "t5-resume"
+      ],
+      "relevant": [
+        [
+          "0d578da00cfb",
+          1.0
+        ],
+        [
+          "0d099f8b9a7a",
+          0.3
+        ]
+      ]
+    },
+    {
+      "query": "找2年工作经验",
+      "retrieved": [
+        "0c0a2519adff",
+        "0d099f8b9a7a",
+        "0d0ce106c131",
+        "0dbadf51adb4",
+        "0a2df74bbc31",
+        "t5-resume",
+        "0ac186229aa0",
+        "0dedfe53f7ac",
+        "0ebd6cfd45fa",
+        "0e19830f79a6"
+      ],
+      "relevant": [
+        [
+          "0dbadf51adb4",
+          1.0
+        ],
+        [
+          "0dedfe53f7ac",
+          0.1
+        ]
+      ]
+    },
+    {
+      "query": "找2年工作经验",
+      "retrieved": [
+        "0c0a2519adff",
+        "0d099f8b9a7a",
+        "0d0ce106c131",
+        "0dbadf51adb4",
+        "0a2df74bbc31",
+        "t5-resume",
+        "0ac186229aa0",
+        "0dedfe53f7ac",
+        "0ebd6cfd45fa",
+        "0e19830f79a6"
+      ],
+      "relevant": [
+        [
+          "0dedfe53f7ac",
+          1.0
+        ],
+        [
+          "0dbadf51adb4",
+          0.1
+        ]
+      ]
+    },
+    {
+      "query": "找会全国计算机二级(C语言) 大学英语4级（CET4） 信息安全工程师（软考中级）的候选人",
+      "retrieved": [
+        "0c8b004b8b4b",
+        "0b3915da3907",
+        "0e19830f79a6",
+        "0d099f8b9a7a",
+        "0c9c7d0b1170",
+        "0dbadf51adb4",
+        "0dedfe53f7ac",
+        "0c0a2519adff",
+        "0ac186229aa0"
+      ],
+      "relevant": [
+        [
+          "0e19830f79a6",
+          1.0
+        ],
+        [
+          "0b3915da3907",
+          0.3
+        ]
+      ]
+    },
+    {
+      "query": "找高级工程师",
+      "retrieved": [
+        "0d0ce106c131",
+        "0c0a2519adff",
+        "0c9c7d0b1170",
+        "0ac186229aa0",
+        "0d099f8b9a7a",
+        "0dedfe53f7ac",
+        "0b3915da3907",
+        "0c8b004b8b4b",
+        "0dbadf51adb4",
+        "t5-resume"
+      ],
+      "relevant": [
+        [
+          "0f5198167eeb",
+          1.0
+        ],
+        [
+          "0c0d1adb4698",
+          0.14
+        ],
+        [
+          "0a2df74bbc31",
+          0.1
+        ],
+        [
+          "0a795895e08a",
+          0.1
+        ],
+        [
+          "0d0ce106c131",
+          0.1
+        ]
+      ]
+    },
+    {
+      "query": "找北京的高级工程师",
+      "retrieved": [
+        "0d0ce106c131",
+        "0c0a2519adff",
+        "0bfdfb5cede0",
+        "0ac186229aa0",
+        "0c9c7d0b1170",
+        "0dedfe53f7ac",
+        "0d6efd507554",
+        "0cb1f40caf07",
+        "0cd92051a9b6",
+        "0d099f8b9a7a"
+      ],
+      "relevant": [
+        [
+          "0f5198167eeb",
+          1.0
+        ],
+        [
+          "0c0d1adb4698",
+          0.14
+        ],
+        [
+          "0a2df74bbc31",
+          0.1
+        ],
+        [
+          "0a795895e08a",
+          0.1
+        ],
+        [
+          "0d0ce106c131",
+          0.1
+        ]
+      ]
+    },
+    {
+      "query": "找会Java Spring Boot MySQL的候选人",
+      "retrieved": [
+        "0dedfe53f7ac",
+        "0d099f8b9a7a",
+        "0c0a2519adff",
+        "0dbadf51adb4",
+        "0ac186229aa0",
+        "0a2df74bbc31",
+        "t5-resume",
+        "0d0ce106c131",
+        "0a8de09be1dc",
+        "0e9182529e95"
+      ],
+      "relevant": [
+        [
+          "0f5198167eeb",
+          1.0
+        ],
+        [
+          "0c0d1adb4698",
+          0.14
+        ],
+        [
+          "0a2df74bbc31",
+          0.1
+        ],
+        [
+          "0a795895e08a",
+          0.1
+        ],
+        [
+          "0d0ce106c131",
+          0.1
+        ]
+      ]
+    },
+    {
+      "query": "找5年以上Java Spring Boot MySQL经验",
+      "retrieved": [
+        "0ebd6cfd45fa",
+        "0e19830f79a6",
+        "0d0ce106c131",
+        "t5-resume",
+        "0a2df74bbc31",
+        "0d6efd507554",
+        "0ac186229aa0",
+        "0c9c7d0b1170",
+        "0cd92051a9b6",
+        "0e9182529e95"
+      ],
+      "relevant": [
+        [
+          "0f5198167eeb",
+          1.0
+        ],
+        [
+          "0c0d1adb4698",
+          0.14
+        ],
+        [
+          "0a2df74bbc31",
+          0.1
+        ],
+        [
+          "0a795895e08a",
+          0.1
+        ],
+        [
+          "0d0ce106c131",
+          0.1
+        ]
+      ]
+    },
+    {
+      "query": "找高级工程师 要求Java Spring Boot",
+      "retrieved": [
+        "0d099f8b9a7a",
+        "0c0a2519adff",
+        "0c9c7d0b1170",
+        "0b3915da3907",
+        "0dedfe53f7ac",
+        "0a795895e08a",
+        "t5-resume",
+        "0a2df74bbc31",
+        "0ac186229aa0"
+      ],
+      "relevant": [
+        [
+          "0f5198167eeb",
+          1.0
+        ],
+        [
+          "0c0d1adb4698",
+          0.14
+        ],
+        [
+          "0a2df74bbc31",
+          0.1
+        ],
+        [
+          "0a795895e08a",
+          0.1
+        ],
+        [
+          "0d0ce106c131",
+          0.1
+        ]
+      ]
+    }
+  ]
+}

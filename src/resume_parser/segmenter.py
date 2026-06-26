@@ -147,13 +147,14 @@ class Segmenter:
 
             # 检查是否为段落标题
             for section_type, keywords in self.SECTION_KEYWORDS.items():
+                matched = False
                 for keyword in keywords:
                     if keyword in line_lower:
                         boundaries.append((i, section_type, line.strip()))
+                        matched = True
                         break
-                else:
-                    continue
-                break
+                if matched:
+                    break
 
         return boundaries
 

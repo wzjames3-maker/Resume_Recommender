@@ -29,7 +29,7 @@ class Message(BaseModel):
 
     role: str = Field(..., description="角色（user/assistant/system）")
     content: str = Field(..., description="消息内容")
-    timestamp: datetime = Field(default_factory=datetime.now(timezone.utc), description="消息时间")
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="消息时间")
     metadata: Dict[str, Any] = Field(default_factory=dict, description="元数据")
 
 
@@ -39,8 +39,8 @@ class SessionState(BaseModel):
     session_id: str = Field(..., description="会话 ID")
     user_id: str = Field(..., description="用户 ID")
     status: SessionStatus = Field(default=SessionStatus.ACTIVE, description="会话状态")
-    created_at: datetime = Field(default_factory=datetime.now(timezone.utc), description="创建时间")
-    last_active_at: datetime = Field(default_factory=datetime.now(timezone.utc), description="最后活跃时间")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="创建时间")
+    last_active_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="最后活跃时间")
 
     # Slot 状态
     last_query: Optional[Dict[str, Any]] = Field(None, description="上一次查询的 Slots")

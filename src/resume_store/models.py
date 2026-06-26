@@ -34,7 +34,7 @@ class ParseStatus(str, Enum):
 class EducationEntry(BaseModel):
     """教育经历"""
 
-    school: str = Field(..., description="学校名称")
+    school: Optional[str] = Field(None, description="学校名称")
     degree: Optional[str] = Field(None, description="学历（本科/硕士/博士/大专）")
     major: Optional[str] = Field(None, description="专业")
     start_date: Optional[str] = Field(None, description="开始日期（YYYY-MM 或 YYYY）")
@@ -49,7 +49,7 @@ class EducationEntry(BaseModel):
 class ExperienceEntry(BaseModel):
     """工作经历"""
 
-    company: str = Field(..., description="公司名称")
+    company: Optional[str] = Field(None, description="公司名称")
     title: Optional[str] = Field(None, description="职位名称")
     start_date: Optional[str] = Field(None, description="开始日期（YYYY-MM 或 YYYY）")
     end_date: Optional[str] = Field(None, description="结束日期（YYYY-MM 或 YYYY 或 至今）")
@@ -62,7 +62,7 @@ class ExperienceEntry(BaseModel):
 class ProjectEntry(BaseModel):
     """项目经历"""
 
-    name: str = Field(..., description="项目名称")
+    name: Optional[str] = Field(None, description="项目名称")
     role: Optional[str] = Field(None, description="担任角色")
     start_date: Optional[str] = Field(None, description="开始日期")
     end_date: Optional[str] = Field(None, description="结束日期")
@@ -89,7 +89,7 @@ class PersonalInfo(BaseModel):
     phone: Optional[str] = Field(None, description="手机号（加密存储）")
     email: Optional[str] = Field(None, description="邮箱（加密存储）")
     city: Optional[str] = Field(None, description="所在城市")
-    birth_year: Optional[int] = Field(None, ge=1950, le=2010, description="出生年份")
+    birth_year: Optional[int] = Field(None, ge=1900, le=2010, description="出生年份")
     gender: Optional[str] = Field(None, description="性别")
     years_of_experience: Optional[int] = Field(None, ge=0, le=50, description="工作年限")
     current_company: Optional[str] = Field(None, description="当前公司")
@@ -130,8 +130,8 @@ class ResumeSchema(BaseModel):
     raw_text: Optional[str] = Field(None, description="原始解析文本")
     vector_id: Optional[str] = Field(None, description="Milvus 中的向量 ID")
     status: ResumeStatus = Field(ResumeStatus.ACTIVE, description="简历状态")
-    created_at: datetime = Field(default_factory=datetime.now(timezone.utc), description="创建时间")
-    updated_at: datetime = Field(default_factory=datetime.now(timezone.utc), description="更新时间")
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="创建时间")
+    updated_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="更新时间")
 
     def to_mongodb_dict(self) -> dict:
         """转换为 MongoDB 文档格式"""

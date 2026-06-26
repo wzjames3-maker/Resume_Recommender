@@ -251,3 +251,8 @@ REQ-008 (降级) ──> 贯穿所有环节的错误处理
 | REQ-013 | FR-011 | JSON 提取 regex 使用正确的 \s* 而非 s* | P0 |
 | REQ-014 | FR-011 | ResumeCreateRequest 必须包含 project_list 字段 | P1 |
 | REQ-015 | FR-011 | 存储时使用 fallback_handler 处理后的 structured（而非原始 LLM 输出） | P1 |
+
+## v1.3-data-pipeline 新增 (2026-06-26)
+| ID | 对应 PRD | 描述 | 优先级 |
+|----|----------|------|--------|
+| REQ-016 | FR-011 | LLM 提取 SkillEntry 字段对齐：JSON schema 中 years→years_of_experience，level→proficiency，确保技能年限和熟练度不丢失 | P0 |

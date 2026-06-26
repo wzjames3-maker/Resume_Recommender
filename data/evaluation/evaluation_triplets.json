@@ -1,0 +1,617 @@
+[
+  {
+    "query": "找5年工作经验",
+    "query_type": "years_only",
+    "query_weight": 0.5,
+    "source_resume_id": "0a2df74bbc31",
+    "relevant_resumes": [
+      {
+        "resume_id": "0a2df74bbc31",
+        "relevance": 1.0,
+        "reasons": [
+          "self"
+        ]
+      },
+      {
+        "resume_id": "0a795895e08a",
+        "relevance": 0.2,
+        "reasons": [
+          "same_city",
+          "similar_years"
+        ]
+      },
+      {
+        "resume_id": "0d0ce106c131",
+        "relevance": 0.2,
+        "reasons": [
+          "same_city",
+          "similar_years"
+        ]
+      },
+      {
+        "resume_id": "0f5198167eeb",
+        "relevance": 0.1,
+        "reasons": [
+          "similar_years"
+        ]
+      }
+    ]
+  },
+  {
+    "query": "找5年工作经验",
+    "query_type": "years_only",
+    "query_weight": 0.5,
+    "source_resume_id": "0a795895e08a",
+    "relevant_resumes": [
+      {
+        "resume_id": "0a795895e08a",
+        "relevance": 1.0,
+        "reasons": [
+          "self"
+        ]
+      },
+      {
+        "resume_id": "0a2df74bbc31",
+        "relevance": 0.2,
+        "reasons": [
+          "same_city",
+          "similar_years"
+        ]
+      },
+      {
+        "resume_id": "0d0ce106c131",
+        "relevance": 0.2,
+        "reasons": [
+          "same_city",
+          "similar_years"
+        ]
+      },
+      {
+        "resume_id": "0f5198167eeb",
+        "relevance": 0.1,
+        "reasons": [
+          "similar_years"
+        ]
+      }
+    ]
+  },
+  {
+    "query": "找会全国计算机二级(C语言) 大学英语4级（CET4） 信息安全工程师（软考中级）的候选人",
+    "query_type": "skill",
+    "query_weight": 1.0,
+    "source_resume_id": "0b3915da3907",
+    "relevant_resumes": [
+      {
+        "resume_id": "0b3915da3907",
+        "relevance": 1.0,
+        "reasons": [
+          "self"
+        ]
+      },
+      {
+        "resume_id": "0e19830f79a6",
+        "relevance": 0.3,
+        "reasons": [
+          "skill_match"
+        ]
+      }
+    ]
+  },
+  {
+    "query": "找会视频拍摄 视频剪辑 特效合成的候选人",
+    "query_type": "skill",
+    "query_weight": 1.0,
+    "source_resume_id": "0ba6300a26c5",
+    "relevant_resumes": [
+      {
+        "resume_id": "0ba6300a26c5",
+        "relevance": 1.0,
+        "reasons": [
+          "self"
+        ]
+      }
+    ]
+  },
+  {
+    "query": "找8年以上视频拍摄 视频剪辑 特效合成经验",
+    "query_type": "skill+years",
+    "query_weight": 1.0,
+    "source_resume_id": "0ba6300a26c5",
+    "relevant_resumes": [
+      {
+        "resume_id": "0ba6300a26c5",
+        "relevance": 1.0,
+        "reasons": [
+          "self"
+        ]
+      }
+    ]
+  },
+  {
+    "query": "找8年工作经验",
+    "query_type": "years_only",
+    "query_weight": 0.5,
+    "source_resume_id": "0ba6300a26c5",
+    "relevant_resumes": [
+      {
+        "resume_id": "0ba6300a26c5",
+        "relevance": 1.0,
+        "reasons": [
+          "self"
+        ]
+      }
+    ]
+  },
+  {
+    "query": "找会Python Java SQL的候选人",
+    "query_type": "skill",
+    "query_weight": 1.0,
+    "source_resume_id": "0c0d1adb4698",
+    "relevant_resumes": [
+      {
+        "resume_id": "0c0d1adb4698",
+        "relevance": 1.0,
+        "reasons": [
+          "self"
+        ]
+      },
+      {
+        "resume_id": "0f5198167eeb",
+        "relevance": 0.14,
+        "reasons": [
+          "same_city"
+        ]
+      }
+    ]
+  },
+  {
+    "query": "找13年以上Python Java SQL经验",
+    "query_type": "skill+years",
+    "query_weight": 1.0,
+    "source_resume_id": "0c0d1adb4698",
+    "relevant_resumes": [
+      {
+        "resume_id": "0c0d1adb4698",
+        "relevance": 1.0,
+        "reasons": [
+          "self"
+        ]
+      },
+      {
+        "resume_id": "0f5198167eeb",
+        "relevance": 0.14,
+        "reasons": [
+          "same_city"
+        ]
+      }
+    ]
+  },
+  {
+    "query": "找13年工作经验",
+    "query_type": "years_only",
+    "query_weight": 0.5,
+    "source_resume_id": "0c0d1adb4698",
+    "relevant_resumes": [
+      {
+        "resume_id": "0c0d1adb4698",
+        "relevance": 1.0,
+        "reasons": [
+          "self"
+        ]
+      },
+      {
+        "resume_id": "0f5198167eeb",
+        "relevance": 0.14,
+        "reasons": [
+          "same_city"
+        ]
+      }
+    ]
+  },
+  {
+    "query": "找会全国计算机等级考试 数据库简单维护 软件开发工程师证的候选人",
+    "query_type": "skill",
+    "query_weight": 1.0,
+    "source_resume_id": "0d099f8b9a7a",
+    "relevant_resumes": [
+      {
+        "resume_id": "0d099f8b9a7a",
+        "relevance": 1.0,
+        "reasons": [
+          "self"
+        ]
+      },
+      {
+        "resume_id": "0d578da00cfb",
+        "relevance": 0.3,
+        "reasons": [
+          "skill_match"
+        ]
+      }
+    ]
+  },
+  {
+    "query": "找5年工作经验",
+    "query_type": "years_only",
+    "query_weight": 0.5,
+    "source_resume_id": "0d0ce106c131",
+    "relevant_resumes": [
+      {
+        "resume_id": "0d0ce106c131",
+        "relevance": 1.0,
+        "reasons": [
+          "self"
+        ]
+      },
+      {
+        "resume_id": "0a2df74bbc31",
+        "relevance": 0.2,
+        "reasons": [
+          "same_city",
+          "similar_years"
+        ]
+      },
+      {
+        "resume_id": "0a795895e08a",
+        "relevance": 0.2,
+        "reasons": [
+          "same_city",
+          "similar_years"
+        ]
+      },
+      {
+        "resume_id": "0f5198167eeb",
+        "relevance": 0.1,
+        "reasons": [
+          "similar_years"
+        ]
+      }
+    ]
+  },
+  {
+    "query": "找会全国计算机等级考试 数据库简单维护 软件开发工程师证的候选人",
+    "query_type": "skill",
+    "query_weight": 1.0,
+    "source_resume_id": "0d578da00cfb",
+    "relevant_resumes": [
+      {
+        "resume_id": "0d578da00cfb",
+        "relevance": 1.0,
+        "reasons": [
+          "self"
+        ]
+      },
+      {
+        "resume_id": "0d099f8b9a7a",
+        "relevance": 0.3,
+        "reasons": [
+          "skill_match"
+        ]
+      }
+    ]
+  },
+  {
+    "query": "找2年工作经验",
+    "query_type": "years_only",
+    "query_weight": 0.5,
+    "source_resume_id": "0dbadf51adb4",
+    "relevant_resumes": [
+      {
+        "resume_id": "0dbadf51adb4",
+        "relevance": 1.0,
+        "reasons": [
+          "self"
+        ]
+      },
+      {
+        "resume_id": "0dedfe53f7ac",
+        "relevance": 0.1,
+        "reasons": [
+          "similar_years"
+        ]
+      }
+    ]
+  },
+  {
+    "query": "找2年工作经验",
+    "query_type": "years_only",
+    "query_weight": 0.5,
+    "source_resume_id": "0dedfe53f7ac",
+    "relevant_resumes": [
+      {
+        "resume_id": "0dedfe53f7ac",
+        "relevance": 1.0,
+        "reasons": [
+          "self"
+        ]
+      },
+      {
+        "resume_id": "0dbadf51adb4",
+        "relevance": 0.1,
+        "reasons": [
+          "similar_years"
+        ]
+      }
+    ]
+  },
+  {
+    "query": "找会全国计算机二级(C语言) 大学英语4级（CET4） 信息安全工程师（软考中级）的候选人",
+    "query_type": "skill",
+    "query_weight": 1.0,
+    "source_resume_id": "0e19830f79a6",
+    "relevant_resumes": [
+      {
+        "resume_id": "0e19830f79a6",
+        "relevance": 1.0,
+        "reasons": [
+          "self"
+        ]
+      },
+      {
+        "resume_id": "0b3915da3907",
+        "relevance": 0.3,
+        "reasons": [
+          "skill_match"
+        ]
+      }
+    ]
+  },
+  {
+    "query": "找高级工程师",
+    "query_type": "job_title",
+    "query_weight": 1.0,
+    "source_resume_id": "0f5198167eeb",
+    "relevant_resumes": [
+      {
+        "resume_id": "0f5198167eeb",
+        "relevance": 1.0,
+        "reasons": [
+          "self"
+        ]
+      },
+      {
+        "resume_id": "0c0d1adb4698",
+        "relevance": 0.14,
+        "reasons": [
+          "same_city"
+        ]
+      },
+      {
+        "resume_id": "0a2df74bbc31",
+        "relevance": 0.1,
+        "reasons": [
+          "similar_years"
+        ]
+      },
+      {
+        "resume_id": "0a795895e08a",
+        "relevance": 0.1,
+        "reasons": [
+          "similar_years"
+        ]
+      },
+      {
+        "resume_id": "0d0ce106c131",
+        "relevance": 0.1,
+        "reasons": [
+          "similar_years"
+        ]
+      }
+    ]
+  },
+  {
+    "query": "找北京的高级工程师",
+    "query_type": "job_title+city",
+    "query_weight": 1.0,
+    "source_resume_id": "0f5198167eeb",
+    "relevant_resumes": [
+      {
+        "resume_id": "0f5198167eeb",
+        "relevance": 1.0,
+        "reasons": [
+          "self"
+        ]
+      },
+      {
+        "resume_id": "0c0d1adb4698",
+        "relevance": 0.14,
+        "reasons": [
+          "same_city"
+        ]
+      },
+      {
+        "resume_id": "0a2df74bbc31",
+        "relevance": 0.1,
+        "reasons": [
+          "similar_years"
+        ]
+      },
+      {
+        "resume_id": "0a795895e08a",
+        "relevance": 0.1,
+        "reasons": [
+          "similar_years"
+        ]
+      },
+      {
+        "resume_id": "0d0ce106c131",
+        "relevance": 0.1,
+        "reasons": [
+          "similar_years"
+        ]
+      }
+    ]
+  },
+  {
+    "query": "找会Java Spring Boot MySQL的候选人",
+    "query_type": "skill",
+    "query_weight": 1.0,
+    "source_resume_id": "0f5198167eeb",
+    "relevant_resumes": [
+      {
+        "resume_id": "0f5198167eeb",
+        "relevance": 1.0,
+        "reasons": [
+          "self"
+        ]
+      },
+      {
+        "resume_id": "0c0d1adb4698",
+        "relevance": 0.14,
+        "reasons": [
+          "same_city"
+        ]
+      },
+      {
+        "resume_id": "0a2df74bbc31",
+        "relevance": 0.1,
+        "reasons": [
+          "similar_years"
+        ]
+      },
+      {
+        "resume_id": "0a795895e08a",
+        "relevance": 0.1,
+        "reasons": [
+          "similar_years"
+        ]
+      },
+      {
+        "resume_id": "0d0ce106c131",
+        "relevance": 0.1,
+        "reasons": [
+          "similar_years"
+        ]
+      }
+    ]
+  },
+  {
+    "query": "找5年以上Java Spring Boot MySQL经验",
+    "query_type": "skill+years",
+    "query_weight": 1.0,
+    "source_resume_id": "0f5198167eeb",
+    "relevant_resumes": [
+      {
+        "resume_id": "0f5198167eeb",
+        "relevance": 1.0,
+        "reasons": [
+          "self"
+        ]
+      },
+      {
+        "resume_id": "0c0d1adb4698",
+        "relevance": 0.14,
+        "reasons": [
+          "same_city"
+        ]
+      },
+      {
+        "resume_id": "0a2df74bbc31",
+        "relevance": 0.1,
+        "reasons": [
+          "similar_years"
+        ]
+      },
+      {
+        "resume_id": "0a795895e08a",
+        "relevance": 0.1,
+        "reasons": [
+          "similar_years"
+        ]
+      },
+      {
+        "resume_id": "0d0ce106c131",
+        "relevance": 0.1,
+        "reasons": [
+          "similar_years"
+        ]
+      }
+    ]
+  },
+  {
+    "query": "找高级工程师 要求Java Spring Boot",
+    "query_type": "combined",
+    "query_weight": 1.0,
+    "source_resume_id": "0f5198167eeb",
+    "relevant_resumes": [
+      {
+        "resume_id": "0f5198167eeb",
+        "relevance": 1.0,
+        "reasons": [
+          "self"
+        ]
+      },
+      {
+        "resume_id": "0c0d1adb4698",
+        "relevance": 0.14,
+        "reasons": [
+          "same_city"
+        ]
+      },
+      {
+        "resume_id": "0a2df74bbc31",
+        "relevance": 0.1,
+        "reasons": [
+          "similar_years"
+        ]
+      },
+      {
+        "resume_id": "0a795895e08a",
+        "relevance": 0.1,
+        "reasons": [
+          "similar_years"
+        ]
+      },
+      {
+        "resume_id": "0d0ce106c131",
+        "relevance": 0.1,
+        "reasons": [
+          "similar_years"
+        ]
+      }
+    ]
+  },
+  {
+    "query": "找5年工作经验",
+    "query_type": "years_only",
+    "query_weight": 0.5,
+    "source_resume_id": "0f5198167eeb",
+    "relevant_resumes": [
+      {
+        "resume_id": "0f5198167eeb",
+        "relevance": 1.0,
+        "reasons": [
+          "self"
+        ]
+      },
+      {
+        "resume_id": "0c0d1adb4698",
+        "relevance": 0.14,
+        "reasons": [
+          "same_city"
+        ]
+      },
+      {
+        "resume_id": "0a2df74bbc31",
+        "relevance": 0.1,
+        "reasons": [
+          "similar_years"
+        ]
+      },
+      {
+        "resume_id": "0a795895e08a",
+        "relevance": 0.1,
+        "reasons": [
+          "similar_years"
+        ]
+      },
+      {
+        "resume_id": "0d0ce106c131",
+        "relevance": 0.1,
+        "reasons": [
+          "similar_years"
+        ]
+      }
+    ]
+  }
+]

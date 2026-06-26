@@ -542,3 +542,10 @@ Hybrid Retrieval 在 Small Chunk 级别执行精准检索，命中后通过 pare
 |----|----------|------|--------|
 | REQ-010 | FR-002 | Small→Big 聚合必须调用 VectorIndex.retrieve_with_parent() 获取 parent chunk 真实内容（非仅透传 parent_chunk_id） | P0 |
 | REQ-011 | FR-002 | RRF 合并后的去重逻辑使用 resume_id（而非 candidate_name + skills 组合键） | P1 |
+
+## v1.3-data-pipeline 新增 (2026-06-26)
+| ID | 对应 PRD | 描述 | 优先级 |
+|----|----------|------|--------|
+| REQ-012 | FR-002 | index_manager.py 通过 VectorIndex.has_collection() 等公开接口操作，禁止调用不存在的方法如 _get_collection_name() | P0 |
+| REQ-013 | FR-002 | ull_pipeline.py 搜索接口使用 hybrid_search_small() 替代不存在的 hybrid_search() | P0 |
+| REQ-014 | FR-002 | ResumeRepository 新增 ind_by_filename() 方法用于 pipeline 脚本的按文件名查找 | P0 |

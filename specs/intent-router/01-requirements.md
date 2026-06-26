@@ -291,3 +291,10 @@ BR-05, UC-002 AF-001, 03-slot-definition.md
 |----|----------|------|--------|
 | REQ-007 | FR-001 | 简化: 移除 Handler 体系死代码（SearchHandler/RefineHandler/LookupHandler 等桩实现），chat.py 使用显式意图→函数映射表 | P1 |
 | REQ-008 | FR-001 | chat.py 未实现意图的引导消息按意图类型返回差异化提示（非统一回复） | P2 |
+
+## v1.3-data-pipeline 新增 (2026-06-26)
+| ID | 对应 PRD | 描述 | 优先级 |
+|----|----------|------|--------|
+| REQ-014 | FR-001 | 修复 segmenter 双匹配：匹配 section type 后 break 外层循环，防止一个 section 被标记为多个类型 | P1 |
+| REQ-015 | FR-001 | _dense_to_sparse() 标注为降级实现（非原生 BGE-M3 sparse），API 支持原生 sparse 时自动切换 | P1 |
+| REQ-016 | FR-001 | classifier._call_llm() 移除不可达代码（for循环后的 return 语句） | P2 |

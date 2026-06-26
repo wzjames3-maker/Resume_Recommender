@@ -58,7 +58,7 @@ class PIIAccessLog(BaseModel):
     resume_id: str = Field(..., description="简历 ID")
     fields: List[str] = Field(..., description="访问的字段列表")
     access_time: datetime = Field(
-        default_factory=datetime.now(timezone.utc), description="访问时间"
+        default_factory=lambda: datetime.now(timezone.utc), description="访问时间"
     )
     action: str = Field("decrypt", description="操作类型")
 

@@ -121,18 +121,11 @@ class RecruitmentWorkflow:
                 session_id=session_id,
             )
 
-        # 4. 元数据过滤
-        filter_result = self.metadata_filter.filter(retrieval_results, merged_slots)
-
-        # 5. Rerank
-        reranked_results = self.reranker.rerank(
-            filter_result.results,
-            query_text=merged_slots.job_title or intent_result.raw_query
-        )
+        # 4. Enrich MongoDB metadata
         #         # Enrich results with MongoDB metadata (try UUID id, fallback to ObjectId _id)
         seen_ids = set()
         enriched = []
-        for r in reranked_results:
+        for r in retrieval_results:
             if r.resume_id in seen_ids:
                 continue
             seen_ids.add(r.resume_id)
@@ -170,19 +163,15 @@ class RecruitmentWorkflow:
             except Exception:
                 pass
             enriched.append(r)
-        reranked_results = enriched
 
-        # Re-dedup by resume_id (different chunks -> same resume)
-        seen_ids = set()
-        final_deduped = []
-        for r in reranked_results:
-            if r.resume_id in seen_ids:
-                continue
-            seen_ids.add(r.resume_id)
-            final_deduped.append(r)
-        reranked_results = final_deduped
+        # 5. 元数据过滤
+        filter_result = self.metadata_filter.filter(retrieval_results, merged_slots)
 
-        # 6. 降级策略
+        # 6. Rerank
+        reranked_results = self.reranker.rerank(
+            filter_result.results,
+            query_text=merged_slots.job_title or intent_result.raw_query
+        )
         degradation_result = self.degradation_strategy.apply(reranked_results)
 
         # 7. 生成推荐理由
@@ -287,8 +276,12 @@ class RecruitmentWorkflow:
             logger.info("在上次结果中检索")
             candidate_ids = scope_decision.candidate_ids
             if candidate_ids:
-                retrieval_results = self.hybrid_retriever.retrieve(merged_slots, raw_query=intent_result.raw_query)
-                retrieval_results = [r for r in retrieval_results if r.resume_id in candidate_ids]
+                # Push candidate filter to Milvus expression for efficiency
+                id_list = ', '.join(f'"{cid}"' for cid in candidate_ids)
+                narrow_expr = f"resume_id in [{id_list}]"
+                retrieval_results = self.hybrid_retriever.retrieve(
+                    merged_slots, raw_query=intent_result.raw_query, expr=narrow_expr
+                )
                 if not retrieval_results:
                     logger.info("NARROW 结果为空，降级为全库检索")
                     retrieval_results = self.hybrid_retriever.retrieve(merged_slots, raw_query=intent_result.raw_query)

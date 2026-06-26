@@ -10,6 +10,7 @@ from src.common.errors import ErrorCode, ExternalServiceError
 from src.common.logger import get_logger
 from src.vector_index.connection import get_milvus_connection
 from src.vector_index.index import get_vector_index
+from src.vector_index.schema import get_collection_name
 
 logger = get_logger("index_manager")
 
@@ -126,7 +127,7 @@ class IndexManager:
 
             from pymilvus import Collection, utility
 
-            collection_name = self.vector_index._get_collection_name()
+            collection_name = get_collection_name()
             collection = Collection(collection_name)
 
             # 获取统计信息
@@ -158,7 +159,7 @@ class IndexManager:
             # 删除现有索引
             from pymilvus import Collection
 
-            collection_name = self.vector_index._get_collection_name()
+            collection_name = get_collection_name()
             collection = Collection(collection_name)
 
             for index in collection.indexes:
@@ -188,7 +189,7 @@ class IndexManager:
 
             from pymilvus import Collection
 
-            collection_name = self.vector_index._get_collection_name()
+            collection_name = get_collection_name()
             collection = Collection(collection_name)
             collection.load()
 
@@ -213,7 +214,7 @@ class IndexManager:
 
             from pymilvus import Collection
 
-            collection_name = self.vector_index._get_collection_name()
+            collection_name = get_collection_name()
             collection = Collection(collection_name)
             collection.release()
 

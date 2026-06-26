@@ -1,0 +1,895 @@
+[
+  {
+    "file": "0a2df74bbc31.docx",
+    "resume_id": "0a2df74bbc31",
+    "name": "皮茗婵",
+    "job_title": "",
+    "years_of_experience": 5,
+    "skills": [],
+    "skill_details": [],
+    "education": [
+      {
+        "school": "北京卫生职业学院",
+        "degree": "博士",
+        "major": "兵器"
+      },
+      {
+        "school": "北京开放大学",
+        "degree": "硕士",
+        "major": "化工与制药"
+      }
+    ],
+    "city": "海口",
+    "industry": "",
+    "confidence": 0.7
+  },
+  {
+    "file": "0a795895e08a.docx",
+    "resume_id": "0a795895e08a",
+    "name": "潘承",
+    "job_title": "",
+    "years_of_experience": 5,
+    "skills": [],
+    "skill_details": [],
+    "education": [
+      {
+        "school": "北京工业大学耿丹学院",
+        "degree": "硕士学位",
+        "major": "工业工程"
+      },
+      {
+        "school": "北京电子科技职业学院",
+        "degree": "学士学位",
+        "major": "中医学"
+      },
+      {
+        "school": "北京航空航天大学",
+        "degree": "学士学位",
+        "major": "公安学"
+      }
+    ],
+    "city": "海口",
+    "industry": "",
+    "confidence": 0.5
+  },
+  {
+    "file": "0a8de09be1dc.docx",
+    "resume_id": "0a8de09be1dc",
+    "name": "姚舒",
+    "job_title": "",
+    "years_of_experience": 0,
+    "skills": [],
+    "skill_details": [],
+    "education": [],
+    "city": "",
+    "industry": "",
+    "confidence": 0.5
+  },
+  {
+    "file": "0ac186229aa0.docx",
+    "resume_id": "0ac186229aa0",
+    "name": "",
+    "job_title": "",
+    "years_of_experience": 0,
+    "skills": [],
+    "skill_details": [],
+    "education": [
+      {
+        "school": "中国人民公安大学",
+        "degree": null,
+        "major": "植物生产"
+      },
+      {
+        "school": "北京市丰台区职工大学",
+        "degree": null,
+        "major": "土木"
+      },
+      {
+        "school": "中国劳动关系学院",
+        "degree": null,
+        "major": "矿业"
+      }
+    ],
+    "city": "广西省贺州市",
+    "industry": "",
+    "confidence": 0.5
+  },
+  {
+    "file": "0ac4e25ad645.docx",
+    "resume_id": "0ac4e25ad645",
+    "name": "",
+    "job_title": "",
+    "years_of_experience": 0,
+    "skills": [],
+    "skill_details": [],
+    "education": [],
+    "city": "",
+    "industry": "",
+    "confidence": 0.0
+  },
+  {
+    "file": "0aee98c8a561.docx",
+    "resume_id": "0aee98c8a561",
+    "name": "吕兴策",
+    "job_title": "",
+    "years_of_experience": 0,
+    "skills": [],
+    "skill_details": [],
+    "education": [],
+    "city": "上海市",
+    "industry": "",
+    "confidence": 0.3
+  },
+  {
+    "file": "0b3915da3907.docx",
+    "resume_id": "0b3915da3907",
+    "name": "薛菲毓",
+    "job_title": "",
+    "years_of_experience": 0,
+    "skills": [
+      "全国计算机二级(C语言)",
+      "大学英语4级（CET4）",
+      "信息安全工程师（软考中级）",
+      "电子商务设计师（软考中级）",
+      "软件设计师（软考中级）"
+    ],
+    "skill_details": [
+      {
+        "name": "全国计算机二级(C语言)",
+        "proficiency": null,
+        "years": null
+      },
+      {
+        "name": "大学英语4级（CET4）",
+        "proficiency": null,
+        "years": null
+      },
+      {
+        "name": "信息安全工程师（软考中级）",
+        "proficiency": null,
+        "years": null
+      },
+      {
+        "name": "电子商务设计师（软考中级）",
+        "proficiency": null,
+        "years": null
+      },
+      {
+        "name": "软件设计师（软考中级）",
+        "proficiency": null,
+        "years": null
+      }
+    ],
+    "education": [
+      {
+        "school": "北京市东城区职工业余大学",
+        "degree": "大专",
+        "major": "水利"
+      },
+      {
+        "school": "北京工业大学",
+        "degree": "大专",
+        "major": "音乐与舞蹈学"
+      },
+      {
+        "school": "北京京北职业技术学院",
+        "degree": "大专",
+        "major": "测绘"
+      }
+    ],
+    "city": "安徽省宣城市",
+    "industry": "",
+    "confidence": 0.6
+  },
+  {
+    "file": "0b5233e7a638.docx",
+    "resume_id": "0b5233e7a638",
+    "name": "",
+    "job_title": "",
+    "years_of_experience": 0,
+    "skills": [],
+    "skill_details": [],
+    "education": [],
+    "city": "",
+    "industry": "",
+    "confidence": 0.0
+  },
+  {
+    "file": "0ba6300a26c5.docx",
+    "resume_id": "0ba6300a26c5",
+    "name": "卫榕",
+    "job_title": "",
+    "years_of_experience": 8,
+    "skills": [
+      "视频拍摄",
+      "视频剪辑",
+      "特效合成"
+    ],
+    "skill_details": [
+      {
+        "name": "视频拍摄",
+        "proficiency": null,
+        "years": null
+      },
+      {
+        "name": "视频剪辑",
+        "proficiency": null,
+        "years": null
+      },
+      {
+        "name": "特效合成",
+        "proficiency": null,
+        "years": null
+      }
+    ],
+    "education": [
+      {
+        "school": "北京科技经营管理学院",
+        "degree": "博士",
+        "major": "医学技术"
+      },
+      {
+        "school": "北京舞蹈学院",
+        "degree": "学士",
+        "major": "地球物理学"
+      }
+    ],
+    "city": "",
+    "industry": "",
+    "confidence": 0.7
+  },
+  {
+    "file": "0bc0a0dc8a03.docx",
+    "resume_id": "0bc0a0dc8a03",
+    "name": "",
+    "job_title": "",
+    "years_of_experience": 0,
+    "skills": [],
+    "skill_details": [],
+    "education": [],
+    "city": "",
+    "industry": "",
+    "confidence": 0.0
+  },
+  {
+    "file": "0bfdfb5cede0.docx",
+    "resume_id": "0bfdfb5cede0",
+    "name": "韩莎",
+    "job_title": "",
+    "years_of_experience": 0,
+    "skills": [],
+    "skill_details": [],
+    "education": [
+      {
+        "school": "北京市石景山区业余大学",
+        "degree": "硕士",
+        "major": "药学"
+      },
+      {
+        "school": "清华大学",
+        "degree": "学士",
+        "major": "矿业"
+      },
+      {
+        "school": "北京林业大学",
+        "degree": "博士",
+        "major": "计算机"
+      }
+    ],
+    "city": "黑龙江省佳木斯市",
+    "industry": "",
+    "confidence": 0.8
+  },
+  {
+    "file": "0c0a2519adff.docx",
+    "resume_id": "0c0a2519adff",
+    "name": "",
+    "job_title": "",
+    "years_of_experience": 0,
+    "skills": [],
+    "skill_details": [],
+    "education": [],
+    "city": "",
+    "industry": "",
+    "confidence": 0.0
+  },
+  {
+    "file": "0c0d1adb4698.docx",
+    "resume_id": "0c0d1adb4698",
+    "name": "简墨",
+    "job_title": "",
+    "years_of_experience": 13,
+    "skills": [
+      "Python",
+      "Java",
+      "SQL",
+      "Spark",
+      "Hadoop",
+      "Flink",
+      "Kafka",
+      "Hive"
+    ],
+    "skill_details": [
+      {
+        "name": "Python",
+        "proficiency": "精通",
+        "years": 10
+      },
+      {
+        "name": "Java",
+        "proficiency": "精通",
+        "years": 8
+      },
+      {
+        "name": "SQL",
+        "proficiency": "精通",
+        "years": 13
+      },
+      {
+        "name": "Spark",
+        "proficiency": "熟练",
+        "years": 7
+      },
+      {
+        "name": "Hadoop",
+        "proficiency": "熟练",
+        "years": 7
+      },
+      {
+        "name": "Flink",
+        "proficiency": "熟练",
+        "years": 5
+      },
+      {
+        "name": "Kafka",
+        "proficiency": "熟练",
+        "years": 5
+      },
+      {
+        "name": "Hive",
+        "proficiency": "熟练",
+        "years": 7
+      }
+    ],
+    "education": [
+      {
+        "school": "某985高校",
+        "degree": "本科",
+        "major": "计算机科学与技术"
+      }
+    ],
+    "city": "北京",
+    "industry": "",
+    "confidence": 0.95
+  },
+  {
+    "file": "0c8b004b8b4b.docx",
+    "resume_id": "0c8b004b8b4b",
+    "name": "",
+    "job_title": "",
+    "years_of_experience": 0,
+    "skills": [],
+    "skill_details": [],
+    "education": [],
+    "city": "",
+    "industry": "",
+    "confidence": 0.0
+  },
+  {
+    "file": "0c9c7d0b1170.docx",
+    "resume_id": "0c9c7d0b1170",
+    "name": "",
+    "job_title": "",
+    "years_of_experience": 0,
+    "skills": [],
+    "skill_details": [],
+    "education": [],
+    "city": "",
+    "industry": "",
+    "confidence": 0.0
+  },
+  {
+    "file": "0cb1f40caf07.docx",
+    "resume_id": "0cb1f40caf07",
+    "name": "鲁淑",
+    "job_title": "",
+    "years_of_experience": 0,
+    "skills": [],
+    "skill_details": [],
+    "education": [
+      {
+        "school": "中国矿业大学（北京）",
+        "degree": "博士",
+        "major": "社会学"
+      },
+      {
+        "school": "中国社会科学院大学",
+        "degree": "学士",
+        "major": "数学"
+      },
+      {
+        "school": "北京市总工会职工大学",
+        "degree": "博士",
+        "major": "安全科学与工程"
+      },
+      {
+        "school": "北京中医药大学",
+        "degree": "学士",
+        "major": "化学"
+      }
+    ],
+    "city": "",
+    "industry": "",
+    "confidence": 0.5
+  },
+  {
+    "file": "0cd92051a9b6.docx",
+    "resume_id": "0cd92051a9b6",
+    "name": "秦裕",
+    "job_title": "",
+    "years_of_experience": 0,
+    "skills": [],
+    "skill_details": [],
+    "education": [
+      {
+        "school": "中国社会科学院大学",
+        "degree": "硕士",
+        "major": "设计学"
+      },
+      {
+        "school": "中国科学院大学",
+        "degree": "博士",
+        "major": "化学"
+      },
+      {
+        "school": "北京市总工会职工大学",
+        "degree": "博士",
+        "major": "金融学"
+      },
+      {
+        "school": "北京邮电大学",
+        "degree": "博士",
+        "major": "动物医学"
+      }
+    ],
+    "city": "台湾省台湾市",
+    "industry": "",
+    "confidence": 0.8
+  },
+  {
+    "file": "0cefc2f0cccf.docx",
+    "resume_id": "0cefc2f0cccf",
+    "name": "",
+    "job_title": "",
+    "years_of_experience": 0,
+    "skills": [],
+    "skill_details": [],
+    "education": [],
+    "city": "",
+    "industry": "",
+    "confidence": 0.0
+  },
+  {
+    "file": "0d099f8b9a7a.docx",
+    "resume_id": "0d099f8b9a7a",
+    "name": "康学林",
+    "job_title": "",
+    "years_of_experience": 0,
+    "skills": [
+      "全国计算机等级考试",
+      "数据库简单维护",
+      "软件开发工程师证"
+    ],
+    "skill_details": [
+      {
+        "name": "全国计算机等级考试",
+        "proficiency": null,
+        "years": null
+      },
+      {
+        "name": "数据库简单维护",
+        "proficiency": null,
+        "years": null
+      },
+      {
+        "name": "软件开发工程师证",
+        "proficiency": null,
+        "years": null
+      }
+    ],
+    "education": [
+      {
+        "school": "北京北大方正软件职业技术",
+        "degree": "硕士研究生",
+        "major": "电气"
+      },
+      {
+        "school": "北京服装学院",
+        "degree": "硕士研究生",
+        "major": "口腔医学"
+      }
+    ],
+    "city": "宝鸡市",
+    "industry": "",
+    "confidence": 0.6
+  },
+  {
+    "file": "0d0ce106c131.docx",
+    "resume_id": "0d0ce106c131",
+    "name": "严康",
+    "job_title": "",
+    "years_of_experience": 5,
+    "skills": [],
+    "skill_details": [],
+    "education": [
+      {
+        "school": "北京经济管理职业学院",
+        "degree": "博士",
+        "major": "公安技术"
+      },
+      {
+        "school": "北京城市学院",
+        "degree": "博士",
+        "major": "材料"
+      }
+    ],
+    "city": "海口",
+    "industry": "",
+    "confidence": 0.7
+  },
+  {
+    "file": "0d28f1a59e01.docx",
+    "resume_id": "0d28f1a59e01",
+    "name": "",
+    "job_title": "",
+    "years_of_experience": 0,
+    "skills": [],
+    "skill_details": [],
+    "education": [],
+    "city": "",
+    "industry": "",
+    "confidence": 0.0
+  },
+  {
+    "file": "0d2cce6f0de6.docx",
+    "resume_id": "0d2cce6f0de6",
+    "name": "方雄",
+    "job_title": "",
+    "years_of_experience": 0,
+    "skills": [],
+    "skill_details": [],
+    "education": [
+      {
+        "school": "华北电业联合职工大学",
+        "degree": "学士",
+        "major": "工商管理"
+      },
+      {
+        "school": "北京印刷学院",
+        "degree": "硕士",
+        "major": "中西医结合"
+      }
+    ],
+    "city": "白城市",
+    "industry": "",
+    "confidence": 0.7
+  },
+  {
+    "file": "0d578da00cfb.docx",
+    "resume_id": "0d578da00cfb",
+    "name": "贾聪",
+    "job_title": "",
+    "years_of_experience": 0,
+    "skills": [
+      "全国计算机等级考试",
+      "数据库简单维护",
+      "软件开发工程师证"
+    ],
+    "skill_details": [
+      {
+        "name": "全国计算机等级考试",
+        "proficiency": null,
+        "years": null
+      },
+      {
+        "name": "数据库简单维护",
+        "proficiency": null,
+        "years": null
+      },
+      {
+        "name": "软件开发工程师证",
+        "proficiency": null,
+        "years": null
+      }
+    ],
+    "education": [
+      {
+        "school": "北京教育学院",
+        "degree": "大学本科",
+        "major": "植物生产"
+      },
+      {
+        "school": "首都师范大学科德学院",
+        "degree": "大学本科",
+        "major": "公安学"
+      },
+      {
+        "school": "中国农业大学",
+        "degree": "大学本科",
+        "major": "数学"
+      }
+    ],
+    "city": "湖北省黄石市",
+    "industry": "",
+    "confidence": 0.8
+  },
+  {
+    "file": "0d6efd507554.docx",
+    "resume_id": "0d6efd507554",
+    "name": "计勇顺",
+    "job_title": "",
+    "years_of_experience": 0,
+    "skills": [],
+    "skill_details": [],
+    "education": [
+      {
+        "school": "国家开放大学（中央广播电视大学）",
+        "degree": "硕士",
+        "major": "林学"
+      },
+      {
+        "school": "外交学院",
+        "degree": "博士",
+        "major": "林业工程"
+      },
+      {
+        "school": "北京化工大学",
+        "degree": "学士",
+        "major": "能源动力"
+      },
+      {
+        "school": "中华女子学院",
+        "degree": "博士",
+        "major": "林业工程"
+      }
+    ],
+    "city": "",
+    "industry": "",
+    "confidence": 0.5
+  },
+  {
+    "file": "0dbadf51adb4.docx",
+    "resume_id": "0dbadf51adb4",
+    "name": "",
+    "job_title": "",
+    "years_of_experience": 2,
+    "skills": [],
+    "skill_details": [],
+    "education": [
+      {
+        "school": "北京工商大学",
+        "degree": null,
+        "major": "社会学"
+      },
+      {
+        "school": "华北电力大学",
+        "degree": null,
+        "major": "草学"
+      }
+    ],
+    "city": "广东省惠州市",
+    "industry": "",
+    "confidence": 0.8
+  },
+  {
+    "file": "0dedfe53f7ac.docx",
+    "resume_id": "0dedfe53f7ac",
+    "name": "",
+    "job_title": "",
+    "years_of_experience": 2,
+    "skills": [],
+    "skill_details": [],
+    "education": [
+      {
+        "school": "国家法官学院",
+        "degree": null,
+        "major": "海洋工程"
+      },
+      {
+        "school": "首都医科大学",
+        "degree": null,
+        "major": "药学"
+      },
+      {
+        "school": "北京科技经营管理学院",
+        "degree": null,
+        "major": "草学"
+      }
+    ],
+    "city": "香港省香港市",
+    "industry": "",
+    "confidence": 0.85
+  },
+  {
+    "file": "0e19830f79a6.docx",
+    "resume_id": "0e19830f79a6",
+    "name": "郎静",
+    "job_title": "",
+    "years_of_experience": 0,
+    "skills": [
+      "全国计算机二级(C语言)",
+      "大学英语4级（CET4）",
+      "信息安全工程师（软考中级）",
+      "电子商务设计师（软考中级）",
+      "软件设计师（软考中级）"
+    ],
+    "skill_details": [
+      {
+        "name": "全国计算机二级(C语言)",
+        "proficiency": null,
+        "years": null
+      },
+      {
+        "name": "大学英语4级（CET4）",
+        "proficiency": null,
+        "years": null
+      },
+      {
+        "name": "信息安全工程师（软考中级）",
+        "proficiency": null,
+        "years": null
+      },
+      {
+        "name": "电子商务设计师（软考中级）",
+        "proficiency": null,
+        "years": null
+      },
+      {
+        "name": "软件设计师（软考中级）",
+        "proficiency": null,
+        "years": null
+      }
+    ],
+    "education": [
+      {
+        "school": "中国科学院大学",
+        "degree": "博士",
+        "major": "轻工"
+      },
+      {
+        "school": "北京教育学院",
+        "degree": "博士",
+        "major": "公安技术"
+      },
+      {
+        "school": "中央音乐学院",
+        "degree": "博士",
+        "major": "轻工"
+      }
+    ],
+    "city": "深圳市",
+    "industry": "",
+    "confidence": 0.8
+  },
+  {
+    "file": "0e338a49c435.docx",
+    "resume_id": "0e338a49c435",
+    "name": "",
+    "job_title": "",
+    "years_of_experience": 0,
+    "skills": [],
+    "skill_details": [],
+    "education": [],
+    "city": "",
+    "industry": "",
+    "confidence": 0.0
+  },
+  {
+    "file": "0e9182529e95.docx",
+    "resume_id": "0e9182529e95",
+    "name": "尤兰",
+    "job_title": "",
+    "years_of_experience": 0,
+    "skills": [],
+    "skill_details": [],
+    "education": [
+      {
+        "school": "北京联合大学",
+        "degree": "学士学位",
+        "major": "设计学"
+      }
+    ],
+    "city": "甘肃省金昌市",
+    "industry": "",
+    "confidence": 0.6
+  },
+  {
+    "file": "0ebd6cfd45fa.docx",
+    "resume_id": "0ebd6cfd45fa",
+    "name": "狄雅宁",
+    "job_title": "",
+    "years_of_experience": 0,
+    "skills": [],
+    "skill_details": [],
+    "education": [
+      {
+        "school": "北京交通运输职业学院",
+        "degree": "学士学位",
+        "major": "安全科学与工程"
+      },
+      {
+        "school": "北京教育学院",
+        "degree": "学士学位",
+        "major": "矿业"
+      }
+    ],
+    "city": "海南省三亚市",
+    "industry": "",
+    "confidence": 0.7
+  },
+  {
+    "file": "0f44e6092adf.docx",
+    "resume_id": "0f44e6092adf",
+    "name": "金天",
+    "job_title": "",
+    "years_of_experience": 0,
+    "skills": [],
+    "skill_details": [],
+    "education": [],
+    "city": "六盘水市",
+    "industry": "",
+    "confidence": 0.6
+  },
+  {
+    "file": "0f5198167eeb.docx",
+    "resume_id": "0f5198167eeb",
+    "name": "张三",
+    "job_title": "高级工程师",
+    "years_of_experience": 5,
+    "skills": [
+      "Java",
+      "Spring Boot",
+      "MySQL"
+    ],
+    "skill_details": [
+      {
+        "name": "Java",
+        "proficiency": "精通",
+        "years": 5
+      },
+      {
+        "name": "Spring Boot",
+        "proficiency": "熟练",
+        "years": 3
+      },
+      {
+        "name": "MySQL",
+        "proficiency": "熟练",
+        "years": 4
+      }
+    ],
+    "education": [
+      {
+        "school": "清华大学",
+        "degree": "硕士",
+        "major": "计算机科学与技术"
+      }
+    ],
+    "city": "北京",
+    "industry": "",
+    "confidence": 0.95
+  },
+  {
+    "file": "0f65615b96ab.docx",
+    "resume_id": "0f65615b96ab",
+    "name": "葛滢",
+    "job_title": "",
+    "years_of_experience": 0,
+    "skills": [],
+    "skill_details": [],
+    "education": [],
+    "city": "河北省承德市",
+    "industry": "",
+    "confidence": 0.5
+  }
+]

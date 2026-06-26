@@ -49,7 +49,7 @@ class ExtractedDocument(BaseModel):
     status: ExtractionStatus = Field(ExtractionStatus.SUCCESS, description="提取状态")
     warnings: List[str] = Field(default_factory=list, description="警告信息列表")
     extraction_time: datetime = Field(
-        default_factory=datetime.now(timezone.utc), description="提取时间"
+        default_factory=lambda: datetime.now(timezone.utc), description="提取时间"
     )
     duration_ms: Optional[int] = Field(None, description="提取耗时（毫秒）")
 

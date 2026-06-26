@@ -20,7 +20,7 @@ class IntentAuditLog(BaseModel):
     """意图审计日志"""
 
     log_id: str = Field(..., description="日志唯一标识")
-    timestamp: datetime = Field(default_factory=datetime.now(timezone.utc), description="日志时间")
+    timestamp: datetime = Field(default_factory=lambda: datetime.now(timezone.utc), description="日志时间")
     conversation_id: Optional[str] = Field(None, description="会话 ID")
     user_id: Optional[str] = Field(None, description="用户 ID")
 

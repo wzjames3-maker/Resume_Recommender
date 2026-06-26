@@ -223,25 +223,21 @@ class EmbeddingGenerator:
 
         return []
 
-    def _dense_to_sparse(self, dense: List[float]) -> Dict[int, float]:
-        """Convert dense to sparse via abs(v) > 0.01 threshold (NOT native BGE-M3 sparse output)."""
-        """
-        将 Dense 向量转换为 Sparse 向量（简化实现）
-
-        Args:
-            dense: Dense 向量
-
-        Returns:
-            Dict[int, float]: Sparse 向量
-        """
-        # 简化实现：取非零元素作为 Sparse 向量
-        sparse = {}
-        for i, value in enumerate(dense):
-            if abs(value) > 0.01:  # 阈值过滤
-                sparse[i] = abs(value)
-
-        return sparse
-
+    def _dense_to_sparse(self, dense: List[float], top_n: int = 50) -> Dict[int, float]:
+        """Generate pseudo-sparse vector from top-N magnitude dense values.
+        SiliconFlow does not expose BGE-M3 native sparse, so we extract
+        top-N indices by absolute value as a sparse dict."""
+        if not dense:
+            return {0: 1.0}
+        indexed = [(abs(v), i, v) for i, v in enumerate(dense)]
+        indexed.sort(reverse=True)
+        max_abs = indexed[0][0] if indexed else 1.0
+        if max_abs == 0:
+            return {0: 1.0}
+        result = {}
+        for abs_val, idx, val in indexed[:top_n]:
+            result[idx] = abs_val / max_abs  # Milvus SPARSE_FLOAT_VECTOR requires non-negative
+        return result
     def _get_cache_key(self, text: str) -> str:
         """
         生成缓存键

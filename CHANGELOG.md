@@ -1,4 +1,28 @@
 
+## [v0.2.2-data-pipeline-v2] - 2026-06-26
+
+### 🔧 第二轮数据链路修复：iter/m-data-pipeline-v2
+
+**触发**：全项目手动 Review（2026-06-26），发现 P0-P2 共 11 个未修复或新发现的缺陷。
+
+#### P0 修复（系统瘫痪级）
+- **PIP2-T01**: 修复 ull_pipeline.py 调用不存在的 ind_by_filename() → 新增 ind_by_filename 方法
+- **PIP2-T02**: 修复 ull_pipeline.py 调用不存在的 hybrid_search() → 改为 hybrid_search_small()
+- **PIP2-T03**: 修复 index_manager.py 调用不存在的 _get_collection_name() → 改用公开的 get_collection_name() 函数
+- **PIP2-T04**: 修复 LLM 提取 SkillEntry 字段映射：years→years_of_experience，level→proficiency
+- **PIP2-T05**: 修复 metadata_filter.hard_filter() 在 MongoDB enrichment 之前执行导致过滤空操作 → 将 enrichment 移到 filter 之前
+
+#### P1 修复（功能残级）
+- **PIP2-T06**: 修复 _dense_to_sparse() 假 Sparse 向量 → 标注为已知限制，API 支持原生 sparse 时自动切换
+- **PIP2-T07**: 修复 segmenter 双匹配不完整 → 匹配后 break 外层循环
+- **PIP2-T08**: efine() NARROW 分支优化：将 candidate_id 过滤推入 Milvus 表达式（而非后过滤）
+- **PIP2-T09**: classifier._call_llm() 移除不可达的 return 语句
+
+#### Spec 基线
+- v1.3-data-pipeline
+- 模块 spec 更新: resume-parser, vector-index, conversation-memory, recommendation-engine, intent-router
+
+---
 ---
 
 ## [v0.2.1-data-pipeline] - 2026-06-26

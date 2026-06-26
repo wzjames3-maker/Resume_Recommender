@@ -255,3 +255,9 @@
 | REQ-009 | FR-006 | refine NARROW 分支: 在上次候选集中执行语义过滤（非全库检索），结果为空时降级为 FULL | P0 |
 | REQ-010 | FR-006 | SessionState 持久化 last_intent 字段，get_conversation_context 返回 last_intent | P1 |
 | REQ-011 | FR-006 | CandidateSlot 新增 candidate_name 字段，lookup 优先用名字匹配 | P2 |
+
+## v1.3-data-pipeline 新增 (2026-06-26)
+| ID | 对应 PRD | 描述 | 优先级 |
+|----|----------|------|--------|
+| REQ-012 | FR-006 | MetadataFilter 必须在 MongoDB enrichment 填充 metadata（city/education/years_of_experience/skills）之后再执行，而非之前 | P0 |
+| REQ-013 | FR-006 | efine() NARROW 分支优先通过 Milvus 表达式 esume_id in [...] 在向量层过滤，而非拉全量后再过滤 | P1 |
