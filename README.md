@@ -15,7 +15,7 @@
 
 ## 架构
 
-`
+```
 ┌─────────────────────────────────────────────────┐
 │                   Streamlit UI                    │
 │           (聊天式交互 / 简历上传 / 搜索结果)          │
@@ -30,7 +30,7 @@
 │            向量索引 / 存储 / 任务队列               │
 │     Milvus      MongoDB    Redis (ARQ)            │
 └─────────────────────────────────────────────────┘
-`
+```
 
 ## 技术栈
 
@@ -67,16 +67,16 @@
 
 ### 1. 配置环境变量
 
-`ash
+```bash
 cp .env.example .env
 # 编辑 .env，填入 OPENAI_API_KEY 等配置
-`
+```
 
 ### 2. 启动服务
 
-`ash
+```bash
 docker compose up -d
-`
+```
 
 启动后：
 - **Streamlit 前端**: http://localhost:8501
@@ -85,14 +85,14 @@ docker compose up -d
 
 ### 3. 本地开发
 
-`ash
+```bash
 pip install -e ".[dev]"
 pytest -v
-`
+```
 
 ## 项目结构
 
-`
+```
 ├── src/                     # 源代码
 │   ├── api/                 # FastAPI 路由
 │   ├── common/              # 公共组件（配置、认证、中间件）
@@ -111,7 +111,7 @@ pytest -v
 ├── tasks/                   # 任务拆分与进度
 ├── docker-compose.yml       # 容器编排
 └── Dockerfile               # 应用镜像
-`
+```
 
 ## 开发方式
 
