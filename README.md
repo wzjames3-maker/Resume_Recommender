@@ -41,8 +41,10 @@
 | 向量数据库 | Milvus 2.4+ | 混合检索（稠密 + 稀疏向量） |
 | 文档数据库 | MongoDB | 简历存储 + PII 加密 |
 | 缓存/队列 | Redis + ARQ | 会话缓存 + 异步任务 |
-| LLM 编排 | LangChain + LangGraph | RAG 流程 + Agent 工作流 |
-| Embedding | OpenAI / 兼容 API | 文本向量化 |
+| LLM | DeepSeek (deepseek-chat) | 意图分类 / 槽位提取 / 推荐理由生成 |
+| Embedding | BGE-M3 via SiliconFlow | Dense 1024d + Sparse 向量 |
+| Reranker | bge-reranker-v2-m3 | 召回结果重排序 |
+| OCR | DeepSeek-OCR | 图片简历文字识别 |
 | 容器化 | Docker Compose | 一键部署 |
 
 ## 核心模块
@@ -63,13 +65,14 @@
 
 - Docker & Docker Compose
 - Python 3.11+（本地开发）
-- OpenAI API Key（或兼容接口）
+- DeepSeek API Key
+- SiliconFlow API Key
 
 ### 1. 配置环境变量
 
 ```bash
 cp .env.example .env
-# 编辑 .env，填入 OPENAI_API_KEY 等配置
+# 编辑 .env，填入 LLM_API_KEY、EMBEDDING_API_KEY 等配置
 ```
 
 ### 2. 启动服务
