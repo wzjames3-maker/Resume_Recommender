@@ -38,26 +38,41 @@
 |------|------|------|
 | 后端框架 | FastAPI + Uvicorn | REST API + WebSocket |
 | 前端 | Streamlit | 聊天式交互界面 |
-| 向量数据库 | Milvus 2.4+ | 混合检索（稠密 + 稀疏向量） |
-| 文档数据库 | MongoDB | 简历存储 + PII 加密 |
-| 缓存/队列 | Redis + ARQ | 会话缓存 + 异步任务 |
-| LLM | DeepSeek (deepseek-chat) | 意图分类 / 槽位提取 / 推荐理由生成 |
-| Embedding | BGE-M3 via SiliconFlow | Dense 1024d + Sparse 向量 |
-| Reranker | bge-reranker-v2-m3 | 召回结果重排序 |
+| Agent 编排 | LangGraph (StateGraph) | 意图路由 + 对话状态管理 + 条件分支 |
+| LLM | DeepSeek (deepseek-chat) via langchain-openai | 意图分类 / 槽位提取 / 推荐理由生成 |
 | OCR | DeepSeek-OCR | 图片简历文字识别 |
+| Embedding | BGE-M3 via SiliconFlow | Dense 1024d + Sparse 向量 |
+| 向量数据库 | Milvus 2.4+ (langchain-milvus) | 混合检索（Dense + Sparse）+ Small→Big 召回 |
+| 重排序 | BGE-Reranker-v2-m3 via SiliconFlow | RRF 融合 + 语义重排序 |
+| 文档数据库 | MongoDB | 简历存储 + PII 加密存储 |
+| 缓存/队列 | Redis + ARQ | 会话缓存 + 异步任务队列 |
+| 认证 | JWT + bcrypt | 用户认证与授权 |
 | 容器化 | Docker Compose | 一键部署 |
 
 ## 核心模块
 
 | 模块 | 路径 | 功能 |
 |------|------|------|
-| 简历解析 | src/resume_parser/ | PDF/DOCX 解析 → 分段 → LLM 提取 → PII 脱敏 |
-| 意图路由 | src/intent_router/ | 用户意图分类 + 槽位提取 + 回退策略 |
-| 推荐引擎 | src/recommendation_engine/ | 混合检索 + 重排序 + 可解释推荐 |
-| 对话记忆 | src/conversation_memory/ | 多轮上下文管理 + 指代消解 |
-| 向量索引 | src/vector_index/ | Milvus 稠密/稀疏索引管理 |
-| 简历存储 | src/resume_store/ | MongoDB CRUD + PII 加解密 |
-| API 层 | src/api/ | REST 端点 + 认证中间件 |
+| 简历解析 | `src/resume_parser/` | PDF/DOCX 解析 → 分段 → LLM 结构化提取 → PII 脱敏 |
+| 意图路由 | `src/intent_router/` | LangGraph StateGraph 驱动的意图分类 + 槽位提取 + 回退策略 |
+| 推荐引擎 | `src/recommendation_engine/` | Dense+Sparse 混合检索 → RRF 融合 → Reranker 重排序 → 可解释推荐 |
+| 对话记忆 | `src/conversation_memory/` | 多轮上下文管理 + Slot 合并 + 指代消解 + 搜索范围决策 |
+| 向量索引 | `src/vector_index/` | Milvus Collection 管理 + Small→Big Chunk 策略 + 批量写入 |
+| 简历存储 | `src/resume_store/` | MongoDB CRUD + Fernet PII 加解密 + 软删除 |
+| API 层 | `src/api/` | REST 端点 + JWT 认证中间件 + 限流 |
+
+## 检索 pipeline
+
+```
+用户输入 → 意图路由(LangGraph StateGraph) → Slot 提取
+    → Query Builder 构建查询文本
+    → BGE-M3 生成 Dense + Sparse 向量
+    → Milvus Hybrid Search (Small Chunk)
+    → Small→Big 召回 (Parent Chunk 聚合)
+    → RRF 融合 Dense/Sparse 结果
+    → BGE-Reranker 语义重排序
+    → LLM 生成推荐理由 → 返回 Top-K 候选人
+```
 
 ## 快速开始
 
@@ -98,17 +113,17 @@ pytest -v
 ```
 ├── src/                     # 源代码
 │   ├── api/                 # FastAPI 路由
-│   ├── common/              # 公共组件（配置、认证、中间件）
-│   ├── conversation_memory/ # 对话记忆模块
-│   ├── intent_router/       # 意图路由模块
-│   ├── recommendation_engine/ # 推荐引擎
-│   ├── resume_parser/       # 简历解析模块
-│   ├── resume_store/        # 简历存储模块
-│   ├── vector_index/        # 向量索引模块
+│   ├── common/              # 公共组件（配置、认证、JWT、限流）
+│   ├── conversation_memory/ # 对话记忆 + 工作流编排
+│   ├── intent_router/       # LangGraph 意图路由
+│   ├── recommendation_engine/ # 混合检索 + RRF + 重排序 + 推荐理由
+│   ├── resume_parser/       # 简历解析 + OCR + LLM 提取 + PII
+│   ├── resume_store/        # MongoDB 存储 + 加密
+│   ├── vector_index/        # Milvus 索引 + Embedding 生成
 │   └── frontend/            # Streamlit 前端
 ├── tests/                   # 测试代码
-├── scripts/                 # 工具脚本
-├── specs/                   # 模块 Spec 文档
+├── scripts/                 # 工具脚本（pipeline / 评估 / 修复）
+├── specs/                   # 模块 8 层 Spec 文档
 ├── docs/                    # 项目文档（PRD / 可行性 / 技术选型）
 ├── design/                  # UI/UX 设计资产
 ├── tasks/                   # 任务拆分与进度
@@ -120,10 +135,10 @@ pytest -v
 
 本项目遵循 **SDD (Spec-Driven Development)** 方法论：
 - 人管 Spec，Agent 管代码
-- 每个模块有 8 层 Spec 文档（specs/<module>/00~08.md）
+- 每个模块有 8 层 Spec 文档（`specs/<module>/00~08.md`）
 - 变更从 Spec 开始，代码是 Spec 的投影
 
-详见 AGENTS.md。
+详见 `AGENTS.md`。
 
 ## License
 
