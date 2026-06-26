@@ -1,0 +1,18 @@
+王五
+手机：13700137003 | 邮箱：wangwu@example.com
+
+教育背景
+中国科学院大学 人工智能 博士 2017-2022
+
+工作经历
+百度 | AI算法工程师 | 2022.07 - 至今
+- 负责文心大语言模型的RAG增强检索系统开发
+- 使用Milvus搭建向量数据库，实现百万级文档的语义检索
+- 开发智能问答系统，准确率达到92%，日均服务10万+用户
+- 熟练使用LangChain、LlamaIndex等RAG框架
+
+商汤科技 | 算法实习生 | 2021.06 - 2022.06
+- 参与计算机视觉模型训练和部署
+- 使用PyTorch进行目标检测模型开发
+
+技能：Python, PyTorch, LangChain, RAG, 向量数据库, Milvus, NLP, LLM, Transformer, TensorFlow, Docker

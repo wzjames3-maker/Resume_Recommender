@@ -1,0 +1,84 @@
+{
+  "colors": {
+    "primary": "#2563EB",
+    "primaryHover": "#1D4ED8",
+    "primaryLight": "#DBEAFE",
+    "secondary": "#6B7280",
+    "secondaryHover": "#4B5563",
+    "danger": "#DC2626",
+    "dangerLight": "#FEE2E2",
+    "success": "#16A34A",
+    "successLight": "#DCFCE7",
+    "warning": "#F59E0B",
+    "warningLight": "#FEF3C7",
+    "info": "#0EA5E9",
+    "infoLight": "#E0F2FE",
+    "bg": "#F8FAFC",
+    "surface": "#FFFFFF",
+    "surfaceSecondary": "#F1F5F9",
+    "textPrimary": "#0F172A",
+    "textSecondary": "#64748B",
+    "textTertiary": "#94A3B8",
+    "textInverse": "#FFFFFF",
+    "border": "#E2E8F0",
+    "borderFocus": "#2563EB",
+    "shadow": "rgba(0, 0, 0, 0.1)",
+    "overlay": "rgba(0, 0, 0, 0.5)",
+    "scoreHigh": "#16A34A",
+    "scoreMedium": "#F59E0B",
+    "scoreLow": "#DC2626",
+    "skillMatched": "#DCFCE7",
+    "skillMatchedText": "#166534",
+    "skillMissing": "#F1F5F9",
+    "skillMissingText": "#64748B",
+    "userBubble": "#2563EB",
+    "userBubbleText": "#FFFFFF",
+    "assistantBubble": "#FFFFFF",
+    "assistantBubbleText": "#0F172A"
+  },
+  "spacing": {
+    "xs": "4px",
+    "sm": "8px",
+    "md": "16px",
+    "lg": "24px",
+    "xl": "32px",
+    "2xl": "48px"
+  },
+  "radius": {
+    "sm": "4px",
+    "md": "8px",
+    "lg": "12px",
+    "xl": "16px",
+    "full": "9999px"
+  },
+  "typography": {
+    "fontFamily": "Inter, -apple-system, BlinkMacSystemFont, sans-serif",
+    "fontFamilyMono": "JetBrains Mono, monospace",
+    "h1": { "size": "28px", "weight": "700", "lineHeight": "1.3" },
+    "h2": { "size": "22px", "weight": "600", "lineHeight": "1.35" },
+    "h3": { "size": "18px", "weight": "600", "lineHeight": "1.4" },
+    "body": { "size": "15px", "weight": "400", "lineHeight": "1.6" },
+    "bodySmall": { "size": "13px", "weight": "400", "lineHeight": "1.5" },
+    "caption": { "size": "12px", "weight": "400", "lineHeight": "1.4" },
+    "button": { "size": "14px", "weight": "500", "lineHeight": "1" }
+  },
+  "layout": {
+    "sidebarWidth": "280px",
+    "sidebarCollapsedWidth": "0px",
+    "chatMaxWidth": "800px",
+    "inputAreaHeight": "auto",
+    "headerHeight": "56px"
+  },
+  "breakpoints": {
+    "sm": "640px",
+    "md": "768px",
+    "lg": "1024px",
+    "xl": "1280px"
+  },
+  "animation": {
+    "fast": "150ms",
+    "normal": "300ms",
+    "slow": "500ms",
+    "easing": "cubic-bezier(0.4, 0, 0.2, 1)"
+  }
+}

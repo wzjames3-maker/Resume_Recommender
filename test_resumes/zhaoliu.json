@@ -1,0 +1,43 @@
+{
+  "education": [
+    {
+      "start": "2018",
+      "degree": "硕士",
+      "school": "浙江大学",
+      "major": "云计算与分布式系统",
+      "end": "2021"
+    }
+  ],
+  "name": "赵六",
+  "email": "zhaoliu@example.com",
+  "experience": [
+    {
+      "company": "华为云",
+      "title": "DevOps高级工程师",
+      "duration": "2021.07-至今",
+      "description": "负责华为云Kubernetes集群运维，管理1000+节点。搭建CI/CD流水线，使部署效率提升300%。设计监控告警系统，使用Prometheus+Grafana，故障发现时间从30分钟降至2分钟。实施容器化改造，将30+核心服务迁移至K8s。"
+    },
+    {
+      "company": "网易",
+      "title": "运维开发工程师",
+      "duration": "2020.06-2021.06",
+      "description": "开发自动化运维工具，Python+Ansible。负责游戏服务器集群管理。"
+    }
+  ],
+  "phone": "13600136004",
+  "skills": [
+    "Kubernetes",
+    "Docker",
+    "Jenkins",
+    "Prometheus",
+    "Grafana",
+    "Ansible",
+    "Terraform",
+    "Linux",
+    "Shell",
+    "Python",
+    "Go",
+    "AWS",
+    "微服务架构"
+  ]
+}

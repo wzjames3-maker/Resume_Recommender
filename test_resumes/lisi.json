@@ -1,0 +1,40 @@
+{
+  "education": [
+    {
+      "start": "2017",
+      "degree": "本科",
+      "school": "清华大学",
+      "major": "软件工程",
+      "end": "2021"
+    }
+  ],
+  "name": "李四",
+  "email": "lisi@example.com",
+  "experience": [
+    {
+      "company": "腾讯",
+      "title": "前端技术专家",
+      "duration": "2022.03-至今",
+      "description": "负责微信小程序开放平台前端架构，支撑百万级小程序接入。主导React技术栈升级，TypeScript覆盖率从30%提升至95%。设计实现前端微服务框架，支持多团队并行开发。性能优化使首屏加载时间从3.2s降至1.1s。"
+    },
+    {
+      "company": "美团",
+      "title": "高级前端工程师",
+      "duration": "2021.07-2022.02",
+      "description": "负责美团外卖商家端React Native跨平台应用开发。实现动态化方案，使页面更新无需发版。"
+    }
+  ],
+  "phone": "13900139002",
+  "skills": [
+    "React",
+    "TypeScript",
+    "Vue.js",
+    "Node.js",
+    "Webpack",
+    "小程序",
+    "React Native",
+    "Next.js",
+    "GraphQL",
+    "前端性能优化"
+  ]
+}

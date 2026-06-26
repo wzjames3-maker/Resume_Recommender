@@ -1,0 +1,69 @@
+{
+  "version": "1.0.0",
+  "last_updated": "2026-06-24",
+  "categories": {
+    "programming_languages": {
+      "name": "编程语言",
+      "skills": {
+        "Python": {"aliases": ["python3", "py", "Python3"], "subcategory": "通用编程语言"},
+        "Java": {"aliases": ["java8", "java11", "java17"], "subcategory": "通用编程语言"},
+        "JavaScript": {"aliases": ["js", "JS", "ES6", "ES2015"], "subcategory": "前端开发"},
+        "TypeScript": {"aliases": ["ts", "TS"], "subcategory": "前端开发"},
+        "C++": {"aliases": ["cpp", "C", "C/C++"], "subcategory": "系统编程"},
+        "Go": {"aliases": ["golang", "Golang"], "subcategory": "云原生"},
+        "Rust": {"aliases": ["rust-lang"], "subcategory": "系统编程"}
+      }
+    },
+    "web_frameworks": {
+      "name": "Web框架",
+      "skills": {
+        "React": {"aliases": ["reactjs", "React.js", "ReactJS"], "subcategory": "前端框架"},
+        "Vue.js": {"aliases": ["vue", "Vue", "VueJS"], "subcategory": "前端框架"},
+        "Angular": {"aliases": ["angularjs", "AngularJS"], "subcategory": "前端框架"},
+        "FastAPI": {"aliases": ["fastapi", "Fast Api"], "subcategory": "后端框架"},
+        "Django": {"aliases": ["django"], "subcategory": "后端框架"},
+        "Flask": {"aliases": ["flask"], "subcategory": "后端框架"},
+        "Spring Boot": {"aliases": ["springboot", "SpringBoot", "Spring"], "subcategory": "后端框架"}
+      }
+    },
+    "databases": {
+      "name": "数据库",
+      "skills": {
+        "MySQL": {"aliases": ["mysql", "MySql"], "subcategory": "关系型数据库"},
+        "PostgreSQL": {"aliases": ["postgres", "Postgres", "pg"], "subcategory": "关系型数据库"},
+        "MongoDB": {"aliases": ["mongo", "Mongo"], "subcategory": "NoSQL数据库"},
+        "Redis": {"aliases": ["redis"], "subcategory": "缓存数据库"},
+        "Elasticsearch": {"aliases": ["elastic", "ES", "elasticsearch"], "subcategory": "搜索引擎"}
+      }
+    },
+    "cloud_devops": {
+      "name": "云原生与DevOps",
+      "skills": {
+        "Docker": {"aliases": ["docker", "container"], "subcategory": "容器化"},
+        "Kubernetes": {"aliases": ["k8s", "K8s", "kubernetes"], "subcategory": "容器编排"},
+        "AWS": {"aliases": ["aws", "Amazon Web Services"], "subcategory": "云服务"},
+        "Azure": {"aliases": ["azure", "Microsoft Azure"], "subcategory": "云服务"},
+        "GCP": {"aliases": ["gcp", "Google Cloud"], "subcategory": "云服务"}
+      }
+    },
+    "ai_ml": {
+      "name": "AI与机器学习",
+      "skills": {
+        "TensorFlow": {"aliases": ["tensorflow", "TF"], "subcategory": "深度学习框架"},
+        "PyTorch": {"aliases": ["pytorch", "torch"], "subcategory": "深度学习框架"},
+        "Scikit-learn": {"aliases": ["sklearn", "scikit-learn", "scikit_learn"], "subcategory": "机器学习库"},
+        "Pandas": {"aliases": ["pandas", "pd"], "subcategory": "数据处理"},
+        "NumPy": {"aliases": ["numpy", "np"], "subcategory": "数值计算"}
+      }
+    },
+    "data_engineering": {
+      "name": "数据工程",
+      "skills": {
+        "Spark": {"aliases": ["spark", "Apache Spark", "PySpark"], "subcategory": "大数据处理"},
+        "Kafka": {"aliases": ["kafka", "Apache Kafka"], "subcategory": "消息队列"},
+        "Airflow": {"aliases": ["airflow", "Apache Airflow"], "subcategory": "工作流调度"},
+        "SQL": {"aliases": ["sql", "SQL"], "subcategory": "数据查询"}
+      }
+    }
+  }
+}

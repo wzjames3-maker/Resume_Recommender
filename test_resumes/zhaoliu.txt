@@ -1,0 +1,18 @@
+赵六
+手机：13600136004 | 邮箱：zhaoliu@example.com
+
+教育背景
+浙江大学 云计算与分布式系统 硕士 2018-2021
+
+工作经历
+华为云 | DevOps高级工程师 | 2021.07 - 至今
+- 负责华为云Kubernetes集群运维，管理1000+节点
+- 搭建CI/CD流水线，使部署效率提升300%
+- 设计监控告警系统，使用Prometheus+Grafana，故障发现时间从30分钟降至2分钟
+- 实施容器化改造，将30+核心服务迁移至K8s
+
+网易 | 运维开发工程师 | 2020.06 - 2021.06
+- 开发自动化运维工具，Python+Ansible
+- 负责游戏服务器集群管理
+
+技能：Kubernetes, Docker, Jenkins, Prometheus, Grafana, Ansible, Terraform, Linux, Shell, Python, Go, AWS, 微服务架构

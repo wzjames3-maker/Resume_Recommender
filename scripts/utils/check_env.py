@@ -1,0 +1,10 @@
+import os
+print("REDIS_HOST:", os.environ.get("REDIS_HOST"))
+print("REDIS_PORT:", os.environ.get("REDIS_PORT"))
+print("REDIS_PASSWORD:", os.environ.get("REDIS_PASSWORD"))
+print("MILVUS_URI:", os.environ.get("MILVUS_URI"))
+print("REDIS_URL:", os.environ.get("REDIS_URL"))
+print("MONGODB_URL:", os.environ.get("MONGODB_URL"))
+print("EMBEDDING_API_KEY:", os.environ.get("EMBEDDING_API_KEY", "")[:10])
+print("LLM_API_KEY:", os.environ.get("LLM_API_KEY", "")[:10])
+print("LLM_BASE_URL:", os.environ.get("LLM_BASE_URL"))

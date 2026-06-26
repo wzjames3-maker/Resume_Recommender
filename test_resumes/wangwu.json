@@ -1,0 +1,41 @@
+{
+  "education": [
+    {
+      "start": "2017",
+      "degree": "博士",
+      "school": "中国科学院大学",
+      "major": "人工智能",
+      "end": "2022"
+    }
+  ],
+  "name": "王五",
+  "email": "wangwu@example.com",
+  "experience": [
+    {
+      "company": "百度",
+      "title": "AI算法工程师",
+      "duration": "2022.07-至今",
+      "description": "负责文心大语言模型的RAG增强检索系统开发。使用Milvus搭建向量数据库，实现百万级文档的语义检索。开发智能问答系统，准确率达到92%，日均服务10万+用户。熟练使用LangChain、LlamaIndex等RAG框架。"
+    },
+    {
+      "company": "商汤科技",
+      "title": "算法实习生",
+      "duration": "2021.06-2022.06",
+      "description": "参与计算机视觉模型训练和部署。使用PyTorch进行目标检测模型开发。"
+    }
+  ],
+  "phone": "13700137003",
+  "skills": [
+    "Python",
+    "PyTorch",
+    "LangChain",
+    "RAG",
+    "向量数据库",
+    "Milvus",
+    "NLP",
+    "LLM",
+    "Transformer",
+    "TensorFlow",
+    "Docker"
+  ]
+}

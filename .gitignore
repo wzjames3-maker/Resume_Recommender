@@ -1,0 +1,47 @@
+# ==================== Python ====================
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.pytest_cache/
+
+# ==================== Environment & Secrets ====================
+.env
+.env.*
+!.env.example
+
+# ==================== Logs & Coverage ====================
+*.log
+server_stdout.log
+server_stderr.log
+.coverage
+.coverage.*
+htmlcov/
+.coverage.*
+
+# ==================== OS & IDE ====================
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# ==================== Project Artifacts ====================
+screenshot_*.png
+test_screenshots/
+.codegraph/
+.streamlit/
+*.db
+*.sqlite3
+
+# ==================== Temporary Scripts (keep reviewed only) ====================
+# Root-level one-off scripts are excluded; reviewed utilities stay in scripts/
+
+# ==================== Docker ====================
+docker-compose.override.yml

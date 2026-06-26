@@ -1,0 +1,41 @@
+{
+  "education": [
+    {
+      "start": "2018",
+      "degree": "硕士",
+      "school": "北京大学",
+      "major": "计算机科学与技术",
+      "end": "2021"
+    }
+  ],
+  "name": "张三",
+  "email": "zhangsan@example.com",
+  "experience": [
+    {
+      "company": "字节跳动",
+      "title": "高级Java开发工程师",
+      "duration": "2021.07-至今",
+      "description": "负责抖音电商后端系统架构设计与开发，使用Java/Spring Boot/微服务架构，日均处理千万级订单。主导分布式事务框架设计，订单成功率提升至99.99%。使用Redis集群做缓存，Kafka做消息队列，MySQL分库分表。带领5人小组完成订单系统重构，QPS从5000提升至20000。"
+    },
+    {
+      "company": "阿里巴巴",
+      "title": "Java开发工程师",
+      "duration": "2020.06-2021.06",
+      "description": "参与淘宝推荐系统后端开发，使用Java和Python进行数据处理。负责用户画像服务，日活用户2亿+。"
+    }
+  ],
+  "phone": "13800138001",
+  "skills": [
+    "Java",
+    "Spring Boot",
+    "微服务",
+    "MySQL",
+    "Redis",
+    "Kafka",
+    "Docker",
+    "Kubernetes",
+    "Python",
+    "分布式系统",
+    "ElasticSearch"
+  ]
+}

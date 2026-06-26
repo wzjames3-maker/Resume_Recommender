@@ -1,0 +1,110 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "resume-rag"
+version = "0.1.0"
+description = "企业智能招聘 RAG 推荐系统"
+readme = {text="", content-type="text/plain"}
+license = "MIT"
+requires-python = ">=3.11"
+authors = [
+    { name = "Your Name", email = "your.email@example.com" },
+]
+
+dependencies = [
+    "passlib[bcrypt]>=1.7,",
+    # FastAPI 核心
+    "fastapi>=0.109.0",
+    "uvicorn[standard]>=0.27.0",
+    "python-multipart>=0.0.6",
+    "pdfplumber>=0.11.0",
+    "python-docx>=1.1.0",
+
+    # 数据验证
+    "pydantic>=2.5.3",
+    "pydantic-settings>=2.1.0",
+
+    # 数据库
+    "pymongo>=4.6.0",
+    "openpyxl>=3.1.0",
+    "pymilvus>=2.4.6",  # ⚠️ 版本锁死：必须 >=2.4.6 才完整支持 SPARSE_FLOAT_VECTOR + SPARSE_INVERTED_INDEX
+    "redis>=5.0.1",
+
+    # LangChain 生态
+    "langchain>=0.1.4",
+    "langgraph>=0.0.20",
+    "langchain-openai>=0.0.5",
+    "langchain-milvus>=0.0.3",
+
+    # LLM API
+    "httpx>=0.26.0",
+    "openai>=1.12.0",
+
+    # 认证
+    "pyjwt>=2.8.0",
+    "cryptography>=42.0.0",
+    "passlib>=1.7.4",
+    "bcrypt>=4.1.2,<5.0.0",
+
+    # 前端
+    "streamlit>=1.31.0",
+
+    # 异步任务
+    "arq>=0.25.0",
+
+    # 日志
+    "python-json-logger>=2.0.7",
+    "loguru>=0.7.2",
+
+    # Embedding
+
+    # 工具
+    "python-dotenv>=1.0.0",
+    "aiofiles>=23.2.1",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.3",
+    "pytest-cov>=4.1.0",
+    "pytest-mock>=3.12.0",
+    "httpx>=0.26.0",
+    "mypy>=1.8.0",
+    "ruff>=0.1.14",
+    "black>=24.1.1",
+    "isort>=5.13.2",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "N", "W", "UP"]
+
+[tool.black]
+line-length = 100
+target-version = ["py311"]
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.mypy]
+python_version = "3.11"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_functions = ["test_*"]
+addopts = "-v --cov=src --cov-report=term-missing"
+asyncio_mode = "auto"

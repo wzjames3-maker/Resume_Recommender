@@ -1,0 +1,199 @@
+# 智能招聘 RAG 推荐系统 - Docker Compose
+# 版本: 3.8
+
+name: resume-rag
+
+services:
+  # FastAPI + Streamlit 应用
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: resume-rag-app
+    ports:
+      - "${APP_PORT:-8000}:8000"
+      - "${STREAMLIT_PORT:-8501}:8501"
+    env_file:
+      - .env
+    environment:
+      - PYTHONPATH=/app
+      - MONGODB_URL=mongodb://admin:password@mongodb:27017/resume_rag?authSource=admin
+      - MILVUS_URI=http://milvus-standalone:19530
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_HOST=redis
+    volumes:
+      - ./src:/app/src
+      - ./tests:/app/tests
+      - ./.streamlit:/app/.streamlit
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      milvus-standalone:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+    networks:
+      - resume-rag-network
+
+  # ARQ Worker（异步任务处理）
+  arq-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: resume-rag-worker
+    command: ["arq", "src.common.worker.WorkerSettings"]
+    env_file:
+      - .env
+    environment:
+      - PYTHONPATH=/app
+      - MONGODB_URL=mongodb://admin:password@mongodb:27017/resume_rag?authSource=admin
+      - MILVUS_URI=http://milvus-standalone:19530
+      - REDIS_URL=redis://redis:6379/0
+      - REDIS_HOST=redis
+    volumes:
+      - ./src:/app/src
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      milvus-standalone:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - resume-rag-network
+
+  # MongoDB 7.x
+  mongodb:
+    image: mongo:7
+    container_name: resume-rag-mongodb
+    ports:
+      - "${MONGODB_PORT:-27017}:27017"
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGODB_USER:-admin}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGODB_PASSWORD:-password}
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - resume-rag-network
+
+  # Milvus Standalone v2.4.6
+  milvus-standalone:
+    image: milvusdb/milvus:v2.4.6
+    container_name: resume-rag-milvus
+    ports:
+      - "${MILVUS_PORT:-19530}:19530"
+      - "9091:9091"
+    environment:
+      - ETCD_ENDPOINTS=etcd:2379
+      - MINIO_ADDRESS=minio:9000
+    volumes:
+      - milvus_data:/var/lib/milvus
+    command: ["milvus", "run", "standalone"]
+    depends_on:
+      etcd:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - resume-rag-network
+
+  # Milvus 依赖: etcd
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.5
+    container_name: resume-rag-etcd
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    volumes:
+      - etcd_data:/etcd
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - resume-rag-network
+
+  # Milvus 依赖: MinIO
+  minio:
+    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    container_name: resume-rag-minio
+    environment:
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
+    volumes:
+      - minio_data:/minio_data
+    command: minio server /minio_data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - resume-rag-network
+
+  # Redis 7.x Alpine
+  redis:
+    image: redis:7-alpine
+    container_name: resume-rag-redis
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:-password}
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:-password}", "ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - resume-rag-network
+
+# 数据卷
+volumes:
+  mongodb_data:
+    driver: local
+  milvus_data:
+    driver: local
+  etcd_data:
+    driver: local
+  minio_data:
+    driver: local
+  redis_data:
+    driver: local
+
+# 网络
+networks:
+  resume-rag-network:
+    driver: bridge
