@@ -66,7 +66,8 @@ def logout():
 
 def health_check() -> Optional[Dict]:
     try:
-        r = requests.get("http://localhost:8000/health", timeout=5)
+        health_url = f"{API_BASE_URL.replace('/api/v1', '')}/health"
+        r = requests.get(health_url, timeout=5)
         return r.json() if r.status_code == 200 else None
     except Exception:
         return None
