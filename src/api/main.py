@@ -123,10 +123,9 @@ async def health_check():
         status["redis"] = "unavailable"
 
     try:
-        from pymilvus import connections, utility
-        connections.connect("health_check", uri=get_settings().milvus.MILVUS_URI, timeout=3)
-        status["milvus"] = "ok" if utility.get_server_version() else "unavailable"
-        connections.disconnect("health_check")
+        from pymilvus import MilvusClient
+        client = MilvusClient(uri=get_settings().milvus.MILVUS_URI, timeout=3)
+        status["milvus"] = "ok" if client.get_server_version() else "unavailable"
     except Exception:
         status["milvus"] = "unavailable"
 
