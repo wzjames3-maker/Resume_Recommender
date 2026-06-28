@@ -54,6 +54,7 @@ services:
       - .env
     environment:
       - PYTHONPATH=/app
+      - API_BASE_URL=http://app:8000/api/v1
     volumes:
       - ./src:/app/src
       - ./.streamlit:/app/.streamlit
