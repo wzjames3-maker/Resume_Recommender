@@ -18,8 +18,8 @@ WORKDIR /app
 # 复制依赖文件
 COPY pyproject.toml ./
 
-# 安装 Python 依赖
-RUN pip install --no-cache-dir .
+# 安装 Python 依赖（含 milvus-lite 用于测试）
+RUN pip install --no-cache-dir ".[dev]" && pip install --no-cache-dir "pymilvus[milvus_lite]"
 
 # 复制应用代码
 COPY . .

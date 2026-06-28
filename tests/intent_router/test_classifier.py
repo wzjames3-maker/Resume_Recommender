@@ -111,9 +111,9 @@ class TestIntentClassifier:
 
     def test_get_cache_key(self, classifier):
         """测试生成缓存键"""
-        key1 = classifier._get_cache_key("测试文本", None)
-        key2 = classifier._get_cache_key("测试文本", None)
-        key3 = classifier._get_cache_key("其他文本", None)
+        key1 = classifier._cache_key("测试文本", None)
+        key2 = classifier._cache_key("测试文本", None)
+        key3 = classifier._cache_key("其他文本", None)
 
         assert key1 == key2  # 相同输入应该有相同的键
         assert key1 != key3  # 不同输入应该有不同的键
@@ -125,8 +125,8 @@ class TestIntentClassifier:
             turn_count=1,
         )
 
-        key1 = classifier._get_cache_key("测试文本", context)
-        key2 = classifier._get_cache_key("测试文本", None)
+        key1 = classifier._cache_key("测试文本", context)
+        key2 = classifier._cache_key("测试文本", None)
 
         assert key1 != key2  # 有无上下文应该有不同的键
 
@@ -139,19 +139,19 @@ class TestIntentClassifier:
         )
 
         # 存入缓存
-        classifier._set_to_cache("test_key", result)
+        classifier._to_cache("test_key", result)
 
         # 从缓存获取
-        cached = classifier._get_from_cache("test_key")
+        cached = classifier._from_cache("test_key")
         assert cached is not None
         assert cached.intent == IntentEnum.CHAT
 
         # 不存在的键
-        assert classifier._get_from_cache("nonexistent") is None
+        assert classifier._from_cache("nonexistent") is None
 
         # 清除缓存
         classifier.clear_cache()
-        assert classifier._get_from_cache("test_key") is None
+        assert classifier._from_cache("test_key") is None
 
     def test_keyword_fallback_search(self, classifier):
         """测试关键词降级 - 搜索"""

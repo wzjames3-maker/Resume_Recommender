@@ -1,4 +1,6 @@
 """测试文件上传安全校验（SEC-T06）"""
+from unittest.mock import MagicMock, patch
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -10,6 +12,18 @@ client = TestClient(app)
 
 def _hr_token() -> str:
     return create_user_token(user_id="hr-001", role="hr")
+
+
+@pytest.fixture(autouse=True)
+def mock_mongodb():
+    with patch("src.resume_store.connection.MongoDBConnection.connect"), \
+         patch("src.resume_store.connection.MongoDBConnection.get_database") as mock_db, \
+         patch("src.resume_store.connection.MongoDBConnection.health_check", return_value=False):
+        mock_col = MagicMock()
+        mock_col.find_one.return_value = None
+        mock_col.insert_one.return_value = MagicMock(inserted_id="mock-id")
+        mock_db.return_value.__getitem__.return_value = mock_col
+        yield
 
 
 class TestUploadSafety:

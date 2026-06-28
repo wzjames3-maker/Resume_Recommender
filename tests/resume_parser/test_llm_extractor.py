@@ -85,19 +85,8 @@ class TestLLMExtractor:
     """LLMExtractor 测试"""
 
     def test_build_function_schema(self, extractor):
-        """测试构建 Function Schema"""
-        schema = extractor._build_function_schema()
-
-        assert schema["name"] == "extract_resume"
-        assert "parameters" in schema
-        assert "properties" in schema["parameters"]
-
-        # 验证必需字段
-        required = schema["parameters"]["required"]
-        assert "personal_info" in required
-        assert "education_list" in required
-        assert "experience_list" in required
-        assert "skill_list" in required
+        """_build_function_schema removed in prompt-based refactor"""
+        pytest.skip("_build_function_schema removed in prompt-based refactor")
 
     def test_build_prompt(self, extractor):
         """测试构建 Prompt"""
@@ -136,7 +125,7 @@ class TestLLMExtractor:
             "confidence_score": 0.9,
         }
 
-        structured = extractor._parse_result(result)
+        structured = extractor._parse(result)
 
         assert structured.personal_info.full_name == "张三"
         assert structured.personal_info.phone == "13800138000"
@@ -155,7 +144,7 @@ class TestLLMExtractor:
             "skill_list": [],
         }
 
-        structured = extractor._parse_result(result)
+        structured = extractor._parse(result)
 
         assert structured.personal_info.full_name is None
         assert structured.education_list == []
@@ -165,7 +154,7 @@ class TestLLMExtractor:
     def test_fallback_result(self, extractor):
         """测试降级结果"""
         error_message = "API 调用失败"
-        result = extractor._fallback_result(error_message)
+        result = extractor._fallback(error_message)
 
         assert result.personal_info.full_name is None
         assert result.education_list == []

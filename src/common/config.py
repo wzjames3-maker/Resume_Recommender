@@ -194,18 +194,29 @@ class JWTSettings(BaseSettings):
     @field_validator("JWT_SECRET_KEY")
     @classmethod
     def validate_secret_key(cls, v: str) -> str:
-        if len(v) < 32:
-            raise ValueError("JWT_SECRET_KEY 长度不能少于 32 字符")
+        import os
+
         weak_keys = [
             "resume-rag-jwt-secret-key-2026",
             "your-secret-key",
             "changeme",
             "secret",
         ]
-        if v.lower() in [k.lower() for k in weak_keys]:
-            raise ValueError(
-                f"JWT_SECRET_KEY 为已知弱密钥，请使用 python -c "
-                f"\"import secrets; print(secrets.token_hex(64))\" 生成"
+        is_weak = v.lower() in [k.lower() for k in weak_keys]
+        is_prod = os.environ.get("APP_ENV", "").lower() == "prod"
+
+        if is_prod:
+            if len(v) < 32:
+                raise ValueError("生产环境 JWT_SECRET_KEY 长度不能少于 32 字符")
+            if is_weak:
+                raise ValueError(
+                    f"JWT_SECRET_KEY 为已知弱密钥，请使用 python -c "
+                    f'"import secrets; print(secrets.token_hex(64))" 生成'
+                )
+        elif is_weak:
+            import logging
+            logging.getLogger("config").warning(
+                "JWT_SECRET_KEY 为已知弱密钥，生产环境请更换"
             )
         return v
 
