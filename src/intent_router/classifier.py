@@ -69,6 +69,7 @@ class IntentClassifier:
         self.timeout = DEFAULT_TIMEOUT
         self.confidence_threshold = CONFIDENCE_THRESHOLD
         self._cache: Dict[str, tuple] = {}
+        self._client = httpx.Client(timeout=self.timeout)
 
     def classify(self, query: str, context: Optional[ConversationContext] = None) -> IntentResult:
         cache_key = self._cache_key(query, context)
@@ -93,8 +94,7 @@ class IntentClassifier:
         }
         for attempt in range(MAX_RETRIES + 1):
             try:
-                with httpx.Client(timeout=self.timeout) as client:
-                    resp = client.post(f"{self.api_base_url}/chat/completions", headers=headers, json=payload)
+                resp = self._client.post(f"{self.api_base_url}/chat/completions", headers=headers, json=payload)
                 if resp.status_code != 200:
                     if attempt < MAX_RETRIES:
                         continue

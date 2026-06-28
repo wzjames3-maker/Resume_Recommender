@@ -37,5 +37,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
 # 暴露端口
 EXPOSE 8000 8501
 
-# 默认启动命令（FastAPI）
-CMD ["sh", "-c", "streamlit run src/frontend/app.py --server.port 8501 --server.address 0.0.0.0 & uvicorn src.api.main:app --host 0.0.0.0 --port 8000"]
+# 默认启动命令（仅 FastAPI，前端用独立服务）
+CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]

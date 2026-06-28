@@ -47,8 +47,11 @@ class EmbeddingGenerator:
         self.dimension = self.settings.embedding.EMBEDDING_DIMENSION
         self.timeout = DEFAULT_TIMEOUT
 
-        # 缓存
-        self._cache: Dict[str, EmbeddingResult] = {}
+        self._client = httpx.Client(timeout=self.timeout)
+
+        # 缓存 (TTL + maxsize 限制)
+        from cachetools import TTLCache
+        self._cache: TTLCache = TTLCache(maxsize=10000, ttl=3600)
 
     def generate(self, text: str) -> EmbeddingResult:
         """
@@ -166,42 +169,41 @@ class EmbeddingGenerator:
 
         for attempt in range(MAX_RETRIES):
             try:
-                with httpx.Client(timeout=self.timeout) as client:
-                    response = client.post(
-                        f"{self.api_base_url}/embeddings",
-                        headers=headers,
-                        json=payload,
-                    )
+                response = self._client.post(
+                    f"{self.api_base_url}/embeddings",
+                    headers=headers,
+                    json=payload,
+                )
 
-                    if response.status_code != 200:
-                        error_msg = f"API 返回错误: {response.status_code}"
-                        logger.warning(error_msg)
+                if response.status_code != 200:
+                    error_msg = f"API 返回错误: {response.status_code}"
+                    logger.warning(error_msg)
 
-                        if attempt < MAX_RETRIES - 1:
-                            continue
-                        else:
-                            raise ExternalServiceError(
-                                error_code=ErrorCode.VEC_003,
-                                detail=error_msg,
-                            )
+                    if attempt < MAX_RETRIES - 1:
+                        continue
+                    else:
+                        raise ExternalServiceError(
+                            error_code=ErrorCode.VEC_003,
+                            detail=error_msg,
+                        )
 
-                    result = response.json()
+                result = response.json()
 
-                    # 解析结果
-                    embeddings = []
-                    for item in result.get("data", []):
-                        dense = item.get("embedding", [])
-                        # BGE-M3 返回的是 Dense 向量
-                        # Sparse 向量需要单独处理（这里简化为使用 Dense）
-                        sparse = self._dense_to_sparse(dense)
+                # 解析结果
+                embeddings = []
+                for item in result.get("data", []):
+                    dense = item.get("embedding", [])
+                    # BGE-M3 返回的是 Dense 向量
+                    # Sparse 向量需要单独处理（这里简化为使用 Dense）
+                    sparse = self._dense_to_sparse(dense)
 
-                        embeddings.append(EmbeddingResult(
-                            dense=dense,
-                            sparse=sparse,
-                            token_count=result.get("usage", {}).get("total_tokens", 0),
-                        ))
+                    embeddings.append(EmbeddingResult(
+                        dense=dense,
+                        sparse=sparse,
+                        token_count=result.get("usage", {}).get("total_tokens", 0),
+                    ))
 
-                    return embeddings
+                return embeddings
 
             except httpx.TimeoutException:
                 logger.warning(f"API 超时，重试 {attempt + 1}/{MAX_RETRIES}")

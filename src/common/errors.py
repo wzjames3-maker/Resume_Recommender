@@ -314,8 +314,8 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     from fastapi.responses import JSONResponse
 
     request_id = request.headers.get("X-Request-ID")
+    debug = request.app.state.debug if hasattr(request.app.state, "debug") else False
 
-    # 提取验证错误详情
     errors = []
     for error in exc.errors():
         errors.append({
@@ -327,7 +327,7 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     response = ErrorResponse(
         code=ErrorCode.SYS_001.value,
         message="输入参数无效",
-        detail=errors,
+        detail=errors if debug else None,
         request_id=request_id,
     )
     return JSONResponse(

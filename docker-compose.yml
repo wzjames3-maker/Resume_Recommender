@@ -12,19 +12,18 @@ services:
     container_name: resume-rag-app
     ports:
       - "${APP_PORT:-8000}:8000"
-      - "${STREAMLIT_PORT:-8501}:8501"
     env_file:
       - .env
     environment:
       - PYTHONPATH=/app
-      - MONGODB_URL=mongodb://admin:password@mongodb:27017/resume_rag?authSource=admin
+      - MONGODB_URL=mongodb://${MONGODB_USER:-admin}:${MONGODB_PASSWORD:-password}@mongodb:27017/resume_rag?authSource=admin
       - MILVUS_URI=http://milvus-standalone:19530
-      - REDIS_URL=redis://redis:6379/0
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-password}@redis:6379/0
       - REDIS_HOST=redis
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-password}
     volumes:
       - ./src:/app/src
       - ./tests:/app/tests
-      - ./.streamlit:/app/.streamlit
     depends_on:
       mongodb:
         condition: service_healthy
@@ -33,11 +32,34 @@ services:
       redis:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 40s
+    restart: unless-stopped
+    networks:
+      - resume-rag-network
+
+  # Streamlit 前端（独立容器）
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: resume-rag-frontend
+    command: ["streamlit", "run", "src/frontend/app.py", "--server.port", "8501", "--server.address", "0.0.0.0"]
+    ports:
+      - "${STREAMLIT_PORT:-8501}:8501"
+    env_file:
+      - .env
+    environment:
+      - PYTHONPATH=/app
+    volumes:
+      - ./src:/app/src
+      - ./.streamlit:/app/.streamlit
+    depends_on:
+      app:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - resume-rag-network
@@ -53,10 +75,11 @@ services:
       - .env
     environment:
       - PYTHONPATH=/app
-      - MONGODB_URL=mongodb://admin:password@mongodb:27017/resume_rag?authSource=admin
+      - MONGODB_URL=mongodb://${MONGODB_USER:-admin}:${MONGODB_PASSWORD:-password}@mongodb:27017/resume_rag?authSource=admin
       - MILVUS_URI=http://milvus-standalone:19530
-      - REDIS_URL=redis://redis:6379/0
+      - REDIS_URL=redis://:${REDIS_PASSWORD:-password}@redis:6379/0
       - REDIS_HOST=redis
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-password}
     volumes:
       - ./src:/app/src
     depends_on:
@@ -66,6 +89,8 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
+    healthcheck:
+      disable: true
     restart: unless-stopped
     networks:
       - resume-rag-network
@@ -77,6 +102,7 @@ services:
     ports:
       - "${MONGODB_PORT:-27017}:27017"
     environment:
+      # ⚠️ 生产环境必须在 .env 中设置强密码，此处仅用于本地开发
       - MONGO_INITDB_ROOT_USERNAME=${MONGODB_USER:-admin}
       - MONGO_INITDB_ROOT_PASSWORD=${MONGODB_PASSWORD:-password}
     volumes:
@@ -146,6 +172,7 @@ services:
     image: minio/minio:RELEASE.2023-03-20T20-16-18Z
     container_name: resume-rag-minio
     environment:
+      # ⚠️ 生产环境必须在 .env 中设置强密码，此处仅用于本地开发
       - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:-minioadmin}
       - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:-minioadmin}
     volumes:

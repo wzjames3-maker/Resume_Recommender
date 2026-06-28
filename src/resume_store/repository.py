@@ -187,6 +187,59 @@ class ResumeRepository:
         resume = ResumeSchema.from_mongodb_dict(doc)
         return self._to_response(resume)
 
+    def batch_get_by_ids(
+        self, resume_ids: List[str]
+    ) -> Dict[str, ResumeResponse]:
+        """
+        批量查询简历（避免 N+1）
+
+        Args:
+            resume_ids: 简历 ID 列表
+
+        Returns:
+            Dict[str, ResumeResponse]: {resume_id: ResumeResponse}
+        """
+        if not resume_ids:
+            return {}
+
+        collection = self._get_collection()
+        from bson import ObjectId
+
+        oid_map = {}
+        for rid in resume_ids:
+            try:
+                oid_map[ObjectId(rid)] = rid
+            except Exception:
+                pass
+
+        query = {
+            "$or": [
+                {"id": {"$in": list(resume_ids)}},
+                {"_id": {"$in": list(oid_map.keys())}} if oid_map else {},
+            ],
+            "status": {"$ne": ResumeStatus.DELETED.value},
+        }
+        if not oid_map:
+            query = {
+                "id": {"$in": list(resume_ids)},
+                "status": {"$ne": ResumeStatus.DELETED.value},
+            }
+
+        results = {}
+        for doc in collection.find(query):
+            resume = ResumeSchema.from_mongodb_dict(doc)
+            resp = self._to_response(resume)
+            rid = resp.id
+            if rid not in results:
+                results[rid] = resp
+            if rid in resume_ids:
+                results[rid] = resp
+            oid = str(doc.get("_id"))
+            if oid in resume_ids and oid not in results:
+                results[oid] = resp
+
+        return results
+
     def find_by_filename(self, file_name: str):
         """通过文件名查找简历（用于 pipeline 脚本）"""
         from typing import Optional as _Opt

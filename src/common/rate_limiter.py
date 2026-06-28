@@ -1,38 +1,70 @@
-"""登录限流模块（Redis 滑动窗口）"""
+"""登录限流模块（Redis 滑动窗口 + 内存降级）"""
 import time
 from collections import defaultdict
-from typing import Dict, Tuple
+from typing import Dict
+
+from src.common.config import Environment, get_settings
+from src.common.logger import get_logger
+
+logger = get_logger("rate_limiter")
 
 
 class RateLimiter:
-    """简单的内存滑动窗口限流器（生产应使用 Redis）"""
+    """滑动窗口限流器（生产用 Redis，开发降级到内存）"""
 
     def __init__(self):
         self._windows: Dict[str, Dict[int, int]] = defaultdict(dict)
+        self._redis = None
+
+    def _use_redis(self) -> bool:
+        try:
+            return get_settings().app.APP_ENV == Environment.PROD
+        except Exception:
+            return False
+
+    def _get_redis(self):
+        if self._redis is None and self._use_redis():
+            import redis.asyncio as aioredis
+            self._redis = aioredis.from_url(
+                get_settings().redis.redis_url,
+                decode_responses=True,
+            )
+        return self._redis
 
     async def is_allowed(self, key: str, limit: int = 10, window: int = 60) -> bool:
-        """
-        检查请求是否被允许。
+        redis = self._get_redis()
+        if redis:
+            return await self._redis_is_allowed(redis, key, limit, window)
+        return self._memory_is_allowed(key, limit, window)
 
-        Args:
-            key: 限流 key（如 ratelimit:login:{ip}）
-            limit: 窗口内最大请求数
-            window: 窗口时间（秒）
+    async def _redis_is_allowed(self, redis, key: str, limit: int, window: int) -> bool:
+        now = int(time.time() * 1000)
+        window_start = now - window * 1000
+        rkey = f"ratelimit:{key}"
+        try:
+            async with redis.pipeline(transaction=True) as pipe:
+                pipe.zremrangebyscore(rkey, 0, window_start)
+                pipe.zcard(rkey)
+                results = await pipe.execute()
+            current = results[1]
+            if current >= limit:
+                return False
+            await redis.zadd(rkey, {str(now): now})
+            await redis.expire(rkey, window)
+            return True
+        except Exception as e:
+            logger.warning(f"Redis rate limit failed, falling back to memory: {e}")
+            return self._memory_is_allowed(key, limit, window)
 
-        Returns:
-            bool: True = 允许，False = 超限
-        """
+    def _memory_is_allowed(self, key: str, limit: int, window: int) -> bool:
         now = int(time.time())
         bucket = self._windows[key]
-        # 清理过期桶
         expired = [t for t in bucket if now - t >= window]
         for t in expired:
             del bucket[t]
-        # 统计当前窗口内请求数
         count = sum(bucket.values())
         if count >= limit:
             return False
-        # 记录当前秒的请求
         bucket[now] = bucket.get(now, 0) + 1
         return True
 

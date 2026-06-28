@@ -282,14 +282,6 @@ class PIIHandler:
     def _log_access(
         self, user_id: str, resume_id: str, fields: List[str]
     ) -> None:
-        """
-        记录 PII 访问日志
-
-        Args:
-            user_id: 用户 ID
-            resume_id: 简历 ID
-            fields: 访问的字段列表
-        """
         log = PIIAccessLog(
             user_id=user_id,
             resume_id=resume_id,
@@ -300,6 +292,13 @@ class PIIHandler:
         logger.info(
             f"PII 访问记录: user={user_id}, resume={resume_id}, fields={fields}"
         )
+
+        try:
+            from src.resume_store.connection import mongodb_connection
+            db = mongodb_connection.get_database()
+            db.pii_access_logs.insert_one(log.model_dump(mode="json"))
+        except Exception as e:
+            logger.error(f"PII 访问日志写入 MongoDB 失败: {e}")
 
     def get_access_logs(
         self,

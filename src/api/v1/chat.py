@@ -46,17 +46,11 @@ async def generate_sse_stream(
 ) -> AsyncGenerator[str, None]:
     """
     生成 SSE 流
-
-    Args:
-        message: 用户消息
-        conversation_id: 会话 ID
-        user_id: 用户 ID
-
-    Yields:
-        str: SSE 事件
     """
+    import asyncio
+
     try:
-        # 1. 意图识别
+        # 1. 意图识别（同步调用，包装到线程避免阻塞事件循环）
         classifier = get_intent_classifier()
 
         # 获取对话上下文
@@ -68,7 +62,7 @@ async def generate_sse_stream(
             if context_data:
                 context = ConversationContext(**context_data)
 
-        intent_result = classifier.classify(message, context)
+        intent_result = await asyncio.to_thread(classifier.classify, message, context)
 
         # 2. Fallback 检查
         fallback_handler = get_intent_fallback_handler()
@@ -104,7 +98,7 @@ async def generate_sse_stream(
             if intent_result.intent == IntentEnum.RECRUITMENT_REFINE and not conversation_id:
                 yield f"data: {json.dumps({'type': 'error', 'message': '请先进行搜索'}, ensure_ascii=False)}\n\n"
                 return
-            result = handler()
+            result = await asyncio.to_thread(handler)
         else:
             msg = FALLBACK_MESSAGES.get(intent_result.intent, DEFAULT_FALLBACK)
             yield f"data: {json.dumps({'type': 'token', 'content': msg}, ensure_ascii=False)}\n\n"

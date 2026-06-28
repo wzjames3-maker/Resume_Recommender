@@ -29,6 +29,7 @@ class Reranker:
         self.api_base_url = "https://api.siliconflow.cn/v1"
         self.model = "BAAI/bge-reranker-v2-m3"
         self.timeout = DEFAULT_TIMEOUT
+        self._client = httpx.Client(timeout=self.timeout)
 
     def rerank(
         self,
@@ -92,12 +93,11 @@ class Reranker:
 
         for attempt in range(MAX_RETRIES):
             try:
-                with httpx.Client(timeout=self.timeout) as client:
-                    resp = client.post(
-                        f"{self.api_base_url}/rerank",
-                        headers=headers,
-                        json=payload,
-                    )
+                resp = self._client.post(
+                    f"{self.api_base_url}/rerank",
+                    headers=headers,
+                    json=payload,
+                )
 
                 if resp.status_code != 200:
                     logger.warning(f"Rerank API error {resp.status_code}: {resp.text[:200]}")

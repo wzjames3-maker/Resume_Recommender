@@ -69,9 +69,17 @@ class MongoDBConnection:
             logger.info("MongoDB 连接已关闭")
 
     def get_database(self) -> Database:
-        """获取数据库实例"""
+        """获取数据库实例（自动重连）"""
         if self._database is None:
             self.connect()
+        else:
+            try:
+                self._client.admin.command("ping")
+            except Exception:
+                logger.warning("MongoDB 连接丢失，尝试重连...")
+                self._client = None
+                self._database = None
+                self.connect()
         return self._database
 
     def get_collection(self, collection_name: str) -> Collection:

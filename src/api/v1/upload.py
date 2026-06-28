@@ -38,6 +38,7 @@ class UploadResponse(BaseModel):
     resume_id: Optional[str] = Field(None, description="简历 ID")
     message: str = Field(..., description="消息")
     parse_status: Optional[str] = Field(None, description="解析状态")
+    index_status: Optional[str] = Field(None, description="索引状态: indexed | failed")
 
 
 @router.post("/upload", response_model=UploadResponse)
@@ -106,16 +107,19 @@ async def upload_resume(
     logger.info(f"简历上传成功: resume_id={resume.id}")
 
     # 11. Indexing: segment -> chunk -> vector write
+    index_status = "indexed"
     try:
         from src.services.indexing import index_resume
         chunk_count = index_resume(resume.id, extracted_doc.raw_text)
         logger.info(f"Vector index write OK: resume_id={resume.id}, chunks={chunk_count}")
     except Exception as e:
-        logger.error(f"Vector index write FAILED (non-blocking): resume_id={resume.id}, error={e}")
+        logger.error(f"Vector index write FAILED: resume_id={resume.id}, error={e}")
+        index_status = "failed"
 
     return UploadResponse(
         success=True,
         resume_id=resume.id,
-        message="简历上传成功",
+        message="简历上传成功" if index_status == "indexed" else "简历已保存，但索引创建失败，搜索可能不准确",
         parse_status=fallback_result.parse_status.value,
+        index_status=index_status,
     )

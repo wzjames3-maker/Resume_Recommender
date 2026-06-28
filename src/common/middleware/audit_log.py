@@ -155,15 +155,15 @@ class AuditLogMiddleware(BaseHTTPMiddleware):
         Returns:
             Optional[str]: 用户 ID，如果没有则返回 None
         """
-        # 尝试从 JWT Token 中提取
-        # 这里只是示例，实际实现需要解析 JWT Token
         auth_header = request.headers.get("Authorization")
         if auth_header and auth_header.startswith("Bearer "):
-            # TODO: 解析 JWT Token 提取用户 ID
-            # token = auth_header.split(" ")[1]
-            # payload = jwt.decode(token, ...)
-            # return payload.get("sub")
-            pass
+            try:
+                from src.common.auth import decode_access_token
+                token = auth_header.split(" ", 1)[1]
+                payload = decode_access_token(token)
+                return payload.get("sub")
+            except Exception:
+                pass
 
         return None
 

@@ -121,51 +121,31 @@ class RecruitmentWorkflow:
                 session_id=session_id,
             )
 
-        # 4. Enrich MongoDB metadata
-        #         # Enrich results with MongoDB metadata (try UUID id, fallback to ObjectId _id)
-        seen_ids = set()
+        # 4. Batch Enrich MongoDB metadata (avoid N+1)
+        unique_ids = list(set(r.resume_id for r in retrieval_results))
+        resume_map = self.resume_repository.batch_get_by_ids(unique_ids)
         enriched = []
         for r in retrieval_results:
-            if r.resume_id in seen_ids:
-                continue
-            seen_ids.add(r.resume_id)
-            try:
-                resp = None
-                try:
-                    resp = self.resume_repository.get(r.resume_id)
-                except Exception:
-                    from bson import ObjectId
-                    from src.resume_store.connection import get_resume_collection
-                    col = get_resume_collection()
-                    try:
-                        doc = col.find_one({"_id": ObjectId(r.resume_id)})
-                        if doc:
-                            from src.resume_store.models import ResumeSchema
-                            resume_obj = ResumeSchema.from_mongodb_dict(doc)
-                            resp = self.resume_repository._to_response(resume_obj)
-                    except Exception:
-                        pass
-                if resp:
-                    pi = resp.personal_info
-                    skills = resp.skill_list or []
-                    skill_names = [s.name for s in skills if s.name]
-                    r.metadata["candidate_name"] = pi.full_name or ""
-                    r.metadata["skills"] = skill_names
-                    r.metadata["years_of_experience"] = pi.years_of_experience
-                    edu_list = resp.education_list or []
-                    highest_edu = ""
-                    for edu in edu_list:
-                        if edu.degree and (not highest_edu or edu.degree in ["博士","硕士","本科","大专"]):
-                            highest_edu = edu.degree
-                    r.metadata["highest_education"] = highest_edu
-                    r.metadata["expected_city"] = pi.expected_city or ""
-                    r.metadata["expected_salary"] = str(pi.expected_salary_range) if pi.expected_salary_range else ""
-            except Exception:
-                pass
+            resp = resume_map.get(r.resume_id)
+            if resp:
+                pi = resp.personal_info
+                skills = resp.skill_list or []
+                skill_names = [s.name for s in skills if s.name]
+                r.metadata["candidate_name"] = pi.full_name or ""
+                r.metadata["skills"] = skill_names
+                r.metadata["years_of_experience"] = pi.years_of_experience
+                edu_list = resp.education_list or []
+                highest_edu = ""
+                for edu in edu_list:
+                    if edu.degree and (not highest_edu or edu.degree in ["博士","硕士","本科","大专"]):
+                        highest_edu = edu.degree
+                r.metadata["highest_education"] = highest_edu
+                r.metadata["expected_city"] = pi.expected_city or ""
+                r.metadata["expected_salary"] = str(pi.expected_salary_range) if pi.expected_salary_range else ""
             enriched.append(r)
 
         # 5. 元数据过滤
-        filter_result = self.metadata_filter.filter(retrieval_results, merged_slots)
+        filter_result = self.metadata_filter.filter(enriched, merged_slots)
 
         # 6. Rerank
         reranked_results = self.reranker.rerank(

@@ -191,6 +191,24 @@ class JWTSettings(BaseSettings):
     JWT_ALGORITHM: str = Field(default="HS256", description="JWT 算法")
     JWT_EXPIRATION_HOURS: int = Field(default=24, description="Token 有效期（小时）", gt=0)
 
+    @field_validator("JWT_SECRET_KEY")
+    @classmethod
+    def validate_secret_key(cls, v: str) -> str:
+        if len(v) < 32:
+            raise ValueError("JWT_SECRET_KEY 长度不能少于 32 字符")
+        weak_keys = [
+            "resume-rag-jwt-secret-key-2026",
+            "your-secret-key",
+            "changeme",
+            "secret",
+        ]
+        if v.lower() in [k.lower() for k in weak_keys]:
+            raise ValueError(
+                f"JWT_SECRET_KEY 为已知弱密钥，请使用 python -c "
+                f"\"import secrets; print(secrets.token_hex(64))\" 生成"
+            )
+        return v
+
 
 class Settings(BaseSettings):
     """全局配置聚合"""
