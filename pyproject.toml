@@ -29,7 +29,7 @@ dependencies = [
     # 数据库
     "pymongo>=4.6.0",
     "openpyxl>=3.1.0",
-    "pymilvus>=2.4.6",  # ⚠️ 版本锁死：必须 >=2.4.6 才完整支持 SPARSE_FLOAT_VECTOR + SPARSE_INVERTED_INDEX
+    "pymilvus>=2.4.6,<2.5",  # 锁定 2.4.x 匹配 milvus 容器版本，SPARSE_FLOAT_VECTOR + SPARSE_INVERTED_INDEX
     "redis>=5.0.1",
 
     # LangChain 生态
