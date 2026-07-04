@@ -125,7 +125,16 @@ class VectorIndex:
                 index_params=SPARSE_INDEX_PARAMS,
             )
 
-            logger.info("向量索引创建成功")
+            # 创建标量字段索引
+            for field in ["chunk_level", "resume_id", "years_of_experience",
+                           "highest_education_level", "city", "gender"]:
+                try:
+                    logger.info(f"创建标量索引: {field}")
+                    collection.create_index(field_name=field)
+                except Exception:
+                    logger.debug(f"标量索引已存在: {field}")
+
+            logger.info("索引创建成功")
 
         except Exception as e:
             logger.error(f"向量索引创建失败: {str(e)}")
@@ -166,6 +175,10 @@ class VectorIndex:
                 [chunk["chunk_level"] for chunk in chunks],
                 [chunk.get("parent_chunk_id", "") for chunk in chunks],
                 [chunk.get("section_type", "") for chunk in chunks],
+                [int(chunk.get("years_of_experience", 0) or 0) for chunk in chunks],
+                [int(chunk.get("highest_education_level", 0) or 0) for chunk in chunks],
+                [str(chunk.get("city", "") or "") for chunk in chunks],
+                [str(chunk.get("gender", "") or "") for chunk in chunks],
                 [chunk["dense_vector"] for chunk in chunks],
                 [chunk["sparse_vector"] for chunk in chunks],
                 [chunk["content"] for chunk in chunks],

@@ -1,8 +1,6 @@
 <!-- Module: recommendation-engine -->
 <!-- Spec Layer: 06 - Acceptance Criteria -->
-<!-- Phase: Phase 4 - Spec Writing -->
-<!-- Project: 企业智能招聘 RAG 推荐系统 -->
-<!-- Date: 2026-06-23 -->
+<!-- ⚠️ 部分更新: Embedding 引用已修正，AC 流程仍为旧架构，待 Tier L 全文重构 -->
 
 # 验收标准：Recommendation Engine
 
@@ -40,7 +38,7 @@ Feature: Dense Retrieval
 
   Scenario: 正常查询返回 Dense 检索结果
     Given Milvus 中已有 100 条候选人向量数据
-    And BGE-M3 API 可用
+    And FlagEmbedding 本地推理 可用
     When 调用 hybrid_retrieve(query="Java工程师 5年", slots={...}, top_k=50)
     Then 返回的 candidates 列表长度 > 0
     And 每个 RetrievalResult 包含 dense_score（0~1 之间的浮点数）
@@ -50,14 +48,14 @@ Feature: Dense Retrieval
   Scenario: Embedding 缓存命中
     Given 相同查询 "Java工程师 5年" 已在 10 分钟内执行过
     When 再次执行 hybrid_retrieve(query="Java工程师 5年", ...)
-    Then BGE-M3 API 不被调用（使用缓存）
+    Then FlagEmbedding 本地推理 不被调用（使用缓存）
     And 返回结果与首次一致
 ```
 
 ### 验证方法
 
-1. 单元测试：Mock BGE-M3 API + Mock Milvus，验证返回结构
-2. 集成测试：真实 Milvus + 真实 BGE-M3 API，验证端到端
+1. 单元测试：Mock FlagEmbedding 本地推理 + Mock Milvus，验证返回结构
+2. 集成测试：真实 Milvus + 真实 FlagEmbedding 本地推理，验证端到端
 
 ---
 
@@ -73,7 +71,7 @@ Feature: Sparse Retrieval
 
   Scenario: 正常查询返回 Sparse 检索结果
     Given Milvus 中已有 100 条候选人 Sparse 向量数据
-    And BGE-M3 API 可用
+    And FlagEmbedding 本地推理 可用
     When 调用 hybrid_retrieve(query="Spring Boot 微服务", slots={...}, top_k=50)
     Then 返回的 candidates 列表长度 > 0
     And 每个 RetrievalResult 包含 sparse_score（>= 0 的浮点数）
@@ -82,8 +80,8 @@ Feature: Sparse Retrieval
 
 ### 验证方法
 
-1. 单元测试：Mock BGE-M3 API + Mock Milvus
-2. 集成测试：真实 Milvus + 真实 BGE-M3 API
+1. 单元测试：Mock FlagEmbedding 本地推理 + Mock Milvus
+2. 集成测试：真实 Milvus + 真实 FlagEmbedding 本地推理
 
 ---
 

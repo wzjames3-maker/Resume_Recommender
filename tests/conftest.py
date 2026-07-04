@@ -9,7 +9,7 @@ from unittest.mock import patch, MagicMock
 
 # 设置测试环境变量
 os.environ["APP_ENV"] = "test"
-os.environ["JWT_SECRET_KEY"] = "test-jwt-secret-key"
+os.environ["JWT_SECRET_KEY"] = "test-jwt-secret-key-for-testing-purposes"
 os.environ["JWT_EXPIRATION_HOURS"] = "2"
 os.environ["LLM_API_KEY"] = "test-api-key"
 os.environ["EMBEDDING_API_KEY"] = "test-api-key"

@@ -1,24 +1,24 @@
 """
 智能招聘 RAG 推荐系统 - Embedding 生成模块
 
-使用 BGE-M3 模型生成 Dense + Sparse Embedding
+双 Provider 支持：
+- Provider=local: FlagEmbedding BGEM3FlagModel 本地推理 Dense + 真实 Sparse
+- Provider=siliconflow (或其它 API): 通过 API 获取 Dense + 词频模拟 Sparse
+
+变更 (Tier L): 从纯 API 迁移到 FlagEmbedding 本地推理为主，API 为降级
 """
 
 import hashlib
-from typing import Any, Dict, List, Optional, Tuple
-
-import httpx
+import re
+from typing import Any, Dict, List, Optional
 
 from src.common.config import get_settings
-from src.common.errors import ErrorCode, ExternalServiceError
 from src.common.logger import get_logger
 
-logger = get_logger("embedding_generator")
+logger = get_logger(__name__)
 
-# 默认配置
-DEFAULT_TIMEOUT = 30
-MAX_RETRIES = 3
 BATCH_SIZE = 32
+API_TIMEOUT = 30
 
 
 class EmbeddingResult:
@@ -36,75 +36,73 @@ class EmbeddingResult:
 
 
 class EmbeddingGenerator:
-    """Embedding 生成器"""
+    """Embedding 生成器 — 双 Provider"""
 
     def __init__(self):
-        """初始化 Embedding 生成器"""
-        self.settings = get_settings()
-        self.api_key = self.settings.embedding.EMBEDDING_API_KEY
-        self.api_base_url = self.settings.embedding.EMBEDDING_BASE_URL
-        self.model = self.settings.embedding.EMBEDDING_MODEL
-        self.dimension = self.settings.embedding.EMBEDDING_DIMENSION
-        self.timeout = DEFAULT_TIMEOUT
+        self._model = None
+        self._client = None
+        self._provider = None
+        self._api_url = None
+        self._api_key = None
+        self._model_name = None
 
-        # 缓存
-        self._cache: Dict[str, EmbeddingResult] = {}
+        from cachetools import TTLCache
+        self._cache: TTLCache = TTLCache(maxsize=10000, ttl=3600)
+
+    @property
+    def provider(self) -> str:
+        if self._provider is None:
+            settings = get_settings()
+            self._provider = settings.embedding.EMBEDDING_PROVIDER
+            self._api_url = settings.embedding.EMBEDDING_BASE_URL
+            self._api_key = settings.embedding.EMBEDDING_API_KEY
+            self._model_name = settings.embedding.EMBEDDING_MODEL
+        return self._provider
+
+    def _get_model(self):
+        """懒加载 BGEM3FlagModel (local provider only)"""
+        if self._model is None:
+            settings = get_settings()
+            model_path = settings.embedding.EMBEDDING_MODEL_PATH or None
+            logger.info(f"正在加载 FlagEmbedding 模型: {self._model_name}")
+            from FlagEmbedding import BGEM3FlagModel
+            if model_path:
+                self._model = BGEM3FlagModel(
+                    model_path,
+                    use_fp16=settings.embedding.EMBEDDING_USE_FP16,
+                    devices="cpu",
+                )
+            else:
+                self._model = BGEM3FlagModel(
+                    self._model_name,
+                    use_fp16=settings.embedding.EMBEDDING_USE_FP16,
+                    devices="cpu",
+                )
+            logger.info("FlagEmbedding 模型加载完成 (CPU)")
+        return self._model
+
+    def _get_api_client(self):
+        """懒加载 httpx Client (api provider only)"""
+        if self._client is None:
+            import httpx
+            self._client = httpx.Client(timeout=API_TIMEOUT)
+        return self._client
 
     def generate(self, text: str) -> EmbeddingResult:
-        """
-        生成单个文本的 Embedding
-
-        Args:
-            text: 文本内容
-
-        Returns:
-            EmbeddingResult: Embedding 结果（Dense + Sparse）
-
-        Raises:
-            ExternalServiceError: API 调用失败
-        """
-        # 检查缓存
         cache_key = self._get_cache_key(text)
         if cache_key in self._cache:
-            logger.debug(f"缓存命中: {cache_key[:8]}...")
             return self._cache[cache_key]
-
-        # 调用 API
-        result = self._call_api([text])
-
-        if not result:
-            raise ExternalServiceError(
-                error_code=ErrorCode.VEC_003,
-                detail="Embedding 生成失败",
-            )
-
-        embedding = result[0]
-
-        # 存入缓存
-        self._cache[cache_key] = embedding
-
-        return embedding
+        result = self._encode([text])[0]
+        self._cache[cache_key] = result
+        return result
 
     def batch_generate(self, texts: List[str]) -> List[EmbeddingResult]:
-        """
-        批量生成 Embedding
-
-        Args:
-            texts: 文本列表
-
-        Returns:
-            List[EmbeddingResult]: Embedding 结果列表
-
-        Raises:
-            ExternalServiceError: API 调用失败
-        """
         if not texts:
             return []
 
-        # 检查缓存，分离需要调用 API 的文本
         results: List[Optional[EmbeddingResult]] = [None] * len(texts)
-        uncached_indices = []
-        uncached_texts = []
+        uncached_indices: List[int] = []
+        uncached_texts: List[str] = []
 
         for i, text in enumerate(texts):
             cache_key = self._get_cache_key(text)
@@ -114,164 +112,112 @@ class EmbeddingGenerator:
                 uncached_indices.append(i)
                 uncached_texts.append(text)
 
-        # 批量调用 API
         if uncached_texts:
             logger.info(f"批量生成 Embedding: {len(uncached_texts)} 个文本")
-
-            # 分批处理
             for batch_start in range(0, len(uncached_texts), BATCH_SIZE):
                 batch_end = min(batch_start + BATCH_SIZE, len(uncached_texts))
-                batch_texts = uncached_texts[batch_start:batch_end]
+                batch = uncached_texts[batch_start:batch_end]
                 batch_indices = uncached_indices[batch_start:batch_end]
+                batch_results = self._encode(batch)
+                for idx, result in zip(batch_indices, batch_results):
+                    results[idx] = result
+                    cache_key = self._get_cache_key(texts[idx])
+                    self._cache[cache_key] = result
 
-                batch_results = self._call_api(batch_texts)
-
-                if batch_results:
-                    for i, result in zip(batch_indices, batch_results):
-                        results[i] = result
-                        # 存入缓存
-                        cache_key = self._get_cache_key(texts[i])
-                        self._cache[cache_key] = result
-
-        # 检查是否有失败的
         for i, result in enumerate(results):
             if result is None:
-                raise ExternalServiceError(
-                    error_code=ErrorCode.VEC_003,
-                    detail=f"Embedding 生成失败: 文本 {i}",
-                )
+                raise RuntimeError(f"Embedding 生成失败: 文本索引 {i}")
 
         return results
 
-    def _call_api(self, texts: List[str]) -> List[EmbeddingResult]:
-        """
-        调用 Embedding API
+    def _encode(self, texts: List[str]) -> List[EmbeddingResult]:
+        if self.provider == "siliconflow":
+            return self._encode_api(texts)
+        return self._encode_local(texts)
 
-        Args:
-            texts: 文本列表
+    def _encode_local(self, texts: List[str]) -> List[EmbeddingResult]:
+        model = self._get_model()
+        output = model.encode(
+            texts,
+            return_dense=True,
+            return_sparse=True,
+            return_colbert_vecs=False,
+            batch_size=BATCH_SIZE,
+        )
+        dense_vecs = output["dense_vecs"]
+        lexical_weights = output["lexical_weights"]
+        results = []
+        for i, dense in enumerate(dense_vecs):
+            sparse = lexical_weights[i] if i < len(lexical_weights) else {}
+            if not sparse:
+                logger.warning(f"FlagEmbedding 生成了空的 sparse 向量: text[{i}]")
+            results.append(EmbeddingResult(
+                dense=dense.tolist(),
+                sparse=sparse,
+                token_count=len(texts[i]) // 2,
+            ))
+        return results
 
-        Returns:
-            List[EmbeddingResult]: Embedding 结果列表
-        """
-        headers = {
-            "Authorization": f"Bearer {self.api_key}",
-            "Content-Type": "application/json",
-        }
+    def _encode_api(self, texts: List[str]) -> List[EmbeddingResult]:
+        client = self._get_api_client()
+        resp = client.post(
+            f"{self._api_url.rstrip('/')}/embeddings",
+            json={
+                "model": self._model_name,
+                "input": texts,
+                "encoding_format": "float",
+            },
+            headers={"Authorization": f"Bearer {self._api_key}"},
+        )
+        resp.raise_for_status()
+        data = resp.json()
+        embeddings = sorted(data.get("data", []), key=lambda x: x["index"])
+        results = []
+        for i, item in enumerate(embeddings):
+            dense = item["embedding"]
+            sparse = self._text_to_sparse(texts[i], len(dense))
+            results.append(EmbeddingResult(
+                dense=dense,
+                sparse=sparse,
+                token_count=len(texts[i]) // 2,
+            ))
+        return results
 
-        payload = {
-            "model": self.model,
-            "input": texts,
-            "encoding_format": "float",
-        }
+    @staticmethod
+    def _text_to_sparse(text: str, dim: int = 0) -> Dict[int, float]:
+        """将文本转为简单的词频 sparse 向量 (API 降级用)"""
+        tokens = re.findall(r'[\u4e00-\u9fff]|[a-zA-Z]+', text.lower())
+        if not tokens:
+            return {0: 0.0}
+        freq: Dict[str, float] = {}
+        for token in tokens:
+            freq[token] = freq.get(token, 0.0) + 1.0
+        max_freq = max(freq.values())
+        results: Dict[int, float] = {}
+        for token, count in freq.items():
+            token_id = abs(hash(token)) % 25000
+            results[token_id] = count / max_freq
+        return results
 
-        for attempt in range(MAX_RETRIES):
-            try:
-                with httpx.Client(timeout=self.timeout) as client:
-                    response = client.post(
-                        f"{self.api_base_url}/embeddings",
-                        headers=headers,
-                        json=payload,
-                    )
-
-                    if response.status_code != 200:
-                        error_msg = f"API 返回错误: {response.status_code}"
-                        logger.warning(error_msg)
-
-                        if attempt < MAX_RETRIES - 1:
-                            continue
-                        else:
-                            raise ExternalServiceError(
-                                error_code=ErrorCode.VEC_003,
-                                detail=error_msg,
-                            )
-
-                    result = response.json()
-
-                    # 解析结果
-                    embeddings = []
-                    for item in result.get("data", []):
-                        dense = item.get("embedding", [])
-                        # BGE-M3 返回的是 Dense 向量
-                        # Sparse 向量需要单独处理（这里简化为使用 Dense）
-                        sparse = self._dense_to_sparse(dense)
-
-                        embeddings.append(EmbeddingResult(
-                            dense=dense,
-                            sparse=sparse,
-                            token_count=result.get("usage", {}).get("total_tokens", 0),
-                        ))
-
-                    return embeddings
-
-            except httpx.TimeoutException:
-                logger.warning(f"API 超时，重试 {attempt + 1}/{MAX_RETRIES}")
-                if attempt == MAX_RETRIES - 1:
-                    raise ExternalServiceError(
-                        error_code=ErrorCode.SYS_004,
-                        detail="Embedding API 调用超时",
-                    )
-
-            except Exception as e:
-                if isinstance(e, ExternalServiceError):
-                    raise
-                logger.error(f"API 调用异常: {str(e)}")
-                if attempt == MAX_RETRIES - 1:
-                    raise ExternalServiceError(
-                        error_code=ErrorCode.VEC_003,
-                        detail=f"Embedding API 调用失败: {str(e)}",
-                    )
-
-        return []
-
-    def _dense_to_sparse(self, dense: List[float], top_n: int = 50) -> Dict[int, float]:
-        """Generate pseudo-sparse vector from top-N magnitude dense values.
-        SiliconFlow does not expose BGE-M3 native sparse, so we extract
-        top-N indices by absolute value as a sparse dict."""
-        if not dense:
-            return {0: 1.0}
-        indexed = [(abs(v), i, v) for i, v in enumerate(dense)]
-        indexed.sort(reverse=True)
-        max_abs = indexed[0][0] if indexed else 1.0
-        if max_abs == 0:
-            return {0: 1.0}
-        result = {}
-        for abs_val, idx, val in indexed[:top_n]:
-            result[idx] = abs_val / max_abs  # Milvus SPARSE_FLOAT_VECTOR requires non-negative
-        return result
     def _get_cache_key(self, text: str) -> str:
-        """
-        生成缓存键
-
-        Args:
-            text: 文本内容
-
-        Returns:
-            str: 缓存键
-        """
         return hashlib.md5(text.encode()).hexdigest()
 
     def clear_cache(self) -> None:
-        """清除缓存"""
         self._cache.clear()
         logger.info("Embedding 缓存已清除")
 
     def get_cache_stats(self) -> Dict[str, Any]:
-        """
-        获取缓存统计
-
-        Returns:
-            Dict: 缓存统计信息
-        """
         return {
             "cache_size": len(self._cache),
-            "cache_keys": list(self._cache.keys())[:10],  # 只返回前 10 个
+            "cache_keys": list(self._cache.keys())[:10],
         }
 
 
-# 全局 Embedding 生成器实例
-embedding_generator = EmbeddingGenerator()
+_embedding_generator: EmbeddingGenerator | None = None
 
 
 def get_embedding_generator() -> EmbeddingGenerator:
-    """获取 Embedding 生成器实例"""
-    return embedding_generator
+    global _embedding_generator
+    if _embedding_generator is None:
+        _embedding_generator = EmbeddingGenerator()
+    return _embedding_generator

@@ -35,6 +35,7 @@ class AppSettings(BaseSettings):
     DEBUG: bool = Field(default=False, description="调试模式")
     HOST: str = Field(default="0.0.0.0", description="监听地址")
     PORT: int = Field(default=8000, description="监听端口")
+    LOG_LEVEL: str = Field(default="INFO", description="日志级别")
 
     CORS_ORIGINS: str = Field(default="", description="允许的 CORS 来源，逗号分隔")
 
@@ -66,7 +67,7 @@ class LLMSettings(BaseSettings):
 
 
 class EmbeddingSettings(BaseSettings):
-    """Embedding 配置"""
+    """Embedding 配置 — FlagEmbedding 本地推理 + API 降级"""
 
     model_config = SettingsConfigDict(
                 env_file=".env",
@@ -74,13 +75,30 @@ class EmbeddingSettings(BaseSettings):
         extra="ignore",
     )
 
-    EMBEDDING_PROVIDER: str = Field(default="bge-m3", description="Embedding 提供商")
-    EMBEDDING_MODEL: str = Field(default="BAAI/bge-m3", description="模型名称")
-    EMBEDDING_API_KEY: str = Field(default="", description="API Key")
-    EMBEDDING_BASE_URL: str = Field(
-        default="https://api.siliconflow.cn/v1", description="API Base URL"
+    EMBEDDING_PROVIDER: str = Field(default="flagembedding", description="Embedding 提供商 (local/siliconflow)")
+    EMBEDDING_MODEL: str = Field(default="BAAI/bge-m3", description="HuggingFace 模型名称")
+    EMBEDDING_MODEL_PATH: str = Field(
+        default="", description="预下载模型路径（可选，留空则从 HuggingFace 自动下载）"
     )
+    EMBEDDING_USE_FP16: bool = Field(default=False, description="是否使用 FP16 精度（CPU 模式禁用）")
     EMBEDDING_DIMENSION: int = Field(default=1024, description="向量维度", gt=0)
+    EMBEDDING_API_KEY: str = Field(default="", description="API Key（siliconflow 等 API Provider）")
+    EMBEDDING_BASE_URL: str = Field(default="", description="API 地址")
+
+
+class RerankerSettings(BaseSettings):
+    """Reranker 配置"""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
+
+    RERANKER_PROVIDER: str = Field(default="siliconflow", description="Reranker 提供商")
+    RERANKER_MODEL: str = Field(default="BAAI/bge-reranker-v2-m3", description="Reranker 模型名称")
+    RERANKER_API_KEY: str = Field(default="", description="Reranker API Key")
+    RERANKER_BASE_URL: str = Field(default="https://api.siliconflow.cn/v1", description="Reranker API 地址")
 
 
 class MilvusSettings(BaseSettings):
@@ -191,6 +209,35 @@ class JWTSettings(BaseSettings):
     JWT_ALGORITHM: str = Field(default="HS256", description="JWT 算法")
     JWT_EXPIRATION_HOURS: int = Field(default=24, description="Token 有效期（小时）", gt=0)
 
+    @field_validator("JWT_SECRET_KEY")
+    @classmethod
+    def validate_secret_key(cls, v: str) -> str:
+        import os
+
+        weak_keys = [
+            "resume-rag-jwt-secret-key-2026",
+            "your-secret-key",
+            "changeme",
+            "secret",
+        ]
+        is_weak = v.lower() in [k.lower() for k in weak_keys]
+        is_prod = os.environ.get("APP_ENV", "").lower() == "prod"
+
+        if is_prod:
+            if len(v) < 32:
+                raise ValueError("生产环境 JWT_SECRET_KEY 长度不能少于 32 字符")
+            if is_weak:
+                raise ValueError(
+                    f"JWT_SECRET_KEY 为已知弱密钥，请使用 python -c "
+                    f'"import secrets; print(secrets.token_hex(64))" 生成'
+                )
+        elif is_weak:
+            import logging
+            logging.getLogger("config").warning(
+                "JWT_SECRET_KEY 为已知弱密钥，生产环境请更换"
+            )
+        return v
+
 
 class Settings(BaseSettings):
     """全局配置聚合"""
@@ -209,6 +256,9 @@ class Settings(BaseSettings):
 
     # Embedding 配置
     embedding: EmbeddingSettings = Field(default_factory=EmbeddingSettings)
+
+    # Reranker 配置
+    reranker: RerankerSettings = Field(default_factory=RerankerSettings)
 
     # Milvus 配置
     milvus: MilvusSettings = Field(default_factory=MilvusSettings)

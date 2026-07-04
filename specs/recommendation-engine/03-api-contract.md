@@ -1,8 +1,6 @@
 <!-- Module: recommendation-engine -->
 <!-- Spec Layer: 03 - API Contract -->
-<!-- Phase: Phase 4 - Spec Writing -->
-<!-- Project: 企业智能招聘 RAG 推荐系统 -->
-<!-- Date: 2026-06-23 -->
+<!-- ⚠️ 部分更新: FlagEmbedding/BGE-M3 引用已修正，核心内容仍为旧架构流程，待 Tier L 全文重构 -->
 
 # 内部接口契约：Recommendation Engine
 
@@ -143,7 +141,7 @@ def hybrid_retrieve(
 ```
 1. query_encode(query) → (dense_vector, sparse_vector)
    - 检查 cachetools 缓存
-   - 缓存未命中 → 调用 BGE-M3 API
+   - 缓存未命中 → 调用 FlagEmbedding 本地推理
    - API 失败 → 按 REQ-012 降级
 2. dense_retrieve(dense_vector, top_k) → dense_results
    - Milvus search, metric_type=COSINE
@@ -566,12 +564,12 @@ def get_resume_summary(resume_id: str) -> str:
     """获取简历摘要文本（用于 Reranker 输入）。对应模块: resume-store"""
 ```
 
-### 调用 BGE-M3 API
+### 调用 FlagEmbedding 本地推理
 
 ```python
 def encode_query(query: str) -> tuple[list[float], dict[int, float]]:
     """
-    调用 BGE-M3 云端 API，同时获取 Dense 和 Sparse 向量。
+    调用 FlagEmbedding BGEM3FlagModel，同时获取 Dense 和 Sparse 向量。
 
     API Endpoint: https://api.siliconflow.cn/v1/embeddings
     Model: BAAI/bge-m3

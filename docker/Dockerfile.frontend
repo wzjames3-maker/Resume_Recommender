@@ -1,0 +1,42 @@
+# 智能招聘 RAG 推荐系统 — Streamlit 前端生产镜像
+
+FROM python:3.11-slim AS builder
+
+ENV PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /build
+
+RUN pip install --no-cache-dir --target=/install-deps \
+    streamlit requests pydantic pydantic-settings httpx pyjwt python-dotenv cachetools
+
+
+FROM python:3.11-slim AS runtime
+
+ENV PYTHONUNBUFFERED=1
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN groupadd -r appuser && useradd -r -g appuser -d /app -s /sbin/nologin appuser
+
+COPY --from=builder /install-deps /usr/local/lib/python3.11/site-packages
+
+WORKDIR /app
+COPY src/frontend/ ./src/frontend/
+
+RUN mkdir -p /app/.streamlit && chown -R appuser:appuser /app
+USER appuser
+
+ENV PYTHONPATH=/app
+
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -sf http://localhost:8501/_stcore/health || exit 1
+
+EXPOSE 8501
+
+CMD ["streamlit", "run", "src/frontend/app.py", \
+     "--server.port", "8501", \
+     "--server.address", "0.0.0.0", \
+     "--server.headless", "true", \
+     "--browser.gatherUsageStats", "false"]

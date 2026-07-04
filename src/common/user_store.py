@@ -16,16 +16,14 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
     return pwd_context.verify(plain_password, hashed_password)
 
 
-# 默认用户（供开发/测试环境使用，哈希存储）
-# 生产环境应从 MongoDB users collection 加载
-DEFAULT_USERS: Dict[str, Dict[str, str]] = {}
+_DEFAULT_USERS: Dict[str, Dict[str, str]] = {}
 
 
-def init_default_users():
+def _init_default_users():
     """初始化默认用户（仅首次调用时生效）"""
-    global DEFAULT_USERS
-    if not DEFAULT_USERS:
-        DEFAULT_USERS = {
+    global _DEFAULT_USERS
+    if not _DEFAULT_USERS:
+        _DEFAULT_USERS = {
             "admin": {
                 "user_id": "admin-001",
                 "password_hash": hash_password("admin123"),
@@ -47,9 +45,8 @@ def init_default_users():
 def get_user_by_username(username: str) -> Optional[Dict[str, str]]:
     """
     按用户名查找用户。
-    优先从 MongoDB users collection 查找，失败回退到内存字典。
+    优先从 MongoDB users collection 查找，失败时根据环境决定是否回退。
     """
-    # 尝试从 MongoDB 获取
     try:
         from src.resume_store.connection import mongodb_connection
         db = mongodb_connection.get_database()
@@ -60,9 +57,13 @@ def get_user_by_username(username: str) -> Optional[Dict[str, str]]:
                 "password_hash": doc.get("password_hash", ""),
                 "role": doc.get("role", ""),
             }
-    except Exception:
-        pass
+    except Exception as e:
+        from src.common.config import Environment, get_settings
+        settings = get_settings()
+        if settings.app.APP_ENV == Environment.PROD:
+            raise RuntimeError(f"生产环境 MongoDB 用户查询失败，禁止回退默认用户: {e}") from e
+        from src.common.logger import get_logger
+        get_logger("user_store").warning(f"MongoDB 查询失败，回退到默认用户: {e}")
 
-    # 回退到内存字典（开发/测试环境）
-    init_default_users()
-    return DEFAULT_USERS.get(username)
+    _init_default_users()
+    return _DEFAULT_USERS.get(username)

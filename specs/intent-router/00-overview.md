@@ -1,103 +1,158 @@
 ﻿<!-- Module: intent-router -->
 <!-- Spec Layer: 00 - Overview -->
-<!-- Phase: Phase 4 - Spec Writing -->
-<!-- Project: 企业智能招聘 RAG 推荐系统 -->
-<!-- Date: 2026-06-23 -->
+<!-- 变更: Tier L - RAG 全量重构 (引入 LangGraph StateGraph) -->
+<!-- Date: 2026-07-03 -->
 
 # 模块概览：Intent Router（意图路由模块）
 
 ## 1. 模块定位
 
-Intent Router 是企业智能招聘 RAG 推荐系统的**请求入口与调度中枢模块**，负责识别用户自然语言输入的意图（Intent）、提取结构化参数（Slots），并将请求路由到对应的下游 Workflow 执行。它是连接用户输入与后端业务逻辑的核心桥梁。
+Intent Router 是企业智能招聘 RAG 推荐系统的**请求入口与调度中枢模块**，基于 LangGraph StateGraph 实现有状态的多轮对话编排。负责识别用户意图（Intent）、提取结构化参数（Slots），通过 Conditional Edge 将请求路由到对应的下游 Workflow。
 
 ## 2. 来源追溯
 
 | 来源 | 内容 |
 |------|------|
 | PRD FR-001 | 支持自然语言意图识别（10 类 Intent） |
-| PRD FR-006 | 支持多轮对话上下文管理（Conversation Memory 集成） |
+| PRD FR-006 | 支持多轮对话上下文管理 |
 | PRD FR-007 | 支持条件修正（recruitment.refine 增量合并） |
-| PRD UC-001 | 智能候选人检索（recruitment.search） |
-| PRD UC-002 | 多轮条件修正（recruitment.refine） |
-| PRD UC-003 | 候选人详情查看（candidate.lookup） |
-| PRD UC-004 | 候选人对比（recruitment.compare） |
-| PRD UC-005 | 简历上传入库（resume.upload） |
-| PRD UC-006 | 简历管理（resume.manage） |
-| PRD UC-007 | 知识问答（knowledge.qa） |
-| PRD UC-008 | 数据统计（analytics） |
-| 02-intent-inventory.md | 10 类 Intent 定义 + 优先级 + 触发 Workflow |
-| 03-slot-definition.md | 3 类 Slot 定义（Candidate/Query/Conversation） |
-| 05-business-rules.md | BR-05~BR-07 多轮对话规则，BR-14~BR-15 候选人操作规则，BR-17 Fallback 规则 |
+| tech-decision.md §3 | LangGraph StateGraph + Tool Calling + Conditional Edge |
 
 ## 3. 做什么（In Scope）
 
 | 能力 | 说明 |
 |------|------|
-| Intent 识别 | 使用 LLM Function Calling + Pydantic Structured Output 识别 10 类 Intent |
-| 置信度评估 | 每次识别输出 confidence 分数，低于阈值（0.6）触发 Fallback |
-| Slot 提取 | 从用户输入中提取 Candidate Slot（17 个字段）和 Query Slot（5 个字段） |
-| 上下文感知 | 集成 Conversation Memory，支持多轮对话场景下的意图消歧和 Slot 增量合并 |
-| Intent 路由分发 | 通过 LangGraph Conditional Edge 将请求分发到对应的下游 Workflow |
-| 排除条件解析 | 识别"不要XX"等否定表达，转换为 exclude_slot |
-| Audit Log 写入 | 每次意图识别结果写入 Audit Log（Query/Intent/Slots/Confidence/Latency） |
-| Fallback 引导 | 置信度不足时返回引导性回复，不静默失败 |
+| LangGraph StateGraph | 使用 StateGraph 管理对话状态，替代旧 if/elif 路由 |
+| Intent 识别 | LLM + few-shot prompt 识别 10 类 Intent，输出 confidence |
+| Slot 提取 | 从用户输入提取 Candidate Slot + Query Slot |
+| Conditional Edge | 根据 Intent 类型通过 LangGraph conditional edge 分发到 Workflow Node |
+| 上下文感知 | 集成 Conversation Memory，支持多轮消歧和 Slot 合并 |
+| Checkpoint | LangGraph MemorySaver 支持对话回溯和重放 |
+| Fallback | 置信度不足或未匹配 Intent 时返回引导性回复 |
 
 ## 4. 不做什么（Out of Scope）
 
-| 不做 | 说明 | 负责模块 |
-|------|------|----------|
-| 候选人检索与排序 | 不执行 Hybrid Retrieval / Metadata Filter / LLM Rerank | recommendation-engine |
-| 简历解析与入库 | 不解析简历文件 | resume-parser |
-| 简历 CRUD 操作 | 不执行简历的增删改查 | resume-store |
-| 向量索引管理 | 不管理 Milvus 中的向量数据 | vector-index |
-| 对话历史持久化 | 不负责对话历史的存储和检索 | conversation-memory |
-| LLM Rerank | 不对推荐结果重排序 | recommendation-engine |
-| Embedding 生成 | 不调用 BGE-M3 生成向量 | vector-index |
-| 前端渲染 | 不处理 UI 展示逻辑 | frontend |
+| 不做 | 负责模块 |
+|------|----------|
+| 候选人检索与排序 | recommendation-engine |
+| 简历解析与入库 | resume-parser |
+| 简历 CRUD 操作 | resume-store |
+| 向量索引管理 | vector-index |
+| 对话历史持久化 | conversation-memory |
+| Embedding 生成 | vector-index |
+| 前端渲染 | frontend |
 
-## 5. 技术栈
-
-| 组件 | 技术选型 | 版本要求 | 用途 |
-|------|----------|----------|------|
-| Agent 编排 | LangGraph StateGraph | langgraph >= 0.4 | 定义 Intent Router 的节点和边，状态管理 |
-| LangChain 核心 | langchain-core | langchain-core >= 0.3 | BaseMessage、StructuredOutput 基础设施 |
-| LLM 调用 | langchain-openai | langchain-openai >= 0.3 | DeepSeek/OpenAI API 调用（OpenAI Compatible） |
-| LLM 主模型 | DeepSeek | deepseek-chat | Intent 识别 + Slot 提取的主 LLM |
-| LLM 备用模型 | OpenAI | gpt-4o-mini | DeepSeek 不可用时的降级 LLM |
-| 数据验证 | Pydantic | Pydantic >= 2.0 | Intent/Slot 的 Schema 定义、LLM 输出约束 |
-| Web 框架 | FastAPI（内部接口） | FastAPI >= 0.115 | 模块内部服务接口 |
-| 日志 | python-json-logger | python-json-logger >= 3.2 | 结构化 Audit Log |
-| 缓存 | Redis | redis >= 5.0 | 意图识别结果缓存（高频查询跳过 LLM） |
-
-## 6. 架构位置
+## 5. LangGraph StateGraph 设计
 
 ```
-┌──────────────┐     ┌─────────────────────────────────────────────────┐
-│   HR 输入     │────>│              Intent Router (本模块)              │
-│  自然语言     │     │                                                 │
-└──────────────┘     │  ┌─────────────┐    ┌──────────────┐           │
-                     │  │ Intent      │    │ Slot         │           │
-         ┌───────────│  │ Classifier  │    │ Extractor    │           │
-         │           │  │ (LLM FC)    │    │ (LLM FC)     │           │
-         │           │  └──────┬──────┘    └──────┬───────┘           │
-         │           │         │                  │                    │
-         │           │  ┌──────▼──────────────────▼───────┐           │
-         │           │  │         LangGraph StateGraph     │           │
-         │           │  │  (Conditional Edge Router)       │           │
-         │           │  └──────┬──────┬──────┬──────┬─────┘           │
-         │           └─────────┼──────┼──────┼──────┼─────────────────┘
-         │                     │      │      │      │
-         │            ┌────────▼┐ ┌───▼───┐ ┌▼────┐ ┌▼──────────┐
-         │            │Hybrid   │ │Resume │ │RAG  │ │Chat       │
-         │            │Search   │ │Parser │ │QA   │ │Response   │
-         │            └─────────┘ └───────┘ └─────┘ └───────────┘
-         │
-         │           ┌──────────────────┐
-         └──────────>│ Conversation     │
-                     │ Memory           │
-                     │ (上下文提供者)    │
-                     └──────────────────┘
+StateGraph(AgentState)
+  │
+  ├── entry_point: intent_classifier
+  │
+  ├── Node: intent_classifier
+  │     LLM + few-shot prompt → IntentResult(intent, confidence, raw_slots)
+  │     └── conditional_edge: route_by_intent
+  │         ├── search  → slot_extractor
+  │         ├── refine  → slot_extractor
+  │         ├── lookup  → candidate_lookup_handler
+  │         ├── compare → compare_handler
+  │         ├── upload  → upload_handler
+  │         ├── manage  → manage_handler
+  │         ├── qa      → qa_handler
+  │         ├── analytics → analytics_handler
+  │         └── fallback → fallback
+  │
+  ├── Node: slot_extractor
+  │     合并 conversation context + 新 slots（增量合并）
+  │     └── edge → hybrid_search (ToolNode → recommendation-engine)
+  │
+  ├── Node: hybrid_search (ToolNode)
+  │     调用 recommendation-engine.hybrid_retrieve()
+  │     └── edge → reranker (ToolNode → recommendation-engine)
+  │
+  ├── Node: reranker (ToolNode)
+  │     调用 recommendation-engine.rerank()
+  │     └── edge → context_builder
+  │
+  ├── Node: context_builder
+  │     构建 LLM 上下文（候选人 + 匹配内容 + 招聘需求）
+  │     └── edge → reason_generator
+  │
+  ├── Node: reason_generator
+  │     LLM 生成推荐理由 + score_breakdown
+  │     └── edge → END
+  │
+  │   ── 非搜索型 Intent 节点 ──
+  │
+  ├── Node: candidate_lookup_handler
+  │     通过 resume-store 查询候选人详情
+  │     └── edge → END
+  │
+  ├── Node: compare_handler
+  │     对比多个候选人（调用 recommendation-engine.compare）
+  │     └── edge → END
+  │
+  ├── Node: upload_handler
+  │     代理到 resume-parser + resume-store + vector-index 入库流程
+  │     └── edge → END
+  │
+  ├── Node: manage_handler
+  │     代理到 resume-store 的 CRUD 操作
+  │     └── edge → END
+  │
+  ├── Node: qa_handler
+  │     调用 knowledge-base RAG QA 流程
+  │     └── edge → END
+  │
+  ├── Node: analytics_handler
+  │     查询统计数据
+  │     └── edge → END
+  │
+  └── Node: fallback
+        返回引导性回复（提示可用的操作类型）
+        └── edge → END
 ```
+
+### AgentState 定义
+
+```python
+class AgentState(TypedDict):
+    messages: list             # 对话消息历史
+    intent: IntentEnum | None
+    slots: CandidateSlot | None
+    raw_query: str
+    conversation_id: str | None
+    retrieval_results: list[RetrievalResult]
+    candidates: list[dict]
+    degradation: dict | None
+    error: str | None
+```
+
+### 路由规则
+
+| Intent | Route | 说明 |
+|--------|-------|------|
+| `recruitment.search` | slot_extractor → search pipeline | 完整检索→重排→理由链路 |
+| `recruitment.refine` | slot_extractor → search pipeline | 增量合并 Slots 后走相同链路 |
+| `candidate.lookup` | candidate_lookup_handler | 查 resume-store 返回候选人详情 |
+| `recruitment.compare` | compare_handler | 多候选人对比 |
+| `resume.upload` | upload_handler | 文件上传→解析→入库 |
+| `resume.manage` | manage_handler | 简历列表/删除/状态变更 |
+| `knowledge.qa` | qa_handler | 知识库 RAG 问答 |
+| `analytics` | analytics_handler | 统计查询 |
+| `chat` / 未匹配 | fallback | 引导性回复 |
+
+## 6. 技术栈
+
+| 组件 | 版本 | 用途 |
+|------|------|------|
+| langgraph | >=0.2 | StateGraph + MemorySaver + ToolNode |
+| langchain-core | >=0.3 | BaseMessage, StructuredOutput |
+| langchain-openai | >=0.3 | OpenAI Compatible API 调用 |
+| LLM 主模型 | DeepSeek deepseek-chat | Intent 识别 + Slot 提取 |
+| LLM 备用模型 | OpenAI gpt-4o-mini | DeepSeek 不可用时降级 |
+| Pydantic | >=2.0 | Intent/Slot Schema 定义与校验 |
+| Redis | >=5.0 | 意图识别结果缓存（相同 query 跳过 LLM） |
 
 ## 7. 数据流
 
@@ -112,15 +167,9 @@ Intent Router 是企业智能招聘 RAG 推荐系统的**请求入口与调度�
                                   │
                                   ▼
                         ┌───────────────────┐
-                        │ LLM Function Call  │
-                        │ (Intent + Slots    │
-                        │  同时提取)         │
-                        └────────┬──────────┘
-                                 │
-                                 ▼
-                        ┌───────────────────┐
-                        │ Pydantic 校验      │
-                        │ (IntentResult)     │
+                        │ intent_classifier  │
+                        │ (LLM + few-shot    │
+                        │  prompt)           │
                         └────────┬──────────┘
                                  │
                           ┌──────▼──────┐
@@ -131,21 +180,36 @@ Intent Router 是企业智能招聘 RAG 推荐系统的**请求入口与调度�
                              ▼      ▼
                     ┌──────────┐  ┌──────────┐
                     │ Route to │  │ Fallback │
-                    │ Workflow │  │ Response │
-                    └──────────┘  └──────────┘
+                    │ Node     │  │ Response │
+                    └────┬─────┘  └──────────┘
+                         │
+              ┌──────────┼──────────┬────────────┐
+              ▼          ▼         ▼            ▼
+         search/     lookup/    upload/       qa/
+         refine      compare    manage        analytics
+              │          │         │            │
+              ▼          ▼         ▼            ▼
+         slot_extractor │    resume-parser   knowledge-base
+              │          │    resume-store    RAG QA
+              ▼          ▼    vector-index
+         hybrid_search  resume-store
+         reranker
+         context_builder
+         reason_generator
+              │
+              ▼
+         Final Output
 ```
 
 ## 8. 关键约束
 
-1. **LLM Function Calling 驱动** — Intent 识别和 Slot 提取必须通过 LLM Structured Output + Pydantic Schema 实现，禁用 regex 分类
-2. **上下文感知** — 有对话历史时必须优先考虑 recruitment.refine（BR-03）
-3. **置信度门控** — confidence < 0.6 必须触发 Fallback，不可跳过（BR-02/BR-17）
-4. **意图优先级** — 多意图冲突时按 10 级优先级表判定（resume.upload 最高，fallback 最低）
-5. **Slot 覆盖规则** — 同类 Slot 新值覆盖旧值，不同类 Slot 增量合并（BR-05）
-6. **审计完整** — 100% 的意图识别结果必须写入 Audit Log
-7. **容器内执行** — 所有测试和运行在 Docker 容器内
-8. **LLM 降级** — DeepSeek 不可用时自动降级到 OpenAI 备用模型
-9. **意图识别缓存** — 相同查询文本（MD5 hash）的 Intent 识别结果缓存到 Redis，TTL 1 小时，跳过 LLM Function Calling 调用
+1. **StateGraph 编排** — 路由由 LangGraph conditional edge 执行，禁用 if/elif 硬编码
+2. **上下文感知** — 有对话历史时必须优先考虑 recruitment.refine（增量合并 Slots）
+3. **置信度门控** — confidence < 0.6 必须触发 Fallback
+4. **Slot 覆盖规则** — 同类 Slot 新值覆盖旧值，不同类 Slot 增量合并
+5. **审计完整** — 100% 的意图识别结果写入 Audit Log
+6. **LLM 降级** — DeepSeek 不可用时自动降级到 OpenAI 备用模型
+7. **意图识别缓存** — 相同查询（MD5 hash）缓存到 Redis，TTL 1h
 
 ## 9. Spec 文件索引
 

@@ -1,8 +1,6 @@
 <!-- Module: recommendation-engine -->
 <!-- Spec Layer: 08 - Dependencies -->
-<!-- Phase: Phase 4 - Spec Writing -->
-<!-- Project: 企业智能招聘 RAG 推荐系统 -->
-<!-- Date: 2026-06-23 -->
+<!-- ⚠️ 部分更新: 外部依赖引用已修正，整体架构仍为旧版，待 Tier L 全文重构 -->
 
 # 模块依赖关系：Recommendation Engine
 
@@ -190,7 +188,7 @@ HTTP Request → api-layer → search_candidates(slots, ...) → RankingResult �
 
 ## 外部服务依赖（非模块）
 
-### 5. BGE-M3 云端 API
+### 5. FlagEmbedding 本地模型
 
 **依赖类型**: 外部 API（强依赖）
 **用途**: 查询向量生成（Dense + Sparse）
@@ -198,9 +196,9 @@ HTTP Request → api-layer → search_candidates(slots, ...) → RankingResult �
 
 | 配置项 | 环境变量 |
 |--------|----------|
-| API URL | BGE_M3_API_URL |
-| API Key | BGE_M3_API_KEY |
-| 模型名 | BGE_M3_MODEL |
+| API URL | FLAGEMBEDDING_MODEL_PATH |
+| API Key | FLAGEMBEDDING_CACHE_DIR |
+| 模型名 | BGE_M3_MODEL_NAME |
 
 ---
 
@@ -240,7 +238,7 @@ HTTP Request → api-layer → search_candidates(slots, ...) → RankingResult �
 | resume-store | 内部模块 | 强 | 部分 | 理由生成降级为模板 |
 | vector-index (Milvus) | 内部模块 | 强 | 否 | 致命错误 |
 | intent-router | 内部模块 | 弱 | 否 | Slots 缺失用默认值 |
-| BGE-M3 API | 外部服务 | 强 | 是 | 降级到纯 Sparse 或缓存 |
+| FlagEmbedding | 外部服务 | 强 | 是 | 降级到纯 Sparse 或缓存 |
 | BGE Reranker API | 外部服务 | 弱 | 是 | 降级到 hybrid_score |
 | LLM API | 外部服务 | 弱 | 是 | 降级到模板化理由 |
 | api-layer | 内部模块 | - | - | 本模块不依赖 api-layer |
@@ -254,7 +252,7 @@ HTTP Request → api-layer → search_candidates(slots, ...) → RankingResult �
 2. Milvus 连接建立（vector-index）
 3. MongoDB 连接建立（resume-store）
 4. Embedding 缓存初始化（cachetools TTLCache）
-5. API 连接验证（BGE-M3, Reranker, LLM）
+5. 服务连接验证（FlagEmbedding 加载, Reranker API, LLM API）
 6. recommendation-engine 就绪
 ```
 

@@ -45,7 +45,7 @@ async def login(request: LoginRequest, http_request: Request):
     if not allowed:
         raise AppException(error_code=ErrorCode.SYS_004, detail="请求过于频繁，请稍后重试")
 
-    logger.info(f"收到登录请求: username={request.username}")
+    logger.info("收到登录请求")
 
     user = get_user_by_username(request.username)
     if not user or not verify_password(request.password, user["password_hash"]):

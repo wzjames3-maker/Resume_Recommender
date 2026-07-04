@@ -25,24 +25,29 @@ class TestAppSettings:
 
     def test_default_values(self, monkeypatch):
         """测试默认值"""
-        # 清除所有可能影响的环境变量
-        for key in ["APP_APP_NAME", "APP_APP_ENV", "APP_APP_DEBUG", "APP_APP_HOST", "APP_APP_PORT"]:
+        for key in ["APP_NAME", "APP_ENV", "DEBUG", "HOST", "PORT", "CORS_ORIGINS",
+                     "LLM_PROVIDER", "LLM_MODEL", "LLM_API_KEY", "LLM_BASE_URL",
+                     "EMBEDDING_PROVIDER", "EMBEDDING_MODEL", "EMBEDDING_API_KEY", "EMBEDDING_BASE_URL",
+                     "MONGODB_URL", "MONGODB_USER", "MONGODB_PASSWORD", "MONGODB_DATABASE",
+                     "REDIS_HOST", "REDIS_PORT", "REDIS_PASSWORD",
+                     "MILVUS_URI", "MILVUS_TOKEN", "MILVUS_VERSION_COMPAT",
+                     "PII_ENCRYPTION_KEY", "JWT_SECRET_KEY"]:
             monkeypatch.delenv(key, raising=False)
 
-        settings = AppSettings()
+        settings = AppSettings(APP_ENV=Environment.DEV)
         assert settings.APP_NAME == "resume-rag"
         assert settings.APP_ENV == Environment.DEV
-        assert settings.DEBUG is True
+        assert settings.DEBUG is False
         assert settings.HOST == "0.0.0.0"
         assert settings.PORT == 8000
 
     def test_custom_values(self, monkeypatch):
         """测试自定义值"""
-        # 使用正确的前缀格式
-        monkeypatch.setenv("APP_APP_NAME", "test-app")
-        monkeypatch.setenv("APP_APP_ENV", "prod")
-        monkeypatch.setenv("APP_DEBUG", "false")  # DEBUG 没有前缀
-        monkeypatch.setenv("APP_PORT", "9000")  # PORT 没有前缀
+        monkeypatch.delenv("APP_NAME", raising=False)
+        monkeypatch.setenv("APP_NAME", "test-app")
+        monkeypatch.setenv("APP_ENV", "prod")
+        monkeypatch.setenv("DEBUG", "false")
+        monkeypatch.setenv("PORT", "9000")
 
         settings = AppSettings()
         assert settings.APP_NAME == "test-app"
@@ -61,8 +66,8 @@ class TestLLMSettings:
 
     def test_default_values(self, monkeypatch):
         """测试默认值"""
-        # 清除所有可能影响的环境变量
-        for key in ["LLM_LLM_PROVIDER", "LLM_LLM_MODEL", "LLM_LLM_TEMPERATURE", "LLM_LLM_MAX_TOKENS"]:
+        for key in ["LLM_PROVIDER", "LLM_MODEL", "LLM_API_KEY", "LLM_BASE_URL",
+                     "LLM_TEMPERATURE", "LLM_MAX_TOKENS"]:
             monkeypatch.delenv(key, raising=False)
 
         settings = LLMSettings()
@@ -73,10 +78,10 @@ class TestLLMSettings:
 
     def test_custom_values(self, monkeypatch):
         """测试自定义值"""
-        # 使用正确的前缀格式
-        monkeypatch.setenv("LLM_LLM_PROVIDER", "openai")
-        monkeypatch.setenv("LLM_LLM_MODEL", "gpt-4")
-        monkeypatch.setenv("LLM_LLM_TEMPERATURE", "0.5")
+        monkeypatch.delenv("LLM_PROVIDER", raising=False)
+        monkeypatch.setenv("LLM_PROVIDER", "openai")
+        monkeypatch.setenv("LLM_MODEL", "gpt-4")
+        monkeypatch.setenv("LLM_TEMPERATURE", "0.5")
 
         settings = LLMSettings()
         assert settings.LLM_PROVIDER == "openai"
@@ -99,8 +104,12 @@ class TestLLMSettings:
 class TestEmbeddingSettings:
     """EmbeddingSettings 测试"""
 
-    def test_default_values(self):
+    def test_default_values(self, monkeypatch):
         """测试默认值"""
+        for key in ["EMBEDDING_PROVIDER", "EMBEDDING_MODEL", "EMBEDDING_API_KEY",
+                     "EMBEDDING_BASE_URL", "EMBEDDING_DIMENSION"]:
+            monkeypatch.delenv(key, raising=False)
+
         settings = EmbeddingSettings()
         assert settings.EMBEDDING_PROVIDER == "bge-m3"
         assert settings.EMBEDDING_MODEL == "BAAI/bge-m3"
@@ -112,8 +121,8 @@ class TestMilvusSettings:
 
     def test_default_values(self, monkeypatch):
         """测试默认值"""
-        # 清除所有可能影响的环境变量
-        for key in ["MILVUS_MILVUS_URI", "MILVUS_MILVUS_TOKEN", "MILVUS_MILVUS_COLLECTION_PREFIX", "MILVUS_MILVUS_DIMENSION", "MILVUS_MILVUS_VERSION_COMPAT"]:
+        for key in ["MILVUS_URI", "MILVUS_TOKEN", "MILVUS_COLLECTION_PREFIX",
+                     "MILVUS_DIMENSION", "MILVUS_VERSION_COMPAT"]:
             monkeypatch.delenv(key, raising=False)
 
         settings = MilvusSettings()
@@ -124,8 +133,8 @@ class TestMilvusSettings:
 
     def test_version_compat(self, monkeypatch):
         """测试版本兼容性配置"""
-        # 使用正确的前缀格式
-        monkeypatch.setenv("MILVUS_MILVUS_VERSION_COMPAT", "2.5")
+        monkeypatch.delenv("MILVUS_VERSION_COMPAT", raising=False)
+        monkeypatch.setenv("MILVUS_VERSION_COMPAT", "2.5")
         settings = MilvusSettings()
         assert settings.MILVUS_VERSION_COMPAT == 2.5
 
@@ -133,8 +142,13 @@ class TestMilvusSettings:
 class TestMongoDBSettings:
     """MongoDBSettings 测试"""
 
-    def test_default_values(self):
+    def test_default_values(self, monkeypatch):
         """测试默认值"""
+        for key in ["MONGODB_URL", "MONGODB_USER", "MONGODB_PASSWORD",
+                     "MONGODB_DATABASE"]:
+            monkeypatch.delenv(key, raising=False)
+        monkeypatch.setenv("MONGODB_PASSWORD", "password")
+
         settings = MongoDBSettings()
         assert settings.MONGODB_URL == "mongodb://localhost:27017"
         assert settings.MONGODB_USER == "admin"
@@ -145,8 +159,12 @@ class TestMongoDBSettings:
 class TestRedisSettings:
     """RedisSettings 测试"""
 
-    def test_default_values(self):
+    def test_default_values(self, monkeypatch):
         """测试默认值"""
+        for key in ["REDIS_HOST", "REDIS_PORT", "REDIS_DB", "REDIS_PASSWORD"]:
+            monkeypatch.delenv(key, raising=False)
+        monkeypatch.setenv("REDIS_PASSWORD", "password")
+
         settings = RedisSettings()
         assert settings.REDIS_HOST == "localhost"
         assert settings.REDIS_PORT == 6379
@@ -242,9 +260,9 @@ class TestEnvironmentIntegration:
 
     def test_env_file_loading(self, monkeypatch):
         """测试 .env 文件加载"""
-        # 使用正确的前缀格式
-        monkeypatch.setenv("APP_APP_NAME", "test-from-env")
-        monkeypatch.setenv("APP_PORT", "9999")  # PORT 没有前缀
+        monkeypatch.delenv("APP_NAME", raising=False)
+        monkeypatch.setenv("APP_NAME", "test-from-env")
+        monkeypatch.setenv("PORT", "9999")
 
         settings = AppSettings()
         assert settings.APP_NAME == "test-from-env"

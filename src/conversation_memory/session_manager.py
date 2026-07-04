@@ -2,8 +2,10 @@
 智能招聘 RAG 推荐系统 - 会话管理模块
 
 会话创建/查询/删除/消息追加
+支持内存存储（dev/test）和 Redis 存储（production）
 """
 
+import json
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
@@ -52,32 +54,83 @@ class SessionState(BaseModel):
     # 消息历史
     messages: List[Message] = Field(default_factory=list, description="消息历史")
 
+    def to_json(self) -> str:
+        return self.model_dump_json()
 
-class SessionManager:
-    """会话管理器"""
+    @classmethod
+    def from_json(cls, data: str) -> "SessionState":
+        return cls.model_validate(json.loads(data))
+
+
+class _RedisSessionBackend:
+    """Redis 会话后端"""
+
+    _REDIS_KEY_PREFIX = "session:"
+    _USER_INDEX_PREFIX = "session:user:"
 
     def __init__(self, ttl_seconds: int = 1800):
-        """
-        初始化会话管理器
+        self.ttl_seconds = ttl_seconds
+        self._redis = None
 
-        Args:
-            ttl_seconds: 会话 TTL（秒）
-        """
+    def _get_redis(self):
+        if self._redis is None:
+            from src.common.config import get_settings
+            settings = get_settings()
+            import redis
+            self._redis = redis.from_url(
+                settings.redis.redis_url,
+                decode_responses=True,
+            )
+        return self._redis
+
+    def _save(self, session: SessionState) -> None:
+        redis = self._get_redis()
+        key = f"{self._REDIS_KEY_PREFIX}{session.session_id}"
+        redis.setex(key, self.ttl_seconds, session.to_json())
+        redis.sadd(f"{self._USER_INDEX_PREFIX}{session.user_id}", session.session_id)
+
+    def _load(self, session_id: str) -> Optional[SessionState]:
+        redis = self._get_redis()
+        key = f"{self._REDIS_KEY_PREFIX}{session_id}"
+        data = redis.get(key)
+        if data is None:
+            return None
+        return SessionState.from_json(data)
+
+    def _delete(self, session_id: str) -> None:
+        redis = self._get_redis()
+        key = f"{self._REDIS_KEY_PREFIX}{session_id}"
+        redis.delete(key)
+
+    def _count_user_sessions(self, user_id: str) -> int:
+        redis = self._get_redis()
+        return redis.scard(f"{self._USER_INDEX_PREFIX}{user_id}")
+
+
+class SessionManager:
+    """会话管理器（自动选择内存或 Redis 后端）"""
+
+    def __init__(self, ttl_seconds: int = 1800):
         self.ttl_seconds = ttl_seconds
         self._sessions: Dict[str, SessionState] = {}
+        self._redis_backend: Optional[_RedisSessionBackend] = None
+
+    def _use_redis(self) -> bool:
+        try:
+            from src.common.config import Environment, get_settings
+            return get_settings().app.APP_ENV == Environment.PROD
+        except Exception:
+            return False
+
+    def _get_redis(self) -> Optional[_RedisSessionBackend]:
+        if not self._use_redis():
+            return None
+        if self._redis_backend is None:
+            self._redis_backend = _RedisSessionBackend(ttl_seconds=self.ttl_seconds)
+        return self._redis_backend
 
     def create_session(self, user_id: str) -> SessionState:
-        """
-        创建会话
-
-        Args:
-            user_id: 用户 ID
-
-        Returns:
-            SessionState: 会话状态
-        """
         session_id = str(uuid.uuid4())
-
         session = SessionState(
             session_id=session_id,
             user_id=user_id,
@@ -85,201 +138,157 @@ class SessionManager:
             created_at=datetime.now(timezone.utc),
             last_active_at=datetime.now(timezone.utc),
         )
-
-        self._sessions[session_id] = session
+        redis = self._get_redis()
+        if redis:
+            try:
+                redis._save(session)
+            except Exception as e:
+                logger.warning(f"Redis session save failed, falling back to memory: {e}")
+                self._sessions[session_id] = session
+        else:
+            self._sessions[session_id] = session
 
         logger.info(f"创建会话: session_id={session_id}, user_id={user_id}")
-
         return session
 
     def get_session(self, session_id: str) -> Optional[SessionState]:
-        """
-        获取会话
+        redis = self._get_redis()
+        if redis:
+            try:
+                session = redis._load(session_id)
+                if session:
+                    if session.status != SessionStatus.ACTIVE:
+                        return None
+                    return session
+            except Exception as e:
+                logger.warning(f"Redis session load failed, falling back to memory: {e}")
 
-        Args:
-            session_id: 会话 ID
-
-        Returns:
-            Optional[SessionState]: 会话状态，不存在返回 None
-        """
         session = self._sessions.get(session_id)
-
         if not session:
             logger.warning(f"会话不存在: session_id={session_id}")
             return None
-
-        # 检查状态
         if session.status != SessionStatus.ACTIVE:
             logger.warning(f"会话状态异常: session_id={session_id}, status={session.status}")
             return None
-
-        # TTL 检查
         elapsed = (datetime.now(timezone.utc) - session.last_active_at).total_seconds()
         if elapsed > self.ttl_seconds:
             session.status = SessionStatus.EXPIRED
             logger.warning(f"会话已过期: session_id={session_id}, elapsed={elapsed:.0f}s")
             return None
-
         return session
 
     def delete_session(self, session_id: str) -> bool:
-        """
-        删除会话
+        redis = self._get_redis()
+        if redis:
+            try:
+                redis._delete(session_id)
+                logger.info(f"删除会话: session_id={session_id}")
+                return True
+            except Exception as e:
+                logger.warning(f"Redis session delete failed: {e}")
 
-        Args:
-            session_id: 会话 ID
-
-        Returns:
-            bool: 是否删除成功
-        """
         session = self._sessions.get(session_id)
-
         if not session:
             logger.warning(f"会话不存在: session_id={session_id}")
             return False
-
         session.status = SessionStatus.DELETED
-
         logger.info(f"删除会话: session_id={session_id}")
-
         return True
 
-    def append_message(
-        self,
-        session_id: str,
-        role: str,
-        content: str,
-        metadata: Optional[Dict[str, Any]] = None,
-    ) -> bool:
-        """
-        追加消息
-
-        Args:
-            session_id: 会话 ID
-            role: 角色
-            content: 消息内容
-            metadata: 元数据
-
-        Returns:
-            bool: 是否追加成功
-        """
+    def append_message(self, session_id: str, role: str, content: str,
+                       metadata: Optional[Dict[str, Any]] = None) -> bool:
         session = self.get_session(session_id)
-
         if not session:
             return False
-
-        # 创建消息
         message = Message(
-            role=role,
-            content=content,
-            timestamp=datetime.now(timezone.utc),
-            metadata=metadata or {},
+            role=role, content=content,
+            timestamp=datetime.now(timezone.utc), metadata=metadata or {},
         )
-
-        # 追加消息
         session.messages.append(message)
-
-        # 更新轮次
         if role == "user":
             session.turn_count += 1
-
-        # 更新最后活跃时间
         session.last_active_at = datetime.now(timezone.utc)
-
+        self._persist(session_id, session)
         logger.info(f"追加消息: session_id={session_id}, role={role}, turn={session.turn_count}")
-
         return True
 
-    def update_session_state(
-        self,
-        session_id: str,
-        last_query: Optional[Dict[str, Any]] = None,
-        last_filters: Optional[Dict[str, Any]] = None,
-        last_candidates: Optional[List[Dict[str, Any]]] = None,
-        last_intent: Optional[str] = None,
-    ) -> bool:
-        """
-        更新会话状态
-
-        Args:
-            session_id: 会话 ID
-            last_query: 上一次查询的 Slots
-            last_filters: 上一次生效的过滤条件
-            last_candidates: 上一次推荐的候选人
-
-        Returns:
-            bool: 是否更新成功
-        """
+    def update_session_state(self, session_id: str,
+                             last_query: Optional[Dict[str, Any]] = None,
+                             last_filters: Optional[Dict[str, Any]] = None,
+                             last_candidates: Optional[List[Dict[str, Any]]] = None,
+                             last_intent: Optional[str] = None) -> bool:
         session = self.get_session(session_id)
-
         if not session:
             return False
-
         if last_query is not None:
             session.last_query = last_query
-
         if last_filters is not None:
             session.last_filters = last_filters
-
         if last_candidates is not None:
             session.last_candidates = last_candidates
-
         if last_intent is not None:
             session.last_intent = last_intent
-
         session.last_active_at = datetime.now(timezone.utc)
-
+        self._persist(session_id, session)
         logger.info(f"更新会话状态: session_id={session_id}")
-
         return True
 
-    def list_sessions(
-        self,
-        user_id: str,
-        page: int = 1,
-        size: int = 20,
-    ) -> List[SessionState]:
-        """
-        获取用户会话列表
+    def _persist(self, session_id: str, session: SessionState) -> None:
+        redis = self._get_redis()
+        if redis:
+            try:
+                redis._save(session)
+                return
+            except Exception as e:
+                logger.warning(f"Redis persist failed: {e}")
+        self._sessions[session_id] = session
 
-        Args:
-            user_id: 用户 ID
-            page: 页码
-            size: 每页数量
+    def list_sessions(self, user_id: str, page: int = 1, size: int = 20) -> List[SessionState]:
+        redis = self._get_redis()
+        if redis:
+            try:
+                user_sessions = self._list_redis_sync(redis, user_id)
+                start = (page - 1) * size
+                return user_sessions[start:start + size]
+            except Exception as e:
+                logger.warning(f"Redis list sessions failed, falling back to memory: {e}")
 
-        Returns:
-            List[SessionState]: 会话列表
-        """
-        # 过滤用户会话
         user_sessions = [
             session for session in self._sessions.values()
             if session.user_id == user_id and session.status == SessionStatus.ACTIVE
         ]
-
-        # 按最后活跃时间排序
         user_sessions.sort(key=lambda s: s.last_active_at, reverse=True)
-
-        # 分页
         start = (page - 1) * size
         end = start + size
-
         return user_sessions[start:end]
 
+    def _list_redis_sync(self, redis: _RedisSessionBackend, user_id: str) -> List[SessionState]:
+        r = redis._get_redis()
+        members = r.smembers(f"{_RedisSessionBackend._USER_INDEX_PREFIX}{user_id}")
+        sessions = []
+        for sid in members:
+            s = redis._load(sid)
+            if s and s.status == SessionStatus.ACTIVE:
+                sessions.append(s)
+        sessions.sort(key=lambda s: s.last_active_at, reverse=True)
+        return sessions
+
+    def count_sessions(self, user_id: str) -> int:
+        redis = self._get_redis()
+        if redis:
+            try:
+                return redis._count_user_sessions(user_id)
+            except Exception as e:
+                logger.warning(f"Redis count sessions failed: {e}")
+        return sum(
+            1 for s in self._sessions.values()
+            if s.user_id == user_id and s.status == SessionStatus.ACTIVE
+        )
+
     def get_conversation_context(self, session_id: str) -> Optional[Dict[str, Any]]:
-        """
-        获取对话上下文
-
-        Args:
-            session_id: 会话 ID
-
-        Returns:
-            Optional[Dict[str, Any]]: 对话上下文
-        """
         session = self.get_session(session_id)
-
         if not session:
             return None
-
         return {
             "conversation_id": session.session_id,
             "turn_count": session.turn_count,

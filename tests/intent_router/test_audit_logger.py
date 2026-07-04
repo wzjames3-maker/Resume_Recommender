@@ -2,7 +2,7 @@
 智能招聘 RAG 推荐系统 - Intent 审计日志测试
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 import pytest
 
@@ -186,7 +186,7 @@ class TestIntentAuditLogger:
         audit_logger.log(**sample_log_data)
 
         # 查询过去 1 小时的日志
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         one_hour_ago = now - timedelta(hours=1)
 
         logs = audit_logger.get_logs(

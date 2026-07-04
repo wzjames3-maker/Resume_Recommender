@@ -1,0 +1,324 @@
+# 智能招聘 RAG 推荐系统 — 生产环境 Docker Compose
+# v2026.07.04
+#
+# 启动: docker compose -f docker-compose.prod.yml up -d
+# 停止: docker compose -f docker-compose.prod.yml down
+# 日志: docker compose -f docker-compose.prod.yml logs -f
+
+name: resume-rag-prod
+
+services:
+  # ═══════════════════════════════════════════════════════════════
+  # Nginx 反向代理
+  # ═══════════════════════════════════════════════════════════════
+  nginx:
+    image: nginx:1.25-alpine
+    container_name: resume-rag-nginx
+    ports:
+      - "${NGINX_PORT:-80}:80"
+    volumes:
+      - ./docker/nginx/nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      api:
+        condition: service_healthy
+      frontend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - frontend-net
+      - backend-net
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+  # ═══════════════════════════════════════════════════════════════
+  # FastAPI 后端
+  # ═══════════════════════════════════════════════════════════════
+  api:
+    image: resume-rag-app:latest
+    container_name: resume-rag-api
+    env_file:
+      - .env
+    environment:
+      - PYTHONPATH=/app
+      - MONGODB_URL=mongodb://${MONGODB_USER:?err}:${MONGODB_PASSWORD:?err}@mongodb:27017/${MONGODB_DATABASE:-resume_rag}?authSource=admin
+      - MILVUS_URI=http://milvus:19530
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?err}
+      - REDIS_URL=redis://:${REDIS_PASSWORD:?err}@redis:6379/0
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      milvus:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - backend-net
+      - data-net
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4G
+        reservations:
+          cpus: "1"
+          memory: 1G
+
+  # ═══════════════════════════════════════════════════════════════
+  # Streamlit 前端
+  # ═══════════════════════════════════════════════════════════════
+  frontend:
+    image: resume-rag-frontend:latest
+    container_name: resume-rag-frontend-prod
+    command: ["streamlit", "run", "src/frontend/app.py", "--server.port", "8501", "--server.address", "0.0.0.0", "--server.headless", "true", "--browser.gatherUsageStats", "false", "--server.baseUrlPath", "", "--server.enableCORS", "false", "--server.enableXsrfProtection", "false"]
+    env_file:
+      - .env
+    environment:
+      - PYTHONPATH=/app
+      - API_BASE_URL=http://nginx/api/v1
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - frontend-net
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
+        reservations:
+          cpus: "0.25"
+          memory: 256M
+
+  # ═══════════════════════════════════════════════════════════════
+  # ARQ 异步任务 Worker
+  # ═══════════════════════════════════════════════════════════════
+  worker:
+    image: resume-rag-app:latest
+    container_name: resume-rag-worker-prod
+    command: ["arq", "src.common.worker.WorkerSettings"]
+    env_file:
+      - .env
+    environment:
+      - PYTHONPATH=/app
+      - MONGODB_URL=mongodb://${MONGODB_USER:?err}:${MONGODB_PASSWORD:?err}@mongodb:27017/${MONGODB_DATABASE:-resume_rag}?authSource=admin
+      - MILVUS_URI=http://milvus:19530
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?err}
+    depends_on:
+      mongodb:
+        condition: service_healthy
+      milvus:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - data-net
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4G
+        reservations:
+          cpus: "1"
+          memory: 1G
+
+  # ═══════════════════════════════════════════════════════════════
+  # MongoDB 7 — 文档存储
+  # ═══════════════════════════════════════════════════════════════
+  mongodb:
+    image: mongo:7
+    container_name: resume-rag-mongodb
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=${MONGODB_USER:?err}
+      - MONGO_INITDB_ROOT_PASSWORD=${MONGODB_PASSWORD:?err}
+    volumes:
+      - mongodb_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - data-net
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 2G
+        reservations:
+          cpus: "0.5"
+          memory: 512M
+
+  # ═══════════════════════════════════════════════════════════════
+  # Milvus Standalone v2.4.6 — 向量库
+  # ═══════════════════════════════════════════════════════════════
+  milvus:
+    image: milvusdb/milvus:v2.4.6
+    container_name: resume-rag-milvus
+    environment:
+      - ETCD_ENDPOINTS=etcd:2379
+      - MINIO_ADDRESS=minio:9000
+    volumes:
+      - milvus_data:/var/lib/milvus
+    command: ["milvus", "run", "standalone"]
+    depends_on:
+      etcd:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9091/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 90s
+    restart: unless-stopped
+    networks:
+      - data-net
+    deploy:
+      resources:
+        limits:
+          cpus: "2"
+          memory: 4G
+        reservations:
+          cpus: "0.5"
+          memory: 1G
+
+  # ═══════════════════════════════════════════════════════════════
+  # Milvus 依赖 — etcd (元数据)
+  # ═══════════════════════════════════════════════════════════════
+  etcd:
+    image: quay.io/coreos/etcd:v3.5.5
+    container_name: resume-rag-etcd
+    environment:
+      - ETCD_AUTO_COMPACTION_MODE=revision
+      - ETCD_AUTO_COMPACTION_RETENTION=1000
+      - ETCD_QUOTA_BACKEND_BYTES=4294967296
+      - ETCD_SNAPSHOT_COUNT=50000
+    volumes:
+      - etcd_data:/etcd
+    command: etcd -advertise-client-urls=http://127.0.0.1:2379 -listen-client-urls http://0.0.0.0:2379 --data-dir /etcd
+    healthcheck:
+      test: ["CMD", "etcdctl", "endpoint", "health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - data-net
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+  # ═══════════════════════════════════════════════════════════════
+  # Milvus 依赖 — MinIO (对象存储)
+  # ═══════════════════════════════════════════════════════════════
+  minio:
+    image: minio/minio:RELEASE.2023-03-20T20-16-18Z
+    container_name: resume-rag-minio
+    environment:
+      - MINIO_ACCESS_KEY=${MINIO_ACCESS_KEY:?err}
+      - MINIO_SECRET_KEY=${MINIO_SECRET_KEY:?err}
+    volumes:
+      - minio_data:/minio_data
+    command: minio server /minio_data --console-address ":9001"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost:9000/minio/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - data-net
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
+
+  # ═══════════════════════════════════════════════════════════════
+  # Redis 7 Alpine — 缓存 + ARQ 队列
+  # ═══════════════════════════════════════════════════════════════
+  redis:
+    image: redis:7-alpine
+    container_name: resume-rag-redis
+    command: redis-server --appendonly yes --requirepass ${REDIS_PASSWORD:?err} --maxmemory 256mb --maxmemory-policy allkeys-lru
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD:?err}", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - data-net
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 512M
+
+# ═══════════════════════════════════════════════════════════════
+# 持久化数据卷
+# ═══════════════════════════════════════════════════════════════
+volumes:
+  mongodb_data:
+    driver: local
+  milvus_data:
+    driver: local
+  etcd_data:
+    driver: local
+  minio_data:
+    driver: local
+  redis_data:
+    driver: local
+
+# ═══════════════════════════════════════════════════════════════
+# 网络隔离 (三层)
+#   frontend-net: nginx + streamlit (可对外)
+#   backend-net:  nginx + api (内部 API)
+#   data-net:     api + worker + mongodb + milvus + etcd + minio + redis (最内层)
+# ═══════════════════════════════════════════════════════════════
+networks:
+  frontend-net:
+    driver: bridge
+  backend-net:
+    driver: bridge
+  data-net:
+    driver: bridge
+    internal: true

@@ -1,8 +1,7 @@
 <!-- Module: intent-router -->
 <!-- Spec Layer: 02 - Data Model -->
-<!-- Phase: Phase 4 - Spec Writing -->
-<!-- Project: 企业智能招聘 RAG 推荐系统 -->
-<!-- Date: 2026-06-23 -->
+<!-- 变更: Tier L - RAG 全量重构 -->
+<!-- Date: 2026-07-03 -->
 
 # 数据模型：Intent Router（意图路由模块）
 

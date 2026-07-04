@@ -187,6 +187,40 @@ class ResumeRepository:
         resume = ResumeSchema.from_mongodb_dict(doc)
         return self._to_response(resume)
 
+    def batch_get_by_ids(
+        self, resume_ids: List[str]
+    ) -> Dict[str, ResumeResponse]:
+        """
+        批量查询简历（避免 N+1）
+
+        Args:
+            resume_ids: 简历 ID 列表 (UUID 字符串)
+
+        Returns:
+            Dict[str, ResumeResponse]: {resume_id: ResumeResponse}
+        """
+        if not resume_ids:
+            return {}
+
+        collection = self._get_collection()
+
+        # resume_id 是 UUID 字符串，直接用 id 字段查询
+        unique_ids = list(set(resume_ids))
+        query = {
+            "id": {"$in": unique_ids},
+            "status": {"$ne": ResumeStatus.DELETED.value},
+        }
+
+        results = {}
+        for doc in collection.find(query):
+            resume = ResumeSchema.from_mongodb_dict(doc)
+            resp = self._to_response(resume)
+            rid = resp.id
+            if rid in resume_ids:
+                results[rid] = resp
+
+        return results
+
     def find_by_filename(self, file_name: str):
         """通过文件名查找简历（用于 pipeline 脚本）"""
         from typing import Optional as _Opt

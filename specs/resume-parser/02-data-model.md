@@ -1,8 +1,7 @@
 ﻿<!-- Module: resume-parser -->
 <!-- Spec Layer: 02 - Data Model -->
-<!-- Phase: Phase 4 - Spec Writing -->
-<!-- Project: 企业智能招聘 RAG 推荐系统 -->
-<!-- Date: 2026-06-23 -->
+<!-- 变更: Tier L - RAG 全量重构 -->
+<!-- Date: 2026-07-03 -->
 
 # 数据模型：Resume Parser
 
@@ -172,6 +171,22 @@ class ResumeMetadata(BaseModel):
     file_md5: Optional[str] = Field(None, description="文件内容 MD5 哈希值（用于去重）")
 ```
 
+### 3.7a ResumeStructured（LLM 提取的结构化数据）
+
+> **注意**: `ResumeStructured` 是 LLM 从 raw_text 提取的结构化数据，**不含** chunks/metadata。
+> `ResumeSchema` = `ResumeStructured` + chunks + metadata，是 complete pipeline 的最终输出。
+
+```python
+class ResumeStructured(BaseModel):
+    """LLM 结构化提取的简历数据（生成 Chunk 的输入）"""
+    personal_info: PersonalInfo = Field(default_factory=PersonalInfo)
+    education_list: list[EducationSchema] = Field(default_factory=list)
+    experience_list: list[ExperienceSchema] = Field(default_factory=list)
+    project_list: list[ProjectSchema] = Field(default_factory=list)
+    skill_list: list[SkillSchema] = Field(default_factory=list)
+    confidence_score: float = Field(0.0, ge=0, le=1, description="LLM 提取置信度")
+```
+
 ### 3.8 ResumeSchema（简历根 Schema）
 
 ```python
@@ -214,47 +229,88 @@ class SectionSchema(BaseModel):
 
 ### 3.10 ChunkSchema（多粒度 Chunk）
 
+> **变更说明 (Tier L)**: Chunk 不再从 raw_text 按字符数切割，而是从 ResumeStructured 结构化数据构建。
+> 每个 Small Chunk 对应一条结构化记录（如一条工作经历、一个项目），携带完整 metadata。
+
 ```python
 class ChunkLevel(str, Enum):
     """Chunk 粒度级别"""
-    SMALL = "small"        # Small Chunk: 单句或小段落 (50~200 字符)
-    PARENT = "parent"      # Parent Chunk: 完整 Section (教育/工作/项目等)
-    FULL = "full"          # Full Resume: 整份简历
+    SMALL = "small"        # Small Chunk: 单条结构化记录（工作经历/项目/教育/技能组）
+    PARENT = "parent"      # Parent Chunk: 完整 Section（所有教育/所有工作/所有项目...）
+    FULL = "full"          # Full Resume: LLM 生成摘要（非 raw_text 拼接）
 
 class ChunkSchema(BaseModel):
     """多粒度 Chunk"""
     chunk_id: str = Field(..., description="Chunk 唯一 ID (resume_id + level + index)")
     resume_id: str = Field(..., description="所属简历 ID")
     chunk_level: ChunkLevel = Field(..., description="Chunk 粒度级别")
-    section_type: Optional[SectionType] = Field(None, description="所属 Section 类型 (small/parent 级别必填)")
+    section_type: Optional[SectionType] = Field(None, description="所属 Section 类型")
     parent_chunk_id: Optional[str] = Field(None, description="父 Chunk ID (small 级别必填)")
     content: str = Field(..., description="Chunk 文本内容")
     char_count: int = Field(..., description="字符数")
     sequence_index: int = Field(..., description="在简历中的顺序索引 (0-based)")
-    metadata: dict = Field(default_factory=dict, description="附加 Metadata (如 page_num, section_title)")
+    metadata: dict = Field(default_factory=dict, description="完整 Metadata（见 §3.10.1）")
 ```
 
-**Chunk 层级关系**:
+#### 3.10.1 Chunk Metadata Schema
+
+**候选人级（所有 chunk 共享，从 ResumeStructured.personal_info 继承）**:
+
+| 字段 | 类型 | 来源 | Milvus 标量列 |
+|------|------|------|---------------|
+| candidate_name | str | personal_info.full_name | — (仅 JSON) |
+| years_of_experience | int | personal_info.years_of_experience | ✅ INT64 |
+| city | str | personal_info.city | ✅ VARCHAR(64) |
+| gender | str | personal_info.gender | ✅ VARCHAR(8) |
+| current_title | str | personal_info.current_title | — |
+| current_company | str | personal_info.current_company | — |
+| highest_education_level | int | 从 education_list 推导最高学历 | ✅ INT8 |
+| highest_education | str | 从 education_list 推导最高学历名称 | — |
+| is_985 | bool | education_list 任一 is_985=true | — |
+| is_211 | bool | education_list 任一 is_211=true | — |
+| skills_normalized | list[str] | skill_list[].name 小写 | — |
+| skills_original | list[str] | skill_list[].name 原始 | — |
+| industry | str | experience_list 最近一条 industry | — |
+
+**Chunk 级（每个 chunk 独有）**:
+
+| 字段 | 类型 | 适用 level | 说明 |
+|------|------|-----------|------|
+| section_type | str | small/parent | "education"/"experience"/"project"/"skill" |
+| organization | str | small/parent | 学校名/公司名 |
+| title | str | small/parent | 职位/角色 |
+| start_date | str | small/parent | YYYY-MM |
+| end_date | str | small/parent | YYYY-MM 或 "至今" |
+| tech_stack | list[str] | small/parent (project) | 技术栈 |
+| sequence_index | int | all | 顺序索引 |
+
+#### 3.10.2 Chunk 构建层级（2 页简历典型示例）
+
 ```
-Full Resume (chunk_level=full)
-├── Parent Chunk: 教育经历 (chunk_level=parent, section_type=education)
-│   ├── Small Chunk: "2018-2022 浙江大学 计算机科学与技术 本科" (chunk_level=small)
-│   └── Small Chunk: "GPA 3.8/4.0 校级优秀毕业生" (chunk_level=small)
-├── Parent Chunk: 工作经历 (chunk_level=parent, section_type=experience)
-│   ├── Small Chunk: "2022.07-至今 阿里巴巴 高级Java工程师" (chunk_level=small)
-│   ├── Small Chunk: "负责订单系统核心模块开发，日均处理订单量 500 万+" (chunk_level=small)
-│   └── Small Chunk: "主导微服务架构改造，系统可用性从 99.5% 提升至 99.99%" (chunk_level=small)
-├── Parent Chunk: 项目经历 (chunk_level=parent, section_type=project)
-│   ├── Small Chunk: "电商平台重构项目 技术负责人" (chunk_level=small)
-│   └── Small Chunk: "使用 Spring Cloud + Kafka + Redis 实现分布式架构" (chunk_level=small)
-└── Parent Chunk: 技能清单 (chunk_level=parent, section_type=skill)
-    └── Small Chunk: "Java, Spring Boot, MySQL, Redis, Kafka, Docker, K8s" (chunk_level=small)
+Full Resume (1 个, chunk_level=full)
+  content = LLM 生成的简历摘要（非 raw_text）
+  metadata = 全部候选人级字段
+│
+├── Parent: 教育经历 (chunk_level=parent, section_type=education)
+│   content = 所有 education_list 条目拼接
+│   metadata = 候选人级 + section_type=education
+│   ├── Small: "浙江大学 | 计算机科学 | 硕士 | 2012-09 ~ 2015-06" (chunk_level=small)
+│   │   metadata = 候选人级 + {organization=浙江大学, section_type=education, start_date=2012-09, ...}
+│   └── Small: "清华大学 | 软件工程 | 本科 | 2008-09 ~ 2012-06"
+│
+├── Parent: 工作经历 (chunk_level=parent, section_type=experience)
+│   ├── Small: "阿里巴巴 | 高级Java工程师 | 2019-07 ~ 2024-03\n负责电商交易系统..."
+│   │   metadata = 候选人级 + {organization=阿里巴巴, title=高级Java工程师, ...}
+│   ├── Small: "字节跳动 | 后端开发 | 2015-07 ~ 2019-06\n负责推荐系统后端..."
+│   └── Small: "腾讯 | 实习生 | 2014-10 ~ 2015-04\n参与微信支付模块开发..."
+│
+├── Parent: 项目经历 (chunk_level=parent, section_type=project)
+│   ├── Small: "电商交易平台重构 | 技术负责人 | Spring Cloud + Kafka + Redis..."
+│   └── Small: "推荐系统实时计算 | 核心开发 | Flink + ClickHouse..."
+│
+└── Parent: 技能清单 (chunk_level=parent, section_type=skill)
+    └── Small: "Java(精通,8年), Spring Cloud(熟练,5年), MySQL(熟练,8年), Kafka(熟悉,3年)..."
 ```
 
-**chunk_id 生成规则**:
-```python
-def generate_chunk_id(resume_id: str, level: ChunkLevel, index: int) -> str:
-    """生成 Chunk ID"""
-    return f"{resume_id}:{level.value}:{index:04d}"
-# 示例: "r_abc123:parent:0000", "r_abc123:small:0003"
-```
+**预计 Chunk 数量** (2 页简历):
+- 1 Full + 4 Parent + 8-12 Small = 13-17 个 Chunk

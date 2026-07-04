@@ -1,7 +1,8 @@
 """
 智能招聘 RAG 推荐系统 - Rerank 重排序模块
 
-使用 BGE-Reranker-v2-m3 API 进行语义重排序
+变更 (Tier L): 加权融合（非覆盖式替换）
+final_score = RERANK_WEIGHT * rerank_score + RETRIEVAL_WEIGHT * norm_retrieval_score
 """
 
 from typing import Any, Dict, List, Optional
@@ -9,26 +10,28 @@ from typing import Any, Dict, List, Optional
 import httpx
 
 from src.common.config import get_settings
-from src.common.errors import ErrorCode, ExternalServiceError
 from src.common.logger import get_logger
 from src.recommendation_engine.hybrid_retriever import RetrievalResult
 
-logger = get_logger("reranker")
+logger = get_logger(__name__)
 
+RERANK_WEIGHT = 0.7
+RETRIEVAL_WEIGHT = 0.3
 DEFAULT_TOP_K = 10
 DEFAULT_TIMEOUT = 30
 MAX_RETRIES = 2
 
 
 class Reranker:
-    """BGE-Reranker 重排序器"""
+    """BGE-Reranker 重排序器 — 加权融合"""
 
     def __init__(self):
         settings = get_settings()
-        self.api_key = settings.embedding.EMBEDDING_API_KEY  # siliconflow key
-        self.api_base_url = "https://api.siliconflow.cn/v1"
-        self.model = "BAAI/bge-reranker-v2-m3"
+        self.api_key = settings.reranker.RERANKER_API_KEY
+        self.api_base_url = settings.reranker.RERANKER_BASE_URL
+        self.model = settings.reranker.RERANKER_MODEL
         self.timeout = DEFAULT_TIMEOUT
+        self._client = httpx.Client(timeout=self.timeout)
 
     def rerank(
         self,
@@ -39,43 +42,56 @@ class Reranker:
         if not results:
             return []
 
-        # Build documents list from result contents
-        documents = []
-        for r in results:
-            content = r.content
-            if isinstance(content, str):
-                documents.append(content)
-            else:
-                documents.append(str(content))
+        documents = [self._build_document(r) for r in results]
 
-        if not documents:
-            return results[:top_k]
-
-        # Call BGE Reranker API
         rerank_scores = self._call_rerank_api(query_text, documents)
 
         if rerank_scores:
-            # Apply rerank scores
-            for i, score in enumerate(rerank_scores):
-                if i < len(results):
-                    results[i].metadata["rerank_score"] = score
-                    results[i].metadata["final_score"] = score
-                    results[i].score = score
+            retrieval_scores = [r.score for r in results]
+            max_ret = max(retrieval_scores) if retrieval_scores else 1.0
 
-            # Sort by rerank score
-            results.sort(key=lambda r: r.metadata.get("final_score", 0), reverse=True)
+            for i, (r, rerank) in enumerate(zip(results, rerank_scores)):
+                norm_retrieval = r.score / max_ret if max_ret > 0 else 0.0
+                final = RERANK_WEIGHT * rerank + RETRIEVAL_WEIGHT * norm_retrieval
+                r.metadata["rerank_score"] = rerank
+                r.metadata["retrieval_score"] = r.score
+                r.metadata["final_score"] = final
+                r.score = final
         else:
-            # Fallback: keep original order with original scores as final
             for r in results:
                 r.metadata["final_score"] = r.score
+            results.sort(key=lambda r: r.score, reverse=True)
 
-        # Update ranks
-        for rank, result in enumerate(results[:top_k], start=1):
-            result.rank = rank
+        # Sort by final score and update ranks
+        results.sort(key=lambda r: r.metadata.get("final_score", r.score), reverse=True)
+        for rank, r in enumerate(results[:top_k], start=1):
+            r.rank = rank
 
         logger.info(f"Rerank done: in={len(results)}, out={min(len(results), top_k)}")
-
         return results[:top_k]
+
+    def _build_document(self, result: RetrievalResult) -> str:
+        """构建结构化 document 文本供 Reranker 使用"""
+        m = result.metadata
+        parts = []
+        name = m.get("candidate_name", "")
+        title = m.get("current_title", m.get("title", ""))
+        org = m.get("organization", m.get("current_company", ""))
+        exp_yrs = m.get("years_of_experience", 0)
+        skills = m.get("skills_normalized", [])
+
+        if name:
+            parts.append(name)
+        if title:
+            parts.append(title)
+        if org:
+            parts.append(org)
+        if exp_yrs:
+            parts.append(f"{exp_yrs}年经验")
+        if skills:
+            parts.append("技能: " + ", ".join(skills[:10]))
+        parts.append(f"内容: {result.content}")
+        return " | ".join(parts)
 
     def _call_rerank_api(self, query: str, documents: List[str]) -> Optional[List[float]]:
         headers = {
@@ -92,31 +108,27 @@ class Reranker:
 
         for attempt in range(MAX_RETRIES):
             try:
-                with httpx.Client(timeout=self.timeout) as client:
-                    resp = client.post(
-                        f"{self.api_base_url}/rerank",
-                        headers=headers,
-                        json=payload,
-                    )
-
+                resp = self._client.post(
+                    f"{self.api_base_url}/rerank",
+                    headers=headers,
+                    json=payload,
+                )
                 if resp.status_code != 200:
-                    logger.warning(f"Rerank API error {resp.status_code}: {resp.text[:200]}")
+                    logger.warning(f"Rerank API error {resp.status_code}")
                     if attempt < MAX_RETRIES - 1:
                         continue
                     return None
 
                 data = resp.json()
-                results = data.get("results", [])
-
-                # Build score array indexed by original position
+                items = data.get("results", [])
                 scores = [0.0] * len(documents)
-                for item in results:
+                for item in items:
                     idx = item.get("index", 0)
                     score = item.get("relevance_score", 0.0)
                     if 0 <= idx < len(scores):
                         scores[idx] = score
 
-                logger.info(f"Rerank API returned {len(results)} scores")
+                logger.info(f"Rerank API returned {len(items)} scores")
                 return scores
 
             except Exception as e:
@@ -128,8 +140,11 @@ class Reranker:
         return None
 
 
-reranker = Reranker()
+_reranker: Optional[Reranker] = None
 
 
 def get_reranker() -> Reranker:
-    return reranker
+    global _reranker
+    if _reranker is None:
+        _reranker = Reranker()
+    return _reranker

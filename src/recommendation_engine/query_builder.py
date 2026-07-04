@@ -87,10 +87,7 @@ class QueryBuilder:
         # 提取工作年限
         if slots.experience is not None:
             experience_value = int(slots.experience) if slots.experience == int(slots.experience) else slots.experience
-            experience_text = f"{experience_value}年经验"
-            if slots.experience_op:
-                experience_text = f"{slots.experience_op.value}{experience_value}年经验"
-            keywords.append(experience_text)
+            keywords.append(f"{experience_value}年以上工作经验")
 
         # 提取行业
         if slots.industry:
@@ -147,10 +144,17 @@ class QueryBuilder:
         keywords = self._extract_keywords(slots)
         # Include the raw user query for richer semantics
         if raw_query and raw_query.strip():
-            # Clean the raw query
             clean_raw = raw_query.strip()
-            if clean_raw not in " ".join(keywords):
-                keywords.insert(0, clean_raw)
+            # Deduplicate: only add raw query if it's not already covered by keywords
+            existing_text = " ".join(keywords)
+            if clean_raw != existing_text:
+                # Check if raw query is substantially different from keywords
+                # Avoid adding if raw query is just a subset of keywords
+                keywords_set = set(k.lower() for k in keywords)
+                raw_words = set(w.lower() for w in clean_raw.split() if len(w) > 1)
+                # If most raw words are already in keywords, don't add
+                if raw_words and not raw_words.issubset(keywords_set):
+                    keywords.insert(0, clean_raw)
         if not keywords:
             raise ValidationError(
                 error_code=ErrorCode.SYS_001,
