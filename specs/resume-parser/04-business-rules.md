@@ -1,8 +1,7 @@
 ﻿<!-- Module: resume-parser -->
 <!-- Spec Layer: 04 - Business Rules -->
-<!-- Phase: Phase 4 - Spec Writing -->
-<!-- Project: 企业智能招聘 RAG 推荐系统 -->
-<!-- Date: 2026-06-23 -->
+<!-- 变更: Tier L - RAG 全量重构 -->
+<!-- Date: 2026-07-03 -->
 
 # 业务规则：Resume Parser
 
@@ -358,87 +357,107 @@ Output Schema: {ResumeSchema.model_json_schema()}
 
 ---
 
-## RULE-008: Multi-Chunk 多粒度切分
+## RULE-008: Multi-Chunk 基于结构化数据切分
 
-**规则描述**: 简历解析后需生成三个粒度的 Chunk：Full Resume、Parent Chunk（Section 级）、Small Chunk（单句级），用于下游向量索引的多粒度检索。
+> **变更说明 (Tier L)**: 不再从 raw_text 按关键词+字符数切割，改为从 LLM 提取的 ResumeStructured 结构化数据构建 Chunk。
 
-**适用场景**: 所有成功解析的简历
+**规则描述**: 简历解析后从 ResumeStructured 构建三个粒度的 Chunk：Full Resume（LLM 摘要）、Parent Chunk（Section 级）、Small Chunk（单条结构化记录），每个 Chunk 携带完整 metadata 支持向量库预过滤。
 
-**规则逻辑**:
+**适用场景**: 所有成功解析的简历（ResumeStructured.confidence_score >= 0.3）
+
+**Chunk 构建规则**:
 
 ```
 1. Full Resume Chunk (1 个):
-   - content = 简历完整文本
+   - content = resume_structured.personal_info.summary（如有）或 raw_text
    - chunk_level = "full"
-   - 用途: LLM 生成推荐理由时的完整上下文
+   - metadata = 候选人级 metadata 全量字段
+   - 用途: 全局语义匹配 + LLM 推荐理由的完整上下文
 
-2. Parent Chunk (N 个, N = Section 数量):
-   - content = Section 原始文本
+2. Parent Chunks (N 个, N = 非空 section 数量):
+   - 每个 Section 对应一个 Parent Chunk
+   - content = 该 section 下所有条目的拼接文本
    - chunk_level = "parent"
-   - section_type = 对应 Section 类型
-   - 用途: 检索命中后提供给 LLM 的上下文（Small→Big 策略中的 "Big"）
+   - section_type = education/experience/project/skill
+   - metadata = 候选人级 metadata + section_type
+   - 用途: Small→Big 召回的 "Big"（LLM 上下文提供）
 
-3. Small Chunk (M 个):
-   - content = Section 内的子段落
+3. Small Chunks (M 个):
+   - 每条结构化记录 → 一个 Small Chunk
+   - education_list 每条 → "学校 | 专业 | 学历 | 日期"
+   - experience_list 每条 → "公司 | 职位 | 日期\n描述\n成就"
+   - project_list 每条 → "项目名 | 角色 | 日期\n描述\ntech_stack"
+   - skill_list 按类别分组 → "技能名(熟练度,年限), ..."
    - chunk_level = "small"
-   - 用途: 向量检索的最小单元（Small→Big 策略中的 "Small"）
+   - parent_chunk_id = 对应 Parent Chunk 的 chunk_id
+   - metadata = 候选人级 metadata + chunk 级 metadata（organization, title, dates, tech_stack 等）
+   - 用途: 向量检索的最小单元（Small→Big 中的 "Small"）
 ```
 
-**Chunk 层级关系**:
-```
-Full Resume
-├── Parent Chunk (教育经历)
-│   ├── Small Chunk 1
-│   └── Small Chunk 2
-├── Parent Chunk (工作经历)
-│   ├── Small Chunk 3
-│   ├── Small Chunk 4
-│   └── Small Chunk 5
-└── Parent Chunk (技能清单)
-    └── Small Chunk 6
-```
+**Metadata 填充规则**:
+- 候选人级字段（years_of_experience, city, gender, highest_education_level, skills_normalized 等）从 ResumeStructured.personal_info 提取
+- 所有 chunk 共享同一份候选人级 metadata
+- 这使得 vector-index 可以在 Milvus expr 中做硬约束预过滤（如 `years_of_experience >= 5`）
 
-**优先级理由**: Multi-Chunk 是实现 Small→Big 检索策略的基础，直接影响检索质量（Recall@10）。
+**降级策略**:
+- ResumeStructured 为 None 或 confidence_score < 0.3:
+  - 降级为旧策略：从 raw_text 按 SectionType 关键词切分 + 字符数合并
+  - metadata 仅含 section_type（不包含候选人级字段）
+  - 记录警告日志 "Chunk 降级为 raw_text 切分模式"
+
+**预计 Chunk 数量** (2 页简历):
+- 1 Full + ~4 Parent + ~10 Small = ~15 个
 
 ---
 
-## RULE-009: Small Chunk 长度控制
+## RULE-009: Small Chunk 基于结构化记录构建
 
-**规则描述**: Small Chunk 的切分需要控制长度，过短则语义不完整，过长则丧失精准检索的优势。
+> **变更说明 (Tier L)**: 不再按句号/字符数切割，改为每条结构化记录（一条工作经历/一个项目/一条教育）作为一个 Small Chunk。
 
-**适用场景**: 所有 Small Chunk 的生成
+**规则描述**: Small Chunk 从 ResumeStructured 的结构化列表构建，每条记录为一个完整语义单元，携带该记录的 metadata。
 
-**切分策略**:
+**适用场景**: ResumeStructured.confidence_score >= 0.3 的简历
+
+**Small Chunk 构建规则**:
 
 ```
-输入: Parent Chunk 的文本内容
+1. 工作经历 Small Chunk (每条 ExperienceEntry 一个):
+   - content 格式: "{company} | {title} | {start_date} ~ {end_date}\n{description}\n成就: {achievements}"
+   - metadata: section_type=experience, organization=company, title=title, start_date, end_date
+   - 示例: "阿里巴巴 | 高级Java工程师 | 2019-07 ~ 2024-03\n负责电商交易系统后端架构设计..."
 
-1. 按句子边界切分:
-   - 中文: 按句号（。）、分号（；）、换行符（\n）切分
-   - 英文: 按句号（.）、分号（;）、换行符（\n）切分
-   - 保留分隔符在句尾
+2. 项目经历 Small Chunk (每条 ProjectEntry 一个):
+   - content 格式: "{name} | {role} | {start_date} ~ {end_date}\n{description}\n技术栈: {tech_stack}"
+   - metadata: section_type=project, organization=name, title=role, tech_stack, start_date, end_date
 
-2. 合并过短段落:
-   - IF 句子长度 < 30 字符:
-       与下一个句子合并
-   - IF 合并后仍 < 30 字符:
-       继续合并（最多合并 3 个连续短句）
+3. 教育经历 Small Chunk (每条 EducationEntry 一个):
+   - content 格式: "{school} | {major} | {degree} | {start_date} ~ {end_date}"
+   - metadata: section_type=education, organization=school, start_date, end_date
 
-3. 切分过长段落:
-   - IF 句子长度 > 300 字符:
-       按逗号（，/,）或顿号（、）切分
-       保证每个子段 >= 50 字符
-
-4. 最终校验:
-   - 每个 Small Chunk 长度范围: 30~300 字符（极端情况允许超出）
-   - 目标长度: 50~200 字符
+4. 技能 Small Chunk (按 category 分组):
+   - content 格式: "{skill_name}({proficiency},{years}年), ..."
+   - metadata: section_type=skill
 ```
 
-**示例**:
+**长内容处理**:
+- 单条记录描述过长（> 500 字符）→ 按句号（。/./；/;）切分为多个 Small Chunk，共享同一 parent_chunk_id
+- 切分后的 Small Chunk 继承完整 metadata
 
-| 原始文本 | 切分结果 |
-|----------|----------|
-| "2022.07-至今 阿里巴巴 高级Java工程师。负责订单系统核心模块开发，日均处理订单量 500 万+。主导微服务架构改造，系统可用性从 99.5% 提升至 99.99%。" | Small-1: "2022.07-至今 阿里巴巴 高级Java工程师。"  Small-2: "负责订单系统核心模块开发，日均处理订单量 500 万+。"  Small-3: "主导微服务架构改造，系统可用性从 99.5% 提升至 99.99%。" |
+**降级策略** (ResumeStructured 不可用时):
+- 从 raw_text 按 SectionType 关键词识别 section 边界
+- 在每个 section 内按句号+换行切分
+- 合并到 50-200 字符
+- metadata 仅含 section_type（无候选人级字段）
+
+**与旧策略对比**:
+
+| 维度 | 旧策略（关键词+字符数） | 新策略（结构化数据） |
+|------|----------------------|---------------------|
+| 边界识别 | 关键词 in 匹配（误判率高） | LLM 提取的结构化列表（精确） |
+| 语义完整性 | 按字符数 50-200 切断 | 每条记录完整语义单元 |
+| Metadata | 仅 section_type | 候选人级 + chunk 级完整字段 |
+| 标量预过滤 | 不支持（metadata 为空） | 支持（years, education, city, gender 在 Milvus 标量列） |
+| Overlap | 无 | 无需（语义单元天然不重叠） |
 
 ---
 
@@ -475,4 +494,4 @@ Full Resume
 - MD5 计算耗时 < 50ms（20MB 文件）
 - find_by_md5 查询走 MongoDB UNIQUE 索引，P95 < 10ms
 
-**优先级理由**: 避免重复解析消耗 LLM Token 和 BGE-M3 API 调用，减少 Milvus 中冗余向量。
+**优先级理由**: 避免重复解析消耗 LLM Token 和 FlagEmbedding 推理资源，减少 Milvus 中冗余向量。

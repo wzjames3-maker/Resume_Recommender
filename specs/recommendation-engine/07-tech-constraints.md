@@ -1,8 +1,7 @@
 <!-- Module: recommendation-engine -->
 <!-- Spec Layer: 07 - Tech Constraints -->
-<!-- Phase: Phase 4 - Spec Writing -->
-<!-- Project: 企业智能招聘 RAG 推荐系统 -->
-<!-- Date: 2026-06-23 -->
+<!-- 变更: Tier L - RAG 全量重构 -->
+<!-- Date: 2026-07-03 -->
 
 # 技术约束：Recommendation Engine
 
@@ -16,64 +15,61 @@
 
 | 组件 | 包名 | 最低版本 | 用途 |
 |------|------|----------|------|
-| 向量数据库客户端 | pymilvus | >= 2.5 | Milvus Dense + Sparse 检索 |
-| Milvus 集成 | langchain-milvus | >= 0.1 | LangChain Milvus 集成（可选） |
-| Embedding 模型 | BGE-M3（云端 API） | OpenAI Compatible API | 查询 Dense + Sparse 向量生成 |
+| 向量数据库客户端 | pymilvus | >=2.4.6,<2.5 | Milvus Dense + Sparse Hybrid Search |
+| Embedding 模型 | FlagEmbedding BGEM3FlagModel | BAAI/bge-m3 | 本地推理查询 Dense + Sparse 向量 |
 | Reranker 模型 | BGE Reranker v2 M3（云端 API） | 专用 Rerank API | 候选精细化重排序 |
 | LLM | DeepSeek / OpenAI | OpenAI Compatible API | 推荐理由生成 |
 | LLM SDK | openai | >= 1.0 | OpenAI Compatible API 调用 |
 | 数据验证 | pydantic | >= 2.0 | Schema 定义与输出约束 |
-| 缓存 | cachetools | >= 5.5 | Embedding 结果本地缓存 |
-| HTTP 客户端 | httpx | >= 0.28 | 异步 HTTP 调用 |
+| 缓存 | cachetools | >= 5.3 | Embedding 结果双层缓存（L1 本地 + L2 Redis） |
 | 日志 | python-json-logger | >= 3.2 | 结构化 JSON 日志 |
 
 ---
 
 ## 2. Embedding 模型约束
 
-### BGE-M3 云端 API
+### FlagEmbedding 本地推理（替代 BGE-M3 云端 API）
+
+> **决策**: 因 SiliconFlow `/v1/embeddings` 不返回 sparse 向量，改用 FlagEmbedding BGEM3FlagModel 本地推理。
 
 | 约束 | 值 | 说明 |
 |------|-----|------|
-| API 格式 | OpenAI Compatible | `POST /v1/embeddings` |
-| 模型名 | `BAAI/bge-m3` | 硬编码，不支持自定义 |
+| 模型 | `BAAI/bge-m3` | HuggingFace 自动下载，首次 ~2GB |
 | 输出维度（Dense） | 1024 | 固定 |
-| 输出格式（Sparse） | dict[int, float] | 稀疏向量，key 为 token_id，value 为权重 |
-| 同时输出 | Dense + Sparse | 一次 API 调用同时获取两种向量 |
-| 最大输入长度 | 8192 tokens | 超长文本需截断 |
-| 请求频率限制 | 按服务商限制 | 需要实现重试和退避 |
+| 输出格式（Sparse） | dict[int, float] | `lexical_weights`: token_id → weight |
+| 推理模式 | CPU（use_fp16=False） | 兼容无 GPU 环境 |
+| 模型实例 | 懒加载 + 单例 | 复用同一模型，避免重复加载 |
+| Batch size | 32 | 批量 encode 时每批大小 |
+| 推理延迟（单条） | P95 <= 200ms | CPU 模式 |
+| 缓存 | L1 cachetools TTL 1h + L2 Redis TTL 24h | 减少重复推理
 
-### API 调用格式
+### FlagEmbedding 调用格式
 
 ```python
-# BGE-M3 Embedding API
-POST https://api.siliconflow.cn/v1/embeddings
-{
-    "model": "BAAI/bge-m3",
-    "input": ["查询文本"],
-    "encoding_format": "float"
-}
+from FlagEmbedding import BGEM3FlagModel
 
-# Response (Dense)
-{
-    "data": [{"embedding": [0.1, 0.2, ...]}],  # 1024 维
-    "usage": {"prompt_tokens": 10, "total_tokens": 10}
-}
-
-# Response (Sparse) - 需单独处理或通过额外参数获取
-# 具体取决于服务商 API 实现
+model = BGEM3FlagModel('BAAI/bge-m3', use_fp16=False)
+output = model.encode(
+    ["查询文本"],
+    return_dense=True,
+    return_sparse=True,
+    return_colbert_vecs=False,
+    batch_size=32,
+)
+# output['dense_vecs'] -> np.ndarray [1, 1024]
+# output['lexical_weights'] -> list[dict[int, float]]
 ```
 
 ### 缓存策略
 
 ```python
+# L1: cachetools 进程内缓存，TTL 1h，maxsize=10000
 from cachetools import TTLCache
+embedding_cache_l1 = TTLCache(maxsize=10000, ttl=3600)
 
-# 最多缓存 1000 条查询结果，TTL 10 分钟
-embedding_cache = TTLCache(maxsize=1000, ttl=600)
-
-# 缓存 key: hash(query_text)
-# 缓存 value: (dense_vector, sparse_vector)
+# L2: Redis 分布式缓存，TTL 24h
+# key = f"emb:{hash(text)}"
+# value = json.dumps({"dense": dense_list, "sparse": {"tok_id": val, ...}})
 ```
 
 ---
@@ -200,10 +196,12 @@ search_params = {
 | 禁用 | 原因 |
 |------|------|
 | Elasticsearch 做主检索 | Milvus 原生 Hybrid Search（Dense + Sparse）已满足需求，无需额外引入 ES |
-| 本地 Embedding 模型 | 使用云端 BGE-M3 API，不部署本地模型（资源消耗大） |
+| SiliconFlow /v1/embeddings API | 不返回 sparse 向量，改用 FlagEmbedding 本地推理 |
+| _dense_to_sparse 伪 sparse | 从 dense 派生，提供零增量信息 |
+| 空 sparse dict | 导致 hybrid_search 退化为 dense-only |
+| ChromaDB | 不支持原生 Hybrid Search |
 | Redis 缓存 | V1 单机部署，cachetools 本地缓存足够 |
 | Celery 异步队列 | V1 同步处理，不需要消息队列 |
-| 自建 Reranker | 使用云端 BGE Reranker v2 M3 API |
 
 ---
 
@@ -219,10 +217,9 @@ search_params = {
 ### 环境变量
 
 ```bash
-# Embedding API
-BGE_M3_API_URL=https://api.siliconflow.cn/v1
-BGE_M3_API_KEY=sk-xxx
-BGE_M3_MODEL=BAAI/bge-m3
+# FlagEmbedding 本地模型
+BGE_M3_MODEL_PATH=/models/bge-m3       # 预下载模型路径（可选，默认 HuggingFace 自动下载）
+BGE_M3_USE_FP16=false                  # CPU 模式
 
 # Reranker API
 RERANKER_API_URL=https://api.siliconflow.cn/v1

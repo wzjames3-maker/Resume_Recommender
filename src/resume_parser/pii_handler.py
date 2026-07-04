@@ -93,6 +93,8 @@ class PIIHandler:
         "小区", "公寓", "大厦", "广场",
     ]
 
+    _MAX_ACCESS_LOGS = 1000
+
     def __init__(self):
         """初始化 PII 处理器"""
         self.encryptor = get_encryptor()
@@ -288,6 +290,8 @@ class PIIHandler:
             fields=fields,
         )
         self._access_logs.append(log)
+        if len(self._access_logs) > self._MAX_ACCESS_LOGS:
+            self._access_logs = self._access_logs[-self._MAX_ACCESS_LOGS:]
 
         logger.info(
             f"PII 访问记录: user={user_id}, resume={resume_id}, fields={fields}"

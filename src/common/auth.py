@@ -97,11 +97,10 @@ def decode_access_token(token: str) -> dict:
             detail="Token 已过期，请重新登录",
         )
 
-    except jwt.InvalidTokenError as e:
-        # Token 无效
+    except jwt.InvalidTokenError:
         raise AuthenticationError(
             error_code=ErrorCode.AUTH_004,
-            detail=f"Token 无效: {str(e)}",
+            detail="Token 无效",
         )
 
 

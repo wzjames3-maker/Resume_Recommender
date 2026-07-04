@@ -1,8 +1,7 @@
 ﻿<!-- Module: resume-parser -->
 <!-- Spec Layer: 03 - API Contract -->
-<!-- Phase: Phase 4 - Spec Writing -->
-<!-- Project: 企业智能招聘 RAG 推荐系统 -->
-<!-- Date: 2026-06-23 -->
+<!-- 变更: Tier L - RAG 全量重构 -->
+<!-- Date: 2026-07-03 -->
 
 # 内部接口契约：Resume Parser
 
@@ -23,7 +22,7 @@ Resume Parser 模块提供**内部函数接口**，不对外暴露 HTTP 端点�
 | `parse_resume` | `UploadFile` | `ParseResult` | 主入口：解析上传文件为结构化 Resume |
 | `parse_resume_text` | `str` (纯文本) | `ResumeSchema` | 纯文本结构化提取（跳过文本提取步骤） |
 | `standardize_skills` | `list[str]` | `list[SkillSchema]` | Skill 标准化 |
-| `generate_chunks` | `str, list[SectionSchema], str` | `list[ChunkSchema]` | 多粒度 Chunk 生成 |
+| `generate_chunks` | `str, ResumeStructured, str` | `list[ChunkSchema]` | 从结构化数据构建多粒度 Chunk |
 
 ---
 
@@ -180,18 +179,20 @@ def standardize_skills(skills: list[str]) -> list[SkillSchema]:
 
 ---
 
----
-
 ### 3.4 generate_chunks
 
-**用途**: 将语义段落列表和完整简历文本生成多粒度 Chunk 列表。
+**用途**: 从 LLM 提取的结构化数据（ResumeStructured）构建多粒度 Chunk 列表。
+
+> **变更说明 (Tier L)**: 输入从 `(resume_id, sections, full_text)` 改为 `(resume_id, resume_structured, raw_text)`。
+> Chunk 不再从 raw_text 按字符数切割，而是从结构化数据中每条记录生成一个 Small Chunk。
+> 每个 Chunk 携带完整 metadata（候选人级 + Chunk 级），支持 Milvus 标量预过滤。
 
 **签名**:
 ```python
 def generate_chunks(
     resume_id: str,
-    sections: list[SectionSchema],
-    full_text: str,
+    resume_structured: ResumeStructured,
+    raw_text: str,
 ) -> list[ChunkSchema]:
 ```
 
@@ -200,40 +201,64 @@ def generate_chunks(
 | 参数 | 类型 | 必填 | 说明 |
 |------|------|------|------|
 | `resume_id` | `str` | 是 | 简历 ID |
-| `sections` | `list[SectionSchema]` | 是 | 语义段落列表 |
-| `full_text` | `str` | 是 | 简历完整文本 |
+| `resume_structured` | `ResumeStructured` | 是 | LLM 提取的结构化简历数据 |
+| `raw_text` | `str` | 是 | 简历原始文本（Full Chunk 降级用） |
 
 **输出**: `list[ChunkSchema]`
 
-包含所有粒度的 Chunk 列表：Parent Chunk（每个 Section 一个）+ Small Chunk（每个 Section 内的子段落）+ Full Resume Chunk（1 个）。
+包含所有粒度的 Chunk 列表。
 
 **处理流程**:
 ```
-1. 生成 Full Resume Chunk:
-   - chunk_id = generate_chunk_id(resume_id, "full", 0)
-   - content = full_text
+1. 提取候选人级 metadata（从 resume_structured.personal_info）:
+   - candidate_name, years_of_experience, city, gender
+   - current_title, current_company
+   - skills_normalized (skill_list[].name 小写), skills_original
+   - highest_education_level (从 education_list 推导), highest_education
+   - is_985, is_211, industry
+
+2. 构建 Full Resume Chunk (1 个):
+   - content = LLM 生成的简历摘要（如有 summary 则用 summary，否则用 raw_text）
    - chunk_level = FULL
+   - metadata = 候选人级 metadata
 
-2. 遍历每个 Section，生成 Parent Chunk:
-   - chunk_id = generate_chunk_id(resume_id, "parent", section_index)
-   - content = section.raw_content
-   - chunk_level = PARENT
-   - section_type = section.section_type
+3. 构建 Parent + Small Chunks:
 
-3. 每个 Parent Chunk 细分为 Small Chunk:
-   - 按句号/换行/分号切分（中文简历常用标点）
-   - 每个 Small Chunk 长度目标: 50~200 字符
-   - 过短的段落（< 30 字符）合并到相邻 Small Chunk
-   - 过长的段落（> 300 字符）按句子边界二次切分
-   - chunk_id = generate_chunk_id(resume_id, "small", global_index)
-   - parent_chunk_id = 对应 Parent Chunk 的 chunk_id
+   3a. 教育经历 (education_list):
+   - Parent: content = 所有教育条目拼接
+   - Small: 每条 EducationEntry → "学校 | 专业 | 学历 | 日期"
+     metadata = 候选人级 + {section_type=education, organization=学校, start_date, end_date}
 
-4. 返回所有 Chunk 的列表（Full + Parent + Small）
+   3b. 工作经历 (experience_list):
+   - Parent: content = 所有工作条目拼接
+   - Small: 每条 ExperienceEntry → "公司 | 职位 | 日期\n描述\n成就"
+     metadata = 候选人级 + {section_type=experience, organization=公司, title=职位, start_date, end_date}
+
+   3c. 项目经历 (project_list):
+   - Parent: content = 所有项目条目拼接
+   - Small: 每条 ProjectEntry → "项目名 | 角色 | 日期\n描述\ntech_stack"
+     metadata = 候选人级 + {section_type=project, organization=项目名, title=角色, tech_stack, start_date, end_date}
+
+   3d. 技能清单 (skill_list):
+   - Parent: content = 所有技能拼接
+   - Small: 按类别分组，每组一条 → "Java(精通,8年), Python(熟练,5年)..."
+     metadata = 候选人级 + {section_type=skill}
+
+4. 每个 Small Chunk 设置 parent_chunk_id 指向对应 Parent Chunk
+
+5. 返回所有 Chunk 列表（Full + Parent + Small）
 ```
 
+**降级处理**:
+- `resume_structured` 为 None 或 confidence_score < 0.3:
+  - 降级为旧策略（从 raw_text 按 SectionType 关键词切分 + 字符数 50-200 合并）
+  - metadata 仅包含 section_type，不包含候选人级字段
+  - 记录警告日志
+
 **边界处理**:
-- Section 内容为空 → 跳过该 Section，不生成 Chunk
-- Section 内容过短（< 30 字符）→ 仅生成 Parent Chunk，不细分 Small Chunk
+- education_list 为空 → 不生成 education 的 Parent/Small Chunk
+- experience_list 为空 → 不生成 experience 的 Parent/Small Chunk
+- 单条经历描述过长（> 500 字符） → 按。；;切分为多个 Small Chunk
 
 
 ## 4. 自定义异常
@@ -318,11 +343,12 @@ standardized = standardize_skills(raw_skills)
 
 ### 6.2 resume-parser → vector-index
 
-**数据**: `resume_id` + 可索引文本
+**数据**: `resume_id` + `list[ChunkSchema]`
 
 **vector-index 职责**:
-- 接收 `resume_id` 和简历文本
-- 调用 BGE-M3 生成 Dense + Sparse Embedding
+- 接收 `resume_id` 和 ChunkSchema 列表（已从 ResumeStructured 构建）
+- 调用 FlagEmbedding BGEM3FlagModel 本地推理生成 Dense + Sparse Embedding
+- 提取 metadata 中的标量字段（years_of_experience, highest_education_level, city, gender）
 - 写入 Milvus
 
 ### 6.3 api-layer → resume-parser

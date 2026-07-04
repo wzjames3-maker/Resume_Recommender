@@ -3,6 +3,7 @@
 """
 
 from contextlib import asynccontextmanager
+from typing import Optional
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -16,10 +17,14 @@ from src.api.v1 import chat, auth, upload, conversations
 settings = get_settings()
 logger = get_logger("main")
 
+_health_redis: Optional["redis.Redis"] = None
+_health_milvus: Optional["MilvusClient"] = None
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """应用生命周期管理"""
+    global _health_redis, _health_milvus
     logger.info(f"应用启动: env={settings.app.APP_ENV}")
 
     try:
@@ -28,6 +33,28 @@ async def lifespan(app: FastAPI):
         logger.info("MongoDB 连接已建立")
     except Exception as e:
         logger.warning(f"MongoDB 连接失败（非致命）: {e}")
+
+    try:
+        import redis
+        _health_redis = redis.from_url(settings.redis.redis_url, socket_connect_timeout=2)
+    except Exception:
+        _health_redis = None
+
+    try:
+        from pymilvus import MilvusClient
+        _health_milvus = MilvusClient(uri=settings.milvus.MILVUS_URI, timeout=3)
+    except Exception:
+        _health_milvus = None
+
+    # 自动创建 Milvus Collection 和索引（幂等）
+    try:
+        from src.vector_index.index import get_vector_index
+        vi = get_vector_index()
+        vi.create_collection()
+        vi.create_indexes()
+        logger.info("Milvus Collection 和索引已就绪")
+    except Exception as e:
+        logger.warning(f"Milvus Collection 初始化失败（非致命，搜索/上传时会重试）: {e}")
 
     yield
 
@@ -50,6 +77,11 @@ async def lifespan(app: FastAPI):
     try:
         from src.vector_index.embedding_generator import embedding_generator
         embedding_generator._client.close()
+    except Exception:
+        pass
+    try:
+        if _health_redis:
+            _health_redis.close()
     except Exception:
         pass
 
@@ -112,21 +144,21 @@ async def health_check():
     except Exception:
         status["mongodb"] = "unavailable"
 
-    try:
-        from src.common.config import get_settings
-        import redis
-        r = redis.from_url(get_settings().redis.redis_url, socket_connect_timeout=2)
-        r.ping()
-        r.close()
-        status["redis"] = "ok"
-    except Exception:
+    if _health_redis:
+        try:
+            _health_redis.ping()
+            status["redis"] = "ok"
+        except Exception:
+            status["redis"] = "unavailable"
+    else:
         status["redis"] = "unavailable"
 
-    try:
-        from pymilvus import MilvusClient
-        client = MilvusClient(uri=get_settings().milvus.MILVUS_URI, timeout=3)
-        status["milvus"] = "ok" if client.get_server_version() else "unavailable"
-    except Exception:
+    if _health_milvus:
+        try:
+            status["milvus"] = "ok" if _health_milvus.get_server_version() else "unavailable"
+        except Exception:
+            status["milvus"] = "unavailable"
+    else:
         status["milvus"] = "unavailable"
 
     return status

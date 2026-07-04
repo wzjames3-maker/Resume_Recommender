@@ -10,7 +10,7 @@ import os
 import streamlit as st
 from typing import Optional, Dict, Any, List
 
-API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000/api/v1")
+API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost/api/v1")
 
 
 def get_token() -> Optional[str]:
@@ -162,126 +162,91 @@ def delete_conversation(conversation_id: str) -> bool:
         return False
 
 # ============================================================
-# v2.0 NEW: Resume CRUD + Stats + Export (T-036)  
+# Resume CRUD + Stats + Export (通过 API 调用，不再直连 MongoDB)
 # ============================================================
-import os as _os
-from pymongo import MongoClient
 from io import BytesIO
 
-MONGO_URI = _os.getenv("MONGODB_URL", "mongodb://admin:password@mongodb:27017/resume_rag?authSource=admin")
-
-@st.cache_resource
-def _get_mongo_client():
-    return MongoClient(MONGO_URI)
-
-def _get_resume_collection():
-    return _get_mongo_client()["resume_rag"]["resumes"]
 
 def get_resume(resume_id):
+    """获取简历详情"""
     try:
-        from bson import ObjectId
-        col = _get_resume_collection()
-        # Try UUID-style id field first
-        doc = col.find_one({"id": resume_id})
-        # Fallback: try _id as ObjectId (API returns ObjectId as resume_id)
-        if not doc:
-            try:
-                doc = col.find_one({"_id": ObjectId(resume_id)})
-            except Exception:
-                pass
-        if doc:
-            doc.pop("_id", None)
-            return doc
-        return None
+        r = requests.get(
+            f"{API_BASE_URL}/resumes/{resume_id}",
+            headers=get_headers(),
+            timeout=10,
+        )
+        return r.json() if r.status_code == 200 else None
     except Exception as e:
         st.error(f"获取简历失败: {e}")
         return None
 
-def list_resumes_api(keyword="", skill="", city="", education="", page=1, size=20):
+
+def list_resumes_api(keyword="", skill="", city="", education="", min_exp=0, is_985=False, is_211=False, page=1, size=20):
+    """获取简历列表"""
     try:
-        col = _get_resume_collection()
-        query = {"status": {"$ne": "deleted"}}
-        if keyword:
-            query["$or"] = [
-                {"personal_info.full_name": {"$regex": keyword, "$options": "i"}},
-                {"skill_list": {"$regex": keyword, "$options": "i"}},
-            ]
-        if skill:
-            query["skill_list"] = {"$regex": skill, "$options": "i"}
-        if city:
-            query["personal_info.expected_city"] = {"$regex": city, "$options": "i"}
-        if education:
-            query["personal_info.highest_education"] = {"$regex": education, "$options": "i"}
-        total = col.count_documents(query)
-        docs = list(col.find(query).sort("created_at", -1).skip((page - 1) * size).limit(size))
-        for d in docs:
-            d.pop("_id", None)
-        return {"items": docs, "total": total, "page": page, "size": size}
+        r = requests.get(
+            f"{API_BASE_URL}/resumes/",
+            params={"keyword": keyword, "skill": skill, "city": city,
+                    "education": education, "min_exp": min_exp,
+                    "is_985": is_985, "is_211": is_211,
+                    "page": page, "size": size},
+            headers=get_headers(),
+            timeout=10,
+        )
+        return r.json() if r.status_code == 200 else None
     except Exception as e:
         st.error(f"获取简历列表失败: {e}")
         return None
 
+
 def update_resume(resume_id, data):
+    """更新简历"""
     try:
-        from bson import ObjectId
-        col = _get_resume_collection()
-        result = col.update_one({"id": resume_id}, {"$set": data})
-        if result.modified_count == 0:
-            try:
-                result = col.update_one({"_id": ObjectId(resume_id)}, {"$set": data})
-            except Exception:
-                pass
-        return result.modified_count > 0
+        r = requests.put(
+            f"{API_BASE_URL}/resumes/{resume_id}",
+            json=data,
+            headers=get_headers(),
+            timeout=10,
+        )
+        if r.status_code == 200:
+            return True
+        st.error(f"更新失败: {r.json().get('detail', r.text)}")
+        return False
     except Exception as e:
         st.error(f"更新失败: {e}")
         return False
 
+
 def delete_resume_api(resume_id):
+    """软删除简历"""
     try:
-        from bson import ObjectId
-        col = _get_resume_collection()
-        result = col.update_one({"id": resume_id}, {"$set": {"status": "deleted"}})
-        if result.modified_count == 0:
-            try:
-                result = col.update_one({"_id": ObjectId(resume_id)}, {"$set": {"status": "deleted"}})
-            except Exception:
-                pass
-        return result.modified_count > 0
+        r = requests.delete(
+            f"{API_BASE_URL}/resumes/{resume_id}",
+            headers=get_headers(),
+            timeout=10,
+        )
+        if r.status_code == 200:
+            return True
+        st.error(f"删除失败: {r.json().get('detail', r.text)}")
+        return False
     except Exception as e:
         st.error(f"删除失败: {e}")
         return False
 
+
 def get_resume_stats():
+    """获取简历统计信息"""
     try:
-        col = _get_resume_collection()
-        skills = list(col.aggregate([
-            {"$match": {"status": {"$ne": "deleted"}}},
-            {"$unwind": "$skill_list"},
-            {"$group": {"_id": "$skill_list", "count": {"$sum": 1}}},
-            {"$sort": {"count": -1}}, {"$limit": 50}
-        ]))
-        educations = list(col.aggregate([
-            {"$match": {"status": {"$ne": "deleted"}, "personal_info.highest_education": {"$exists": True}}},
-            {"$group": {"_id": "$personal_info.highest_education", "count": {"$sum": 1}}},
-            {"$sort": {"count": -1}}
-        ]))
-        cities = list(col.aggregate([
-            {"$match": {"status": {"$ne": "deleted"}}},
-            {"$unwind": "$personal_info.expected_city"},
-            {"$group": {"_id": "$personal_info.expected_city", "count": {"$sum": 1}}},
-            {"$sort": {"count": -1}}, {"$limit": 20}
-        ]))
-        companies = list(col.aggregate([
-            {"$match": {"status": {"$ne": "deleted"}}},
-            {"$unwind": "$experience_list"},
-            {"$group": {"_id": "$experience_list.company", "count": {"$sum": 1}}},
-            {"$sort": {"count": -1}}, {"$limit": 20}
-        ]))
-        total = col.count_documents({"status": {"$ne": "deleted"}})
-        return {"total_resumes": total, "skills": skills, "educations": educations, "cities": cities, "companies": companies}
+        r = requests.get(
+            f"{API_BASE_URL}/resumes/stats",
+            headers=get_headers(),
+            timeout=10,
+        )
+        return r.json() if r.status_code == 200 else None
     except Exception as e:
         st.error(f"获取统计失败: {e}")
         return None
+
 
 def export_candidates_excel(candidates, filename="candidates.xlsx"):
     try:
@@ -314,3 +279,4 @@ def export_candidates_excel(candidates, filename="candidates.xlsx"):
     except Exception as e:
         st.error(f"导出失败: {e}")
         return None
+

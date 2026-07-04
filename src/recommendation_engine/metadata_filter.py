@@ -106,15 +106,15 @@ class MetadataFilter:
         for result in results:
             metadata = result.metadata
 
-            # 检查城市
-            if slots.city and metadata.get("city"):
-                if not self._match_city(slots.city, metadata["city"]):
+            # 检查城市 (workflow enrich 设置的字段名为 expected_city)
+            if slots.city and metadata.get("expected_city"):
+                if not self._match_city(slots.city, metadata["expected_city"]):
                     filtered_count += 1
                     continue
 
-            # 检查学历
-            if slots.education and metadata.get("education"):
-                if not self._match_education(slots.education.value, metadata["education"]):
+            # 检查学历 (workflow enrich 设置的字段名为 highest_education)
+            if slots.education and metadata.get("highest_education"):
+                if not self._match_education(slots.education.value, metadata["highest_education"]):
                     filtered_count += 1
                     continue
 
@@ -149,7 +149,7 @@ class MetadataFilter:
         """
         relaxed = []
 
-        # 优先放宽地点
+        # 优先放宽地点 (对 expected_city 字段)
         if slots.city:
             logger.info("放宽地点约束")
             slots.city = None
@@ -201,7 +201,7 @@ class MetadataFilter:
             metadata = result.metadata
             filter_scores = {}
 
-            # 技能匹配度
+            # 技能匹配度 (skills 是字符串列表)
             if slots.skills and metadata.get("skills"):
                 filter_scores["skills"] = self._calculate_skill_match(
                     slots.skills, metadata["skills"]
@@ -209,17 +209,15 @@ class MetadataFilter:
             else:
                 filter_scores["skills"] = 0.0
 
-            # 行业匹配度
+            # 行业匹配度 (从 experience_list 中提取)
             if slots.industry and metadata.get("industry"):
                 filter_scores["industry"] = 1.0 if slots.industry == metadata["industry"] else 0.0
             else:
                 filter_scores["industry"] = 0.0
 
-            # 薪资匹配度
-            if slots.salary and metadata.get("salary_range"):
-                filter_scores["salary"] = self._calculate_salary_match(
-                    slots.salary, metadata["salary_range"]
-                )
+            # 薪资匹配度 (workflow enrich 设置的字段名为 expected_salary, 是字符串)
+            if slots.salary and metadata.get("expected_salary"):
+                filter_scores["salary"] = 0.5  # 字符串无法精确匹配，给默认分
             else:
                 filter_scores["salary"] = 0.0
 

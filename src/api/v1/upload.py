@@ -106,15 +106,32 @@ async def upload_resume(
     resume = repository.create(user_id, request, file_md5)
     logger.info(f"简历上传成功: resume_id={resume.id}")
 
-    # 11. Indexing: segment -> chunk -> vector write
+    # 11. Indexing: segment -> chunk -> vector write (带重试机制)
     index_status = "indexed"
-    try:
-        from src.services.indexing import index_resume
-        chunk_count = index_resume(resume.id, extracted_doc.raw_text)
-        logger.info(f"Vector index write OK: resume_id={resume.id}, chunks={chunk_count}")
-    except Exception as e:
-        logger.error(f"Vector index write FAILED: resume_id={resume.id}, error={e}")
-        index_status = "failed"
+    max_retries = 2
+    for attempt in range(max_retries):
+        try:
+            from src.services.indexing import index_resume
+            chunk_count = index_resume(resume.id, extracted_doc.raw_text)
+            logger.info(f"Vector index write OK: resume_id={resume.id}, chunks={chunk_count}")
+            break
+        except Exception as e:
+            if attempt < max_retries - 1:
+                logger.warning(f"Vector index write attempt {attempt+1} FAILED, retrying: {e}")
+                import time
+                time.sleep(1)  # 重试前等待 1 秒
+            else:
+                logger.error(f"Vector index write FAILED after {max_retries} attempts: resume_id={resume.id}, error={e}")
+                index_status = "failed"
+                # 标记简历需要重建索引
+                try:
+                    collection = repository._get_collection()
+                    collection.update_one(
+                        {"id": resume.id},
+                        {"$set": {"_index_status": "pending", "_index_error": str(e)}}
+                    )
+                except Exception as mark_err:
+                    logger.error(f"Failed to mark resume for reindex: {mark_err}")
 
     return UploadResponse(
         success=True,
@@ -123,3 +140,159 @@ async def upload_resume(
         parse_status=fallback_result.parse_status.value,
         index_status=index_status,
     )
+
+
+# ============================================================
+# 简历 CRUD + 统计 API（供前端调用，替代直连 MongoDB）
+# ============================================================
+
+from typing import List, Optional
+from src.resume_store.models import ResumeUpdateRequest
+
+
+@router.get("/")
+async def list_resumes(
+    keyword: Optional[str] = None,
+    skill: Optional[str] = None,
+    city: Optional[str] = None,
+    education: Optional[str] = None,
+    min_exp: int = 0,
+    is_985: bool = False,
+    is_211: bool = False,
+    page: int = 1,
+    size: int = 20,
+    current_user: dict = Depends(require_permission("resume:read")),
+):
+    """获取简历列表（支持关键词/技能/城市/学历/经验/院校筛选）"""
+    user_id = current_user.get("sub", "default")
+    repository = get_resume_repository()
+
+    # 使用 repository 的 list
+    result = repository.list(
+        user_id=user_id,
+        page=page,
+        size=size,
+    )
+
+    items = [item.model_dump(mode="json") for item in result.items]
+
+    # 内存过滤（keyword/skill/city/education/min_exp/is_985/is_211）
+    if keyword:
+        kw = keyword.lower()
+        items = [
+            r for r in items
+            if kw in (r.get("personal_info", {}).get("full_name", "") or "").lower()
+            or any(kw in (s.get("name", "") or "").lower() for s in r.get("skill_list", []))
+        ]
+    if skill:
+        sk = skill.lower()
+        items = [r for r in items if any(sk in (s.get("name", "") or "").lower() for s in r.get("skill_list", []))]
+    if city:
+        ct = city.lower()
+        items = [r for r in items if ct in (r.get("personal_info", {}).get("expected_city", "") or "").lower()]
+    if education:
+        ed = education.lower()
+        items = [r for r in items if ed in (r.get("personal_info", {}).get("highest_education", "") or "").lower()]
+    if min_exp and min_exp > 0:
+        items = [
+            r for r in items
+            if (r.get("personal_info", {}).get("years_of_experience") or 0) >= min_exp
+        ]
+    if is_985:
+        items = [r for r in items if any(e.get("is_985") for e in r.get("education_list", []))]
+    if is_211:
+        items = [r for r in items if any(e.get("is_211") for e in r.get("education_list", []))]
+
+    return {"items": items, "total": len(items), "page": page, "size": size}
+
+
+@router.get("/stats")
+async def get_resume_stats(
+    current_user: dict = Depends(require_permission("resume:read")),
+):
+    """获取简历统计信息"""
+    user_id = current_user.get("sub", "default")
+    repository = get_resume_repository()
+
+    # 获取所有简历（最多 1000 条用于统计）
+    result = repository.list(user_id=user_id, page=1, size=1000)
+    resumes = [item.model_dump(mode="json") for item in result.items]
+
+    # 技能统计
+    skill_count = {}
+    for r in resumes:
+        for s in r.get("skill_list", []):
+            name = s.get("name", "")
+            if name:
+                skill_count[name] = skill_count.get(name, 0) + 1
+    skills = [{"_id": k, "count": v} for k, v in sorted(skill_count.items(), key=lambda x: x[1], reverse=True)[:50]]
+
+    # 学历统计
+    edu_count = {}
+    for r in resumes:
+        edu = r.get("personal_info", {}).get("highest_education", "")
+        if edu:
+            edu_count[edu] = edu_count.get(edu, 0) + 1
+    educations = [{"_id": k, "count": v} for k, v in sorted(edu_count.items(), key=lambda x: x[1], reverse=True)]
+
+    # 城市统计
+    city_count = {}
+    for r in resumes:
+        c = r.get("personal_info", {}).get("expected_city", "")
+        if c:
+            city_count[c] = city_count.get(c, 0) + 1
+    cities = [{"_id": k, "count": v} for k, v in sorted(city_count.items(), key=lambda x: x[1], reverse=True)[:20]]
+
+    # 公司统计
+    company_count = {}
+    for r in resumes:
+        for exp in r.get("experience_list", []):
+            comp = exp.get("company", "")
+            if comp:
+                company_count[comp] = company_count.get(comp, 0) + 1
+    companies = [{"_id": k, "count": v} for k, v in sorted(company_count.items(), key=lambda x: x[1], reverse=True)[:20]]
+
+    return {
+        "total_resumes": len(resumes),
+        "skills": skills,
+        "educations": educations,
+        "cities": cities,
+        "companies": companies,
+    }
+
+
+@router.get("/{resume_id}")
+async def get_resume_detail(
+    resume_id: str,
+    current_user: dict = Depends(require_permission("resume:read")),
+):
+    """获取简历详情"""
+    user_id = current_user.get("sub", "default")
+    repository = get_resume_repository()
+    resume = repository.get(resume_id, user_id=user_id, decrypt_pii=True)
+    return resume.model_dump(mode="json")
+
+
+@router.put("/{resume_id}")
+async def update_resume(
+    resume_id: str,
+    request: ResumeUpdateRequest,
+    current_user: dict = Depends(require_permission("resume:update")),
+):
+    """更新简历"""
+    user_id = current_user.get("sub", "default")
+    repository = get_resume_repository()
+    repository.update(resume_id, user_id, request)
+    return {"success": True}
+
+
+@router.delete("/{resume_id}")
+async def delete_resume(
+    resume_id: str,
+    current_user: dict = Depends(require_permission("resume:delete")),
+):
+    """软删除简历"""
+    user_id = current_user.get("sub", "default")
+    repository = get_resume_repository()
+    repository.delete(resume_id, user_id)
+    return {"success": True}

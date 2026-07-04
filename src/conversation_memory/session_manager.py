@@ -76,31 +76,35 @@ class _RedisSessionBackend:
         if self._redis is None:
             from src.common.config import get_settings
             settings = get_settings()
-            import redis.asyncio as aioredis
-            self._redis = aioredis.from_url(
+            import redis
+            self._redis = redis.from_url(
                 settings.redis.redis_url,
                 decode_responses=True,
             )
         return self._redis
 
-    async def _save(self, session: SessionState) -> None:
+    def _save(self, session: SessionState) -> None:
         redis = self._get_redis()
         key = f"{self._REDIS_KEY_PREFIX}{session.session_id}"
-        await redis.setex(key, self.ttl_seconds, session.to_json())
-        await redis.sadd(f"{self._USER_INDEX_PREFIX}{session.user_id}", session.session_id)
+        redis.setex(key, self.ttl_seconds, session.to_json())
+        redis.sadd(f"{self._USER_INDEX_PREFIX}{session.user_id}", session.session_id)
 
-    async def _load(self, session_id: str) -> Optional[SessionState]:
+    def _load(self, session_id: str) -> Optional[SessionState]:
         redis = self._get_redis()
         key = f"{self._REDIS_KEY_PREFIX}{session_id}"
-        data = await redis.get(key)
+        data = redis.get(key)
         if data is None:
             return None
         return SessionState.from_json(data)
 
-    async def _delete(self, session_id: str) -> None:
+    def _delete(self, session_id: str) -> None:
         redis = self._get_redis()
         key = f"{self._REDIS_KEY_PREFIX}{session_id}"
-        await redis.delete(key)
+        redis.delete(key)
+
+    def _count_user_sessions(self, user_id: str) -> int:
+        redis = self._get_redis()
+        return redis.scard(f"{self._USER_INDEX_PREFIX}{user_id}")
 
 
 class SessionManager:
@@ -136,15 +140,8 @@ class SessionManager:
         )
         redis = self._get_redis()
         if redis:
-            import asyncio
             try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    import concurrent.futures
-                    future = asyncio.run_coroutine_threadsafe(redis._save(session), loop)
-                    future.result(timeout=5)
-                else:
-                    asyncio.run(redis._save(session))
+                redis._save(session)
             except Exception as e:
                 logger.warning(f"Redis session save failed, falling back to memory: {e}")
                 self._sessions[session_id] = session
@@ -157,15 +154,8 @@ class SessionManager:
     def get_session(self, session_id: str) -> Optional[SessionState]:
         redis = self._get_redis()
         if redis:
-            import asyncio
             try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    import concurrent.futures
-                    future = asyncio.run_coroutine_threadsafe(redis._load(session_id), loop)
-                    session = future.result(timeout=5)
-                else:
-                    session = asyncio.run(redis._load(session_id))
+                session = redis._load(session_id)
                 if session:
                     if session.status != SessionStatus.ACTIVE:
                         return None
@@ -190,15 +180,8 @@ class SessionManager:
     def delete_session(self, session_id: str) -> bool:
         redis = self._get_redis()
         if redis:
-            import asyncio
             try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    import concurrent.futures
-                    future = asyncio.run_coroutine_threadsafe(redis._delete(session_id), loop)
-                    future.result(timeout=5)
-                else:
-                    asyncio.run(redis._delete(session_id))
+                redis._delete(session_id)
                 logger.info(f"删除会话: session_id={session_id}")
                 return True
             except Exception as e:
@@ -253,15 +236,8 @@ class SessionManager:
     def _persist(self, session_id: str, session: SessionState) -> None:
         redis = self._get_redis()
         if redis:
-            import asyncio
             try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    import concurrent.futures
-                    future = asyncio.run_coroutine_threadsafe(redis._save(session), loop)
-                    future.result(timeout=5)
-                else:
-                    asyncio.run(redis._save(session))
+                redis._save(session)
                 return
             except Exception as e:
                 logger.warning(f"Redis persist failed: {e}")
@@ -270,16 +246,10 @@ class SessionManager:
     def list_sessions(self, user_id: str, page: int = 1, size: int = 20) -> List[SessionState]:
         redis = self._get_redis()
         if redis:
-            import asyncio
             try:
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    import concurrent.futures
-                    future = asyncio.run_coroutine_threadsafe(
-                        self._list_redis(redis, user_id), loop)
-                    return future.result(timeout=5)
-                else:
-                    return asyncio.run(self._list_redis(redis, user_id))
+                user_sessions = self._list_redis_sync(redis, user_id)
+                start = (page - 1) * size
+                return user_sessions[start:start + size]
             except Exception as e:
                 logger.warning(f"Redis list sessions failed, falling back to memory: {e}")
 
@@ -292,16 +262,28 @@ class SessionManager:
         end = start + size
         return user_sessions[start:end]
 
-    async def _list_redis(self, redis: _RedisSessionBackend, user_id: str) -> List[SessionState]:
+    def _list_redis_sync(self, redis: _RedisSessionBackend, user_id: str) -> List[SessionState]:
         r = redis._get_redis()
-        members = await r.smembers(f"{_RedisSessionBackend._USER_INDEX_PREFIX}{user_id}")
+        members = r.smembers(f"{_RedisSessionBackend._USER_INDEX_PREFIX}{user_id}")
         sessions = []
         for sid in members:
-            s = await redis._load(sid)
+            s = redis._load(sid)
             if s and s.status == SessionStatus.ACTIVE:
                 sessions.append(s)
         sessions.sort(key=lambda s: s.last_active_at, reverse=True)
         return sessions
+
+    def count_sessions(self, user_id: str) -> int:
+        redis = self._get_redis()
+        if redis:
+            try:
+                return redis._count_user_sessions(user_id)
+            except Exception as e:
+                logger.warning(f"Redis count sessions failed: {e}")
+        return sum(
+            1 for s in self._sessions.values()
+            if s.user_id == user_id and s.status == SessionStatus.ACTIVE
+        )
 
     def get_conversation_context(self, session_id: str) -> Optional[Dict[str, Any]]:
         session = self.get_session(session_id)

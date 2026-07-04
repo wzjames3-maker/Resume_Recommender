@@ -1,8 +1,6 @@
 <!-- Module: recommendation-engine -->
 <!-- Spec Layer: 05 - Edge Cases -->
-<!-- Phase: Phase 4 - Spec Writing -->
-<!-- Project: 企业智能招聘 RAG 推荐系统 -->
-<!-- Date: 2026-06-23 -->
+<!-- ⚠️ 部分更新: BGE-M3/FlagEmbedding 引用已修正，降级链仍为旧架构，待 Tier L 全文重构 -->
 
 # 边界情况与异常处理：Recommendation Engine
 
@@ -258,19 +256,19 @@ def handle_insufficient_candidates(
 ## EC-005: 查询向量生成失败
 
 **严重度**: 高
-**触发条件**: BGE-M3 API 调用失败（网络错误、API 错误、超时等）
+**触发条件**: FlagEmbedding 本地推理失败（网络错误、API 错误、超时等）
 **关联规则**: RULE-009
 
 ### 场景描述
 
-BGE-M3 云端 API 不可用，无法生成查询的 Dense 和 Sparse 向量。
+FlagEmbedding 不可用，无法生成查询的 Dense 和 Sparse 向量。
 
 ### 处理策略
 
 **分级降级**:
 
 ```
-BGE-M3 API 调用
+FlagEmbedding 推理
     ↓ 失败
 检查本地缓存（cachetools）
     ↓ 未命中
@@ -292,13 +290,13 @@ async def query_encode_with_fallback(query: str) -> EncodeResult:
         cached = embedding_cache[cache_key]
         return EncodeResult(dense=cached[0], sparse=cached[1], degradation=None)
 
-    # 2. 调用 BGE-M3 API
+    # 2. 调用 FlagEmbedding 本地推理
     try:
-        result = await call_bge_m3_api(query)
+        result = await call_flagembedding(query)
         embedding_cache[cache_key] = (result.dense, result.sparse)
         return EncodeResult(dense=result.dense, sparse=result.sparse, degradation=None)
     except Exception as e:
-        logger.error(f"BGE-M3 API 失败: {e}")
+        logger.error(f"FlagEmbedding 推理失败: {e}")
 
     # 3. 降级到纯 Sparse（本地 jieba 分词 + TF-IDF）
     try:

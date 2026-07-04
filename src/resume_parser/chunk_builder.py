@@ -1,396 +1,375 @@
 """
-智能招聘 RAG 推荐系统 - Chunk 层级构建器
+智能招聘 RAG 推荐系统 - Chunk Builder
 
-构建 Multi-Level Chunk（Small/Parent/Full 三层）
+变更 (Tier L): 从 ResumeStructured 结构化数据构建 Chunk，不再从 raw_text 按关键词+字符数切割。
+每条结构化记录（工作经历/项目/教育/技能组）→ 一个 Small Chunk，
+携带完整 metadata（候选人级 + Chunk 级），支持 Milvus 标量预过滤。
 """
 
+from dataclasses import dataclass, field
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
-import re
-
-from pydantic import BaseModel, Field
-
 from src.common.logger import get_logger
-from src.resume_parser.segmenter import SectionType, Segment
 
-logger = get_logger("chunk_builder")
+logger = get_logger(__name__)
+
+EDUCATION_LEVEL_MAP: Dict[str, int] = {
+    "高中": 0, "中专": 0,
+    "大专": 1,
+    "本科": 2,
+    "硕士": 3,
+    "博士": 4,
+}
 
 
 class ChunkLevel(str, Enum):
-    """Chunk 粒度级别"""
-
-    SMALL = "small"  # Small Chunk: 单句或小段落 (50~200 字符)
-    PARENT = "parent"  # Parent Chunk: 完整 Section
-    FULL = "full"  # Full Resume: 整份简历
+    SMALL = "small"
+    PARENT = "parent"
+    FULL = "full"
 
 
-class ChunkSchema(BaseModel):
-    """多粒度 Chunk"""
-
-    chunk_id: str = Field(..., description="Chunk 唯一 ID")
-    resume_id: str = Field(..., description="所属简历 ID")
-    chunk_level: ChunkLevel = Field(..., description="Chunk 粒度级别")
-    parent_chunk_id: Optional[str] = Field(None, description="父 Chunk ID")
-    section_type: Optional[SectionType] = Field(None, description="所属 Section 类型")
-    content: str = Field(..., description="Chunk 文本内容")
-    char_count: int = Field(0, description="字符数")
-    sequence_index: int = Field(0, description="在简历中的顺序索引")
-    metadata: Dict[str, Any] = Field(default_factory=dict, description="附加元数据")
+class SectionType(str, Enum):
+    PERSONAL_INFO = "personal_info"
+    EDUCATION = "education"
+    EXPERIENCE = "experience"
+    PROJECT = "project"
+    SKILL = "skill"
+    OTHER = "other"
 
 
-class ChunkBuildResult(BaseModel):
-    """Chunk 构建结果"""
+@dataclass
+class ChunkSchema:
+    chunk_id: str
+    resume_id: str
+    chunk_level: ChunkLevel
+    parent_chunk_id: Optional[str] = None
+    section_type: Optional[SectionType] = None
+    content: str = ""
+    char_count: int = 0
+    sequence_index: int = 0
+    metadata: Dict[str, Any] = field(default_factory=dict)
 
-    chunks: List[ChunkSchema] = Field(default_factory=list, description="Chunk 列表")
-    full_chunk: Optional[ChunkSchema] = Field(None, description="Full Resume Chunk")
-    parent_chunks: List[ChunkSchema] = Field(default_factory=list, description="Parent Chunk 列表")
-    small_chunks: List[ChunkSchema] = Field(default_factory=list, description="Small Chunk 列表")
-    total_chunks: int = Field(0, description="Chunk 总数")
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "chunk_id": self.chunk_id,
+            "resume_id": self.resume_id,
+            "chunk_level": self.chunk_level.value,
+            "parent_chunk_id": self.parent_chunk_id or "",
+            "section_type": self.section_type.value if self.section_type else "",
+            "content": self.content,
+            "char_count": self.char_count,
+            "sequence_index": self.sequence_index,
+            "metadata": self.metadata,
+        }
+
+
+@dataclass
+class ChunkBuildResult:
+    chunks: List[ChunkSchema] = field(default_factory=list)
+    full_chunk: Optional[ChunkSchema] = None
+    parent_chunks: List[ChunkSchema] = field(default_factory=list)
+    small_chunks: List[ChunkSchema] = field(default_factory=list)
+    total_chunks: int = 0
 
 
 class ChunkBuilder:
-    """Chunk 层级构建器"""
 
-    # Small Chunk 目标大小范围
-    SMALL_CHUNK_MIN_SIZE = 50  # 最小字符数
-    SMALL_CHUNK_MAX_SIZE = 200  # 最大字符数
-
-    def build(
+    def generate_chunks(
         self,
-        segments: List[Segment],
         resume_id: str,
-        full_text: str,
-    ) -> ChunkBuildResult:
-        """
-        构建 Multi-Level Chunk
-
-        Args:
-            segments: 语义段落列表
-            resume_id: 简历 ID
-            full_text: 简历全文
-
-        Returns:
-            ChunkBuildResult: Chunk 构建结果
-        """
-        chunks = []
-        parent_chunks = []
-        small_chunks = []
-
-        # 1. 构建 Full Resume Chunk
-        full_chunk = self._build_full_chunk(full_text, resume_id, 0)
-        chunks.append(full_chunk)
-
-        # 2. 构建 Parent Chunks 和 Small Chunks
-        parent_index = 0
-        small_index = 0
-
-        for segment in segments:
-            # 构建 Parent Chunk
-            parent_chunk_id = self._generate_chunk_id(
-                resume_id, ChunkLevel.PARENT, parent_index
-            )
-            parent_chunk = self._build_parent_chunk(
-                segment, resume_id, parent_chunk_id, parent_index
-            )
-            parent_chunks.append(parent_chunk)
-            chunks.append(parent_chunk)
-
-            # 构建 Small Chunks
-            segment_small_chunks = self._build_small_chunks(
-                segment, resume_id, parent_chunk_id, small_index
-            )
-            small_chunks.extend(segment_small_chunks)
-            chunks.extend(segment_small_chunks)
-
-            parent_index += 1
-            small_index += len(segment_small_chunks)
-
-        logger.info(
-            f"Chunk 构建完成: 1 Full + {len(parent_chunks)} Parent + "
-            f"{len(small_chunks)} Small = {len(chunks)} 个 Chunk"
-        )
-
-        return ChunkBuildResult(
-            chunks=chunks,
-            full_chunk=full_chunk,
-            parent_chunks=parent_chunks,
-            small_chunks=small_chunks,
-            total_chunks=len(chunks),
-        )
-
-    def _generate_chunk_id(
-        self, resume_id: str, level: ChunkLevel, index: int
-    ) -> str:
-        """
-        生成 Chunk ID
-
-        格式: {resume_id}:{level}:{index}
-
-        Args:
-            resume_id: 简历 ID
-            level: Chunk 级别
-            index: 索引
-
-        Returns:
-            str: Chunk ID
-        """
-        return f"{resume_id}:{level.value}:{index}"
-
-    def _build_full_chunk(
-        self, content: str, resume_id: str, index: int
-    ) -> ChunkSchema:
-        """
-        构建 Full Resume Chunk
-
-        Args:
-            content: 简历全文
-            resume_id: 简历 ID
-            index: 索引
-
-        Returns:
-            ChunkSchema: Full Chunk
-        """
-        chunk_id = self._generate_chunk_id(resume_id, ChunkLevel.FULL, index)
-
-        return ChunkSchema(
-            chunk_id=chunk_id,
-            resume_id=resume_id,
-            chunk_level=ChunkLevel.FULL,
-            parent_chunk_id=None,
-            section_type=None,
-            content=content,
-            char_count=len(content),
-            sequence_index=index,
-        )
-
-    def _build_parent_chunk(
-        self,
-        segment: Segment,
-        resume_id: str,
-        chunk_id: str,
-        index: int,
-    ) -> ChunkSchema:
-        """
-        构建 Parent Chunk
-
-        Args:
-            segment: 语义段落
-            resume_id: 简历 ID
-            chunk_id: Chunk ID
-            index: 索引
-
-        Returns:
-            ChunkSchema: Parent Chunk
-        """
-        return ChunkSchema(
-            chunk_id=chunk_id,
-            resume_id=resume_id,
-            chunk_level=ChunkLevel.PARENT,
-            parent_chunk_id=None,  # Parent Chunk 没有父 Chunk
-            section_type=segment.segment_type,
-            content=segment.content,
-            char_count=len(segment.content),
-            sequence_index=index,
-            metadata={
-                "title": segment.title,
-                "organization": segment.organization,
-                "start_date": segment.start_date,
-                "end_date": segment.end_date,
-            },
-        )
-
-    def _build_small_chunks(
-        self,
-        segment: Segment,
-        resume_id: str,
-        parent_chunk_id: str,
-        start_index: int,
+        resume_structured: Any,
+        raw_text: str = "",
     ) -> List[ChunkSchema]:
         """
-        构建 Small Chunks
-
-        将语义段落切分为单句级粒度（50~200 字符）
+        从 ResumeStructured 结构化数据构建多粒度 Chunk。
 
         Args:
-            segment: 语义段落
             resume_id: 简历 ID
-            parent_chunk_id: 父 Chunk ID
-            start_index: 起始索引
-
-        Returns:
-            List[ChunkSchema]: Small Chunk 列表
+            resume_structured: LLM 提取的结构化数据 (ResumeStructured)
+            raw_text: 原始文本（降级用）
         """
-        small_chunks = []
+        chunks: List[ChunkSchema] = []
+        seq = 0
 
-        # 按句子切分
-        sentences = self._split_into_sentences(segment.content)
+        # 提取候选人级 metadata
+        personal = getattr(resume_structured, "personal_info", None)
+        education_list = getattr(resume_structured, "education_list", []) or []
+        experience_list = getattr(resume_structured, "experience_list", []) or []
+        project_list = getattr(resume_structured, "project_list", []) or []
+        skill_list = getattr(resume_structured, "skill_list", []) or []
 
-        # 合并短句子，拆分长句子
-        merged_chunks = self._merge_and_split_chunks(sentences)
+        candidate_meta = self._build_candidate_metadata(personal, education_list, experience_list)
+        candidate_meta["skills_normalized"] = [
+            getattr(s, "name", str(s)).lower() for s in skill_list
+        ]
+        candidate_meta["skills_original"] = [
+            getattr(s, "name", str(s)) for s in skill_list
+        ]
+        candidate_meta["total_experience_entries"] = len(experience_list)
+        candidate_meta["total_project_entries"] = len(project_list)
 
-        # 创建 Small Chunks
-        for i, chunk_content in enumerate(merged_chunks):
-            chunk_id = self._generate_chunk_id(
-                resume_id, ChunkLevel.SMALL, start_index + i
-            )
+        # 1. Full Resume Chunk
+        summary = getattr(personal, "summary", None) if personal else None
+        full_content = summary or raw_text or "无内容"
+        full = self._make_chunk(
+            resume_id, ChunkLevel.FULL, seq, "full-00",
+            full_content, None, None, candidate_meta,
+        )
+        chunks.append(full)
+        seq += 1
 
-            small_chunks.append(ChunkSchema(
-                chunk_id=chunk_id,
-                resume_id=resume_id,
-                chunk_level=ChunkLevel.SMALL,
-                parent_chunk_id=parent_chunk_id,
-                section_type=segment.segment_type,
-                content=chunk_content,
-                char_count=len(chunk_content),
-                sequence_index=start_index + i,
-                metadata={
-                    "parent_title": segment.title,
-                    "parent_organization": segment.organization,
-                },
+        # 1.1 PersonalInfo Small Chunk (使职称/年限/城市可被语义检索命中)
+        pi_parts = []
+        if candidate_meta.get("current_title"):
+            pi_parts.append(candidate_meta["current_title"])
+        if candidate_meta.get("years_of_experience"):
+            pi_parts.append(f"{candidate_meta['years_of_experience']}年经验")
+        if candidate_meta.get("city"):
+            pi_parts.append(candidate_meta["city"])
+        if candidate_meta.get("candidate_name"):
+            pi_parts.append(candidate_meta["candidate_name"])
+        if candidate_meta.get("current_company"):
+            pi_parts.append(candidate_meta["current_company"])
+        if pi_parts:
+            pi_content = " | ".join(pi_parts)
+            pi_parent_id = f"{resume_id}:parent:{seq:04d}"
+            chunks.append(self._make_chunk(
+                resume_id, ChunkLevel.PARENT, seq, pi_parent_id,
+                pi_content, SectionType.PERSONAL_INFO, None, dict(candidate_meta),
             ))
+            seq += 1
+            chunks.append(self._make_chunk(
+                resume_id, ChunkLevel.SMALL, seq,
+                self._chunk_id(resume_id, ChunkLevel.SMALL, seq),
+                pi_content, SectionType.PERSONAL_INFO, pi_parent_id,
+                {**candidate_meta, "entry_type": "personal_info"},
+            ))
+            seq += 1
 
-        return small_chunks
+        # 2. Education section
+        if education_list:
+            parent_id = f"{resume_id}:parent:{seq:04d}"
+            parent_content, parent_meta = self._build_parent_section(
+                education_list, SectionType.EDUCATION, candidate_meta,
+                fmt_fn=lambda e: self._fmt_education(e),
+            )
+            chunks.append(self._make_chunk(
+                resume_id, ChunkLevel.PARENT, seq, parent_id,
+                parent_content, SectionType.EDUCATION, None, parent_meta,
+            ))
+            seq += 1
+            for e in education_list:
+                chunks.append(self._make_chunk(
+                    resume_id, ChunkLevel.SMALL, seq, self._chunk_id(resume_id, ChunkLevel.SMALL, seq),
+                    self._fmt_education(e), SectionType.EDUCATION, parent_id,
+                    {**candidate_meta, "organization": getattr(e, "school", ""),
+                     "start_date": getattr(e, "start_date", ""),
+                     "end_date": getattr(e, "end_date", ""),
+                     "entry_type": "education"},
+                ))
+                seq += 1
 
-    def _split_into_sentences(self, text: str) -> List[str]:
-        """
-        将文本切分为句子
+        # 3. Experience section
+        if experience_list:
+            parent_id = f"{resume_id}:parent:{seq:04d}"
+            parent_content, parent_meta = self._build_parent_section(
+                experience_list, SectionType.EXPERIENCE, candidate_meta,
+                fmt_fn=lambda e: self._fmt_experience(e),
+            )
+            chunks.append(self._make_chunk(
+                resume_id, ChunkLevel.PARENT, seq, parent_id,
+                parent_content, SectionType.EXPERIENCE, None, parent_meta,
+            ))
+            seq += 1
+            for e in experience_list:
+                content = self._fmt_experience(e)
+                chunks.append(self._make_chunk(
+                    resume_id, ChunkLevel.SMALL, seq, self._chunk_id(resume_id, ChunkLevel.SMALL, seq),
+                    content, SectionType.EXPERIENCE, parent_id,
+                    {**candidate_meta,
+                     "organization": getattr(e, "company", ""),
+                     "title": getattr(e, "title", ""),
+                     "start_date": getattr(e, "start_date", ""),
+                     "end_date": getattr(e, "end_date", ""),
+                     "entry_type": "experience"},
+                ))
+                seq += 1
 
-        Args:
-            text: 文本内容
+        # 4. Project section
+        if project_list:
+            parent_id = f"{resume_id}:parent:{seq:04d}"
+            parent_content, parent_meta = self._build_parent_section(
+                project_list, SectionType.PROJECT, candidate_meta,
+                fmt_fn=lambda e: self._fmt_project(e),
+            )
+            chunks.append(self._make_chunk(
+                resume_id, ChunkLevel.PARENT, seq, parent_id,
+                parent_content, SectionType.PROJECT, None, parent_meta,
+            ))
+            seq += 1
+            for e in project_list:
+                chunks.append(self._make_chunk(
+                    resume_id, ChunkLevel.SMALL, seq, self._chunk_id(resume_id, ChunkLevel.SMALL, seq),
+                    self._fmt_project(e), SectionType.PROJECT, parent_id,
+                    {**candidate_meta,
+                     "organization": getattr(e, "name", ""),
+                     "title": getattr(e, "role", ""),
+                     "tech_stack": getattr(e, "tech_stack", []),
+                     "start_date": getattr(e, "start_date", ""),
+                     "end_date": getattr(e, "end_date", ""),
+                     "entry_type": "project"},
+                ))
+                seq += 1
 
-        Returns:
-            List[str]: 句子列表
-        """
-        # 按换行符和句号分割
-        sentences = []
+        # 5. Skill section
+        if skill_list:
+            parent_id = f"{resume_id}:parent:{seq:04d}"
+            parent_content = "、".join(
+                f"{getattr(s, 'name', str(s))}"
+                f"({getattr(s, 'proficiency', '')},"
+                f"{getattr(s, 'years_of_experience', '')}年)"
+                for s in skill_list
+            )
+            chunks.append(self._make_chunk(
+                resume_id, ChunkLevel.PARENT, seq, parent_id,
+                parent_content, SectionType.SKILL, None, dict(candidate_meta),
+            ))
+            seq += 1
+            # Group skills by category
+            by_cat: Dict[str, List[Any]] = {}
+            for s in skill_list:
+                cat = getattr(s, "category", "other") or "other"
+                by_cat.setdefault(cat, []).append(s)
+            for cat, skills in by_cat.items():
+                skill_content = "、".join(
+                    f"{getattr(s, 'name', str(s))}"
+                    f"({getattr(s, 'proficiency', '')},"
+                    f"{getattr(s, 'years_of_experience', '')}年)"
+                    for s in skills
+                )
+                chunks.append(self._make_chunk(
+                    resume_id, ChunkLevel.SMALL, seq, self._chunk_id(resume_id, ChunkLevel.SMALL, seq),
+                    skill_content, SectionType.SKILL, parent_id,
+                    {**candidate_meta, "skill_category": cat, "entry_type": "skill"},
+                ))
+                seq += 1
 
-        # 先按换行分割
-        lines = text.split("\n")
+        logger.info(f"Chunk 构建完成: {len(chunks)} 个 (resume_id={resume_id})")
+        return chunks
 
-        for line in lines:
-            line = line.strip()
-            if not line:
-                continue
+    def _build_candidate_metadata(
+        self, personal: Any, education_list: List[Any], experience_list: List[Any],
+    ) -> Dict[str, Any]:
+        meta: Dict[str, Any] = {
+            "candidate_name": getattr(personal, "full_name", "") if personal else "",
+            "years_of_experience": int(getattr(personal, "years_of_experience", 0) or 0),
+            "city": getattr(personal, "city", "") if personal else "",
+            "gender": getattr(personal, "gender", "") if personal else "",
+            "current_title": getattr(personal, "current_title", "") if personal else "",
+            "current_company": getattr(personal, "current_company", "") if personal else "",
+        }
 
-            # 按句号、分号分割（中文标点）
-            parts = re.split(r"[。；;]", line)
+        # 最高学历
+        max_level = 0
+        max_degree = ""
+        for e in education_list:
+            degree = getattr(e, "degree", "") or ""
+            level = EDUCATION_LEVEL_MAP.get(degree, 0)
+            if level > max_level:
+                max_level = level
+                max_degree = degree
+        meta["highest_education_level"] = max_level
+        meta["highest_education"] = max_degree
+        meta["is_985"] = any(getattr(e, "is_985", False) for e in education_list)
+        meta["is_211"] = any(getattr(e, "is_211", False) for e in education_list)
 
-            for part in parts:
-                part = part.strip()
-                if part:
-                    sentences.append(part)
+        # 行业
+        if experience_list:
+            latest = experience_list[0]
+            meta["industry"] = getattr(latest, "industry", "") or ""
 
-        return sentences
+        return meta
 
-    def _merge_and_split_chunks(self, sentences: List[str]) -> List[str]:
-        """
-        合并短句子，拆分长句子
+    def _build_parent_section(
+        self, entries: List[Any], stype: SectionType,
+        candidate_meta: Dict[str, Any], fmt_fn,
+    ) -> tuple:
+        lines = [fmt_fn(e) for e in entries]
+        content = "\n\n".join(lines)
+        meta = dict(candidate_meta)
+        meta["section_type"] = stype.value
+        return content, meta
 
-        Args:
-            sentences: 句子列表
+    def _fmt_education(self, e: Any) -> str:
+        school = getattr(e, "school", "")
+        major = getattr(e, "major", "")
+        degree = getattr(e, "degree", "")
+        s_date = getattr(e, "start_date", "")
+        e_date = getattr(e, "end_date", "")
+        desc = getattr(e, "description", "")
+        parts = [f"{school} | {major} | {degree}"]
+        if s_date or e_date:
+            parts.append(f"{s_date} ~ {e_date}")
+        if desc:
+            parts.append(desc)
+        return " | ".join(p for p in parts if p)
 
-        Returns:
-            List[str]: 处理后的 Chunk 列表
-        """
-        chunks = []
-        current_chunk = ""
+    def _fmt_experience(self, e: Any) -> str:
+        company = getattr(e, "company", "")
+        title = getattr(e, "title", "")
+        s_date = getattr(e, "start_date", "")
+        e_date = getattr(e, "end_date", "")
+        desc = getattr(e, "description", "")
+        achievements = getattr(e, "achievements", []) or []
+        parts = [f"{company} | {title} | {s_date} ~ {e_date}"]
+        if desc:
+            parts.append(desc)
+        if achievements:
+            parts.append("成就: " + "; ".join(achievements))
+        return "\n".join(parts)
 
-        for sentence in sentences:
-            # 如果当前句子太长，需要拆分
-            if len(sentence) > self.SMALL_CHUNK_MAX_SIZE:
-                # 先保存当前 chunk
-                if current_chunk:
-                    chunks.append(current_chunk)
-                    current_chunk = ""
+    def _fmt_project(self, e: Any) -> str:
+        name = getattr(e, "name", "")
+        role = getattr(e, "role", "")
+        s_date = getattr(e, "start_date", "")
+        e_date = getattr(e, "end_date", "")
+        desc = getattr(e, "description", "")
+        tech_stack = getattr(e, "tech_stack", []) or []
+        parts = [f"{name} | {role} | {s_date} ~ {e_date}"]
+        if desc:
+            parts.append(desc)
+        if tech_stack:
+            parts.append("技术栈: " + ", ".join(tech_stack))
+        return "\n".join(parts)
 
-                # 拆分长句子
-                split_parts = self._split_long_sentence(sentence)
-                chunks.extend(split_parts)
-                continue
+    def _chunk_id(self, resume_id: str, level: ChunkLevel, seq: int) -> str:
+        return f"{resume_id}:{level.value}:{seq:04d}"
 
-            # 如果加上当前句子会超过最大长度，保存当前 chunk
-            if len(current_chunk) + len(sentence) > self.SMALL_CHUNK_MAX_SIZE:
-                if current_chunk:
-                    chunks.append(current_chunk)
-                current_chunk = sentence
-            else:
-                # 合并句子
-                if current_chunk:
-                    current_chunk += " " + sentence
-                else:
-                    current_chunk = sentence
-
-        # 保存最后一个 chunk
-        if current_chunk:
-            chunks.append(current_chunk)
-
-        # 合并过短的 chunks
-        merged_chunks = []
-        temp_chunk = ""
-
-        for chunk in chunks:
-            if len(chunk) < self.SMALL_CHUNK_MIN_SIZE:
-                # 尝试与前一个 chunk 合并
-                if temp_chunk and len(temp_chunk) + len(chunk) <= self.SMALL_CHUNK_MAX_SIZE:
-                    temp_chunk += " " + chunk
-                else:
-                    if temp_chunk:
-                        merged_chunks.append(temp_chunk)
-                    temp_chunk = chunk
-            else:
-                if temp_chunk:
-                    merged_chunks.append(temp_chunk)
-                    temp_chunk = ""
-                merged_chunks.append(chunk)
-
-        if temp_chunk:
-            merged_chunks.append(temp_chunk)
-
-        return merged_chunks if merged_chunks else chunks
-
-    def _split_long_sentence(self, sentence: str) -> List[str]:
-        """
-        拆分长句子
-
-        Args:
-            sentence: 长句子
-
-        Returns:
-            List[str]: 拆分后的句子列表
-        """
-        parts = []
-
-        # 按逗号、顿号分割
-        sub_parts = re.split(r"[，、,]", sentence)
-
-        current_part = ""
-        for part in sub_parts:
-            part = part.strip()
-            if not part:
-                continue
-
-            if len(current_part) + len(part) <= self.SMALL_CHUNK_MAX_SIZE:
-                if current_part:
-                    current_part += "，" + part
-                else:
-                    current_part = part
-            else:
-                if current_part:
-                    parts.append(current_part)
-                current_part = part
-
-        if current_part:
-            parts.append(current_part)
-
-        return parts if parts else [sentence]
+    def _make_chunk(
+        self, resume_id: str, level: ChunkLevel, seq: int, chunk_id: str,
+        content: str, section_type: Optional[SectionType],
+        parent_chunk_id: Optional[str], metadata: Dict[str, Any],
+    ) -> ChunkSchema:
+        return ChunkSchema(
+            chunk_id=chunk_id,
+            resume_id=resume_id,
+            chunk_level=level,
+            parent_chunk_id=parent_chunk_id,
+            section_type=section_type,
+            content=content,
+            char_count=len(content),
+            sequence_index=seq,
+            metadata=metadata,
+        )
 
 
-
-# 全局 Chunk 构建器实例
-chunk_builder = ChunkBuilder()
+# 全局单例
+_chunk_builder: Optional[ChunkBuilder] = None
 
 
 def get_chunk_builder() -> ChunkBuilder:
-    """获取 Chunk 构建器实例"""
-    return chunk_builder
+    global _chunk_builder
+    if _chunk_builder is None:
+        _chunk_builder = ChunkBuilder()
+    return _chunk_builder

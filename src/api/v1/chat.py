@@ -50,6 +50,9 @@ async def generate_sse_stream(
     import asyncio
 
     try:
+        # 发送 thinking 事件，让前端显示加载状态
+        yield f"data: {json.dumps({'type': 'thinking', 'content': '正在分析您的需求...'}, ensure_ascii=False)}\n\n"
+
         # 1. 意图识别（同步调用，包装到线程避免阻塞事件循环）
         classifier = get_intent_classifier()
 
@@ -60,7 +63,30 @@ async def generate_sse_stream(
             session_manager = get_session_manager()
             context_data = session_manager.get_conversation_context(conversation_id)
             if context_data:
-                context = ConversationContext(**context_data)
+                # 安全构造 ConversationContext，处理 enum 字符串转换
+                try:
+                    # 处理 last_intent 字符串 -> IntentEnum
+                    if context_data.get("last_intent") and isinstance(context_data["last_intent"], str):
+                        try:
+                            context_data["last_intent"] = IntentEnum(context_data["last_intent"])
+                        except ValueError:
+                            context_data["last_intent"] = None
+                    # 处理 intent_history 列表中的字符串 -> IntentEnum
+                    if context_data.get("intent_history"):
+                        new_hist = []
+                        for item in context_data["intent_history"]:
+                            if isinstance(item, str):
+                                try:
+                                    new_hist.append(IntentEnum(item))
+                                except ValueError:
+                                    pass
+                            else:
+                                new_hist.append(item)
+                        context_data["intent_history"] = new_hist
+                    context = ConversationContext(**context_data)
+                except Exception as ctx_err:
+                    logger.warning(f"上下文构造失败，忽略上下文: {ctx_err}")
+                    context = None
 
         intent_result = await asyncio.to_thread(classifier.classify, message, context)
 
@@ -69,8 +95,12 @@ async def generate_sse_stream(
         fallback_response = fallback_handler.handle(intent_result)
 
         if fallback_response.is_fallback:
-            # 发送 Fallback 响应
-            yield f"data: {json.dumps({'type': 'token', 'content': fallback_response.message}, ensure_ascii=False)}\n\n"
+            # 逐句发送 Fallback 响应
+            for line in fallback_response.message.split("\n"):
+                if line.strip():
+                    content = line + "\n"
+                    yield f"data: {json.dumps({'type': 'token', 'content': content}, ensure_ascii=False)}\n\n"
+                    await asyncio.sleep(0.05)
             yield f"data: {json.dumps({'type': 'done', 'content': ''}, ensure_ascii=False)}\n\n"
             return
 
@@ -98,6 +128,7 @@ async def generate_sse_stream(
             if intent_result.intent == IntentEnum.RECRUITMENT_REFINE and not conversation_id:
                 yield f"data: {json.dumps({'type': 'error', 'message': '请先进行搜索'}, ensure_ascii=False)}\n\n"
                 return
+            yield f"data: {json.dumps({'type': 'thinking', 'content': '正在检索候选人...'}, ensure_ascii=False)}\n\n"
             result = await asyncio.to_thread(handler)
         else:
             msg = FALLBACK_MESSAGES.get(intent_result.intent, DEFAULT_FALLBACK)
@@ -107,8 +138,12 @@ async def generate_sse_stream(
 
         # 4. 发送响应
         if result.success:
-            # 发送消息
-            yield f"data: {json.dumps({'type': 'token', 'content': result.message}, ensure_ascii=False)}\n\n"
+            # 逐句发送消息
+            for line in result.message.split("\n"):
+                if line.strip():
+                    content = line + "\n"
+                    yield f"data: {json.dumps({'type': 'token', 'content': content}, ensure_ascii=False)}\n\n"
+                    await asyncio.sleep(0.03)
 
             # 发送候选人列表
             if result.candidates:
@@ -121,8 +156,8 @@ async def generate_sse_stream(
             yield f"data: {json.dumps({'type': 'error', 'message': result.message}, ensure_ascii=False)}\n\n"
 
     except Exception as e:
-        logger.error(f"SSE 流生成失败: {str(e)}")
-        yield f"data: {json.dumps({'type': 'error', 'message': '内部错误'}, ensure_ascii=False)}\n\n"
+        logger.error(f"SSE 流生成失败: {str(e)}", exc_info=True)
+        yield f"data: {json.dumps({'type': 'error', 'message': f'内部错误: {str(e)}'}, ensure_ascii=False)}\n\n"
 
 
 @router.post("/chat")

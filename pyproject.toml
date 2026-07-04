@@ -34,7 +34,7 @@ dependencies = [
 
     # LangChain 生态
     "langchain>=0.1.4",
-    "langgraph>=0.0.20",
+    "langgraph>=0.2.0",
     "langchain-openai>=0.0.5",
     "langchain-milvus>=0.0.3",
 
@@ -59,6 +59,7 @@ dependencies = [
     "loguru>=0.7.2",
 
     # Embedding
+    "FlagEmbedding>=1.2.6",
 
     # 工具
     "python-dotenv>=1.0.0",

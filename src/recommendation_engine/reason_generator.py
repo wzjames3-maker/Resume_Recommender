@@ -1,16 +1,22 @@
 """
 智能招聘 RAG 推荐系统 - 推荐理由生成模块
 
-使用 LLM 生成推荐理由和 Score Breakdown
+变更 (Tier L): 使用 LLM 生成自然语言推荐理由（非模板字符串拼接）
 """
 
+import json
+import re
 from typing import Any, Dict, List, Optional
 
+from openai import OpenAI
+
+from src.common.config import get_settings
 from src.common.logger import get_logger
 from src.intent_router.schemas import CandidateSlot
+from src.recommendation_engine.context_builder import get_context_builder
 from src.recommendation_engine.hybrid_retriever import RetrievalResult
 
-logger = get_logger("reason_generator")
+logger = get_logger(__name__)
 
 
 class ReasonResult:
@@ -29,7 +35,6 @@ class ReasonResult:
         self.score_breakdown = score_breakdown
 
     def to_dict(self) -> Dict[str, Any]:
-        """转换为字典"""
         return {
             "reason": self.reason,
             "matched_skills": self.matched_skills,
@@ -38,157 +43,154 @@ class ReasonResult:
         }
 
 
+SYSTEM_PROMPT = """你是招聘推荐顾问。根据已有信息客观评估候选人匹配度。
+
+要求：
+1. reason: 具体说明匹配点和不足点，引用简历中的实际经验/技能/学历，不要泛泛而谈
+2. matched_skills: 候选人与招聘需求匹配的特定技能
+3. missing_skills: 候选人不具备的关键技能
+4. score_breakdown: 0.0-1.0评分
+   - skill_match: 技能重叠度
+   - experience_match: 工作经验与相关度
+   - education_match: 学历/学校匹配
+   - project_relevance: 过往工作/项目与目标岗位内容相关性
+   - industry_match: 所处行业/公司类型匹配度
+
+严格输出JSON，不要额外文字。"""
+
+
 class ReasonGenerator:
-    """推荐理由生成器"""
+    """推荐理由生成器 — LLM 驱动"""
+
+    def __init__(self):
+        settings = get_settings()
+        self.context_builder = get_context_builder()
+        self.llm_client = OpenAI(
+            api_key=settings.llm.LLM_API_KEY,
+            base_url=settings.llm.LLM_BASE_URL,
+        )
+        self.model = settings.llm.LLM_MODEL
+        self._fallback = False
 
     def generate(
         self,
         result: RetrievalResult,
         slots: CandidateSlot,
     ) -> ReasonResult:
-        """
-        生成推荐理由
+        """生成推荐理由"""
 
-        Args:
-            result: 检索结果
-            slots: 候选人属性 Slots
+        # 构建上下文
+        ctx = self.context_builder.build(result, slots)
+        prompt_text = ctx.to_prompt_text()
 
-        Returns:
-            ReasonResult: 推荐理由结果
-        """
-        metadata = result.metadata
+        try:
+            return self._call_llm(prompt_text, result, slots)
+        except Exception as e:
+            logger.warning(f"LLM 推荐理由生成失败，降级为模板化理由: {e}")
+            return self._fallback_reason(result, slots)
 
-        # 提取技能匹配信息
-        required_skills = slots.skills or []
-        candidate_skills = metadata.get("skills", [])
-
-        matched_skills, missing_skills = self._analyze_skills(
-            required_skills, candidate_skills,
-            job_title=slots.job_title or ""
+    def _call_llm(
+        self,
+        prompt_text: str,
+        result: RetrievalResult,
+        slots: CandidateSlot,
+    ) -> ReasonResult:
+        """调用 LLM 生成推荐理由"""
+        response = self.llm_client.chat.completions.create(
+            model=self.model,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": prompt_text},
+            ],
+            temperature=0.3,
+            max_tokens=2048,
         )
 
-        # 生成推荐理由
-        reason = self._build_reason(result, slots, matched_skills, missing_skills)
-
-        # 构建 Score Breakdown
-        score_breakdown = self._build_score_breakdown(result)
-
-        logger.info(f"生成推荐理由: resume_id={result.resume_id}")
+        raw = response.choices[0].message.content or "{}"
+        data = self._parse_json(raw)
 
         return ReasonResult(
-            reason=reason,
-            matched_skills=matched_skills,
-            missing_skills=missing_skills,
-            score_breakdown=score_breakdown,
+            reason=data.get("reason", ""),
+            matched_skills=data.get("matched_skills", []),
+            missing_skills=data.get("missing_skills", []),
+            score_breakdown={
+                "skill_match": float(data.get("score_breakdown", {}).get("skill_match", 0)),
+                "experience_match": float(data.get("score_breakdown", {}).get("experience_match", 0)),
+                "education_match": float(data.get("score_breakdown", {}).get("education_match", 0)),
+                "project_relevance": float(data.get("score_breakdown", {}).get("project_relevance", 0)),
+                "industry_match": float(data.get("score_breakdown", {}).get("industry_match", 0)),
+            },
         )
 
-    def _analyze_skills(
-        self,
-        required_skills: List[str],
-        candidate_skills: List[str],
-        job_title: str = "",
-    ) -> tuple[List[str], List[str]]:
-        """
-        分析技能匹配
+    def _parse_json(self, raw: str) -> Dict[str, Any]:
+        text = raw.strip()
+        if "```json" in text:
+            start = text.index("```json") + 7
+            end = text.index("```", start) if "```" in text[start:] else len(text)
+            text = text[start:end].strip()
+        elif "```" in text:
+            start = text.index("```") + 3
+            end = text.index("```", start) if "```" in text[start:] else len(text)
+            text = text[start:end].strip()
+        if not text.startswith("{"):
+            first = text.find("{")
+            last = text.rfind("}")
+            if first != -1 and last > first:
+                text = text[first:last + 1]
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            try:
+                text = re.sub(r",\s*}", "}", text)
+                text = re.sub(r",\s*]", "]", text)
+                return json.loads(text)
+            except json.JSONDecodeError:
+                pass
+        logger.warning(f"无法解析 LLM 输出 JSON: {raw[:200]}")
+        return {}
 
-        Args:
-            required_skills: 要求的技能
-            candidate_skills: 候选人技能
-
-        Returns:
-            tuple: (匹配的技能, 缺失的技能)
-        """
-        if job_title:
-            title_keywords = [w for w in job_title.replace("工程师","").replace("开发","").split() if w]
-            required_skills = list(required_skills) + title_keywords
-        if not required_skills:
-            return [], []
-
-        required_set = set(s.lower() for s in required_skills)
-        candidate_set = set(s.lower() for s in candidate_skills)
-
-        # 找到匹配的技能
-        matched = [
-            skill for skill in required_skills
-            if skill.lower() in candidate_set
-        ]
-
-        # 找到缺失的技能
-        missing = [
-            skill for skill in required_skills
-            if skill.lower() not in candidate_set
-        ]
-
-        return matched, missing
-
-    def _build_reason(
+    def _fallback_reason(
         self,
         result: RetrievalResult,
         slots: CandidateSlot,
-        matched_skills: List[str],
-        missing_skills: List[str],
-    ) -> str:
-        """
-        构建推荐理由
+    ) -> ReasonResult:
+        """LLM 不可用时的模板化降级理由"""
+        m = result.metadata
+        name = m.get("candidate_name", "该候选人")
+        req_skills = getattr(slots, "skills", None) or []
+        candidate_skills = m.get("skills_normalized", [])
+        exp = m.get("years_of_experience", 0)
 
-        Args:
-            result: 检索结果
-            slots: 候选人属性 Slots
-            matched_skills: 匹配的技能
-            missing_skills: 缺失的技能
+        req_set = set(s.lower() for s in req_skills)
+        cand_set = set(s.lower() for s in candidate_skills)
+        matched = [s for s in req_skills if s.lower() in cand_set]
+        missing = [s for s in req_skills if s.lower() not in cand_set]
 
-        Returns:
-            str: 推荐理由
-        """
-        metadata = result.metadata
-        parts = []
+        req_exp = getattr(slots, "experience", None)
+        reason = f"{name}，匹配技能: {', '.join(matched) if matched else '无'}，"
+        if missing:
+            reason += f"缺失: {', '.join(missing)}，"
+        reason += f"{exp}年经验。匹配度: {result.score:.0%}（模板化理由）"
 
-        # 基本信息
-        candidate_name = metadata.get("candidate_name", "该候选人")
-        parts.append(f"{candidate_name}")
-
-        # 技能匹配
-        if matched_skills:
-            parts.append(f"具备 {', '.join(matched_skills)} 等技能")
-
-        # 工作年限
-        years = metadata.get("years_of_experience")
-        if years:
-            parts.append(f"拥有 {years} 年工作经验")
-
-        # 综合分数
-        final_score = metadata.get("final_score", result.score)
-        parts.append(f"综合匹配度 {final_score:.1%}")
-
-        # 缺失技能
-        if missing_skills:
-            parts.append(f"缺少 {', '.join(missing_skills)} 等技能")
-
-        return "，".join(parts) + "。"
-
-    def _build_score_breakdown(self, result: RetrievalResult) -> Dict[str, float]:
-        """
-        构建 Score Breakdown
-
-        Args:
-            result: 检索结果
-
-        Returns:
-            Dict[str, float]: 分数明细
-        """
-        return {
-            "semantic_score": result.score,
-            "filter_score": result.metadata.get("filter_total_score", 0.0),
-            "final_score": result.metadata.get("final_score", result.score),
-            "skill_match_score": result.metadata.get("filter_scores", {}).get("skills", 0.0),
-            "industry_match_score": result.metadata.get("filter_scores", {}).get("industry", 0.0),
-        }
+        return ReasonResult(
+            reason=reason,
+            matched_skills=matched,
+            missing_skills=missing,
+            score_breakdown={
+                "skill_match": len(matched) / max(len(req_skills), 1),
+                "experience_match": min(exp / max(float(req_exp or 1), 1), 1.0),
+                "education_match": 0.5,
+                "project_relevance": 0.5,
+                "industry_match": 0.5,
+            },
+        )
 
 
-# 全局推荐理由生成器实例
-reason_generator = ReasonGenerator()
+_reason_generator: Optional[ReasonGenerator] = None
 
 
 def get_reason_generator() -> ReasonGenerator:
-    """获取推荐理由生成器实例"""
-    return reason_generator
+    global _reason_generator
+    if _reason_generator is None:
+        _reason_generator = ReasonGenerator()
+    return _reason_generator

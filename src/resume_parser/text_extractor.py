@@ -329,16 +329,24 @@ class TextExtractor:
                 if para.text.strip():
                     paragraphs.append(para.text.strip())
 
-            # 提取表格文本
+            # 提取表格文本（同行相同内容去重）
             tables_text = []
             for table in doc.tables:
                 table_rows = []
                 for row in table.rows:
                     row_cells = [cell.text.strip() for cell in row.cells]
-                    table_rows.append(" | ".join(row_cells))
+                    seen = set()
+                    deduped = []
+                    for ct in row_cells:
+                        if ct and ct not in seen:
+                            seen.add(ct)
+                            deduped.append(ct)
+                        elif not ct:
+                            deduped.append(ct)
+                    if deduped:
+                        table_rows.append(" | ".join(deduped))
                 if table_rows:
                     tables_text.append("\n".join(table_rows))
-
             # 合并文本
             all_text = paragraphs + tables_text
             raw_text = "\n\n".join(all_text)

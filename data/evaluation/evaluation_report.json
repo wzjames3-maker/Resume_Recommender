@@ -1,645 +1,1278 @@
 {
-  "generated_at": "2026-06-26T16:49:03.735850",
+  "generated_at": "2026-07-04T16:23:15",
   "total_queries": 21,
+  "indexed_resumes": 33,
   "aggregate_metrics": {
-    "avg_recall@1": 0.1429,
+    "avg_recall@1": 0.4071,
     "max_recall@1": 1.0,
-    "avg_precision@1": 0.1429,
-    "max_precision@1": 1.0,
-    "avg_recall@3": 0.2381,
+    "avg_recall@3": 0.7262,
     "max_recall@3": 1.0,
-    "avg_precision@3": 0.0794,
-    "max_precision@3": 0.3333,
-    "avg_recall@5": 0.3333,
+    "avg_recall@5": 0.7738,
     "max_recall@5": 1.0,
-    "avg_precision@5": 0.0667,
-    "max_precision@5": 0.2,
-    "avg_recall@10": 0.4762,
+    "avg_recall@10": 0.8857,
     "max_recall@10": 1.0,
-    "avg_precision@10": 0.0487,
-    "max_precision@10": 0.1111,
-    "avg_recall@20": 0.5238,
+    "avg_recall@20": 0.9143,
     "max_recall@20": 1.0,
-    "avg_precision@20": 0.0441,
-    "max_precision@20": 0.1111,
-    "avg_mrr": 0.2282,
+    "avg_precision@1": 0.8571,
+    "max_precision@1": 1.0,
+    "avg_precision@3": 0.6032,
+    "max_precision@3": 1.0,
+    "avg_precision@5": 0.4095,
+    "max_precision@5": 0.8,
+    "avg_precision@10": 0.2571,
+    "max_precision@10": 0.5,
+    "avg_precision@20": 0.1357,
+    "max_precision@20": 0.25,
+    "avg_mrr": 0.9167,
     "max_mrr": 1.0,
-    "avg_ndcg@10": 0.3247,
-    "max_ndcg@10": 1.0
+    "avg_ndcg@1": 0.6286,
+    "max_ndcg@1": 1.0,
+    "avg_ndcg@3": 0.7884,
+    "max_ndcg@3": 1.0,
+    "avg_ndcg@5": 0.782,
+    "max_ndcg@5": 1.0,
+    "avg_ndcg@10": 0.8219,
+    "max_ndcg@10": 1.0,
+    "avg_ndcg@20": 0.8257,
+    "max_ndcg@20": 1.0,
+    "avg_map": 0.7992,
+    "hit_rate@1": 0.8571,
+    "hit_rate@3": 0.9524,
+    "hit_rate@5": 1.0,
+    "hit_rate@10": 1.0,
+    "hit_rate@20": 1.0,
+    "pairwise_ranking_loss": 0.3485,
+    "coverage": 1.0
   },
   "by_query_type": {
     "years_only": {
-      "count": 8,
-      "avg_recall@5": 0.375,
-      "avg_recall@10": 0.625,
-      "avg_mrr": 0.2156,
-      "avg_ndcg@10": 0.3513
+      "avg_recall@1": 0.4313,
+      "max_recall@1": 1.0,
+      "avg_recall@3": 0.7937,
+      "max_recall@3": 1.0,
+      "avg_recall@5": 0.8187,
+      "max_recall@5": 1.0,
+      "avg_recall@10": 0.9375,
+      "max_recall@10": 1.0,
+      "avg_recall@20": 0.9375,
+      "max_recall@20": 1.0,
+      "avg_precision@1": 1.0,
+      "max_precision@1": 1.0,
+      "avg_precision@3": 0.75,
+      "max_precision@3": 1.0,
+      "avg_precision@5": 0.475,
+      "max_precision@5": 0.8,
+      "avg_precision@10": 0.2875,
+      "max_precision@10": 0.5,
+      "avg_precision@20": 0.1438,
+      "max_precision@20": 0.25,
+      "avg_mrr": 1.0,
+      "max_mrr": 1.0,
+      "avg_ndcg@1": 0.575,
+      "max_ndcg@1": 1.0,
+      "avg_ndcg@3": 0.7699,
+      "max_ndcg@3": 1.0,
+      "avg_ndcg@5": 0.7624,
+      "max_ndcg@5": 1.0,
+      "avg_ndcg@10": 0.8152,
+      "max_ndcg@10": 1.0,
+      "avg_ndcg@20": 0.8152,
+      "max_ndcg@20": 1.0,
+      "avg_map": 0.9021,
+      "hit_rate@1": 1.0,
+      "hit_rate@3": 1.0,
+      "hit_rate@5": 1.0,
+      "hit_rate@10": 1.0,
+      "hit_rate@20": 1.0,
+      "pairwise_ranking_loss": 0.52,
+      "coverage": 1.0,
+      "count": 8
     },
     "skill": {
-      "count": 7,
-      "avg_recall@5": 0.5714,
-      "avg_recall@10": 0.5714,
-      "avg_mrr": 0.4048,
-      "avg_ndcg@10": 0.4835
+      "avg_recall@1": 0.4571,
+      "max_recall@1": 1.0,
+      "avg_recall@3": 0.9143,
+      "max_recall@3": 1.0,
+      "avg_recall@5": 0.9429,
+      "max_recall@5": 1.0,
+      "avg_recall@10": 0.9714,
+      "max_recall@10": 1.0,
+      "avg_recall@20": 1.0,
+      "max_recall@20": 1.0,
+      "avg_precision@1": 0.8571,
+      "max_precision@1": 1.0,
+      "avg_precision@3": 0.6191,
+      "max_precision@3": 0.6667,
+      "avg_precision@5": 0.4,
+      "max_precision@5": 0.6,
+      "avg_precision@10": 0.2143,
+      "max_precision@10": 0.4,
+      "avg_precision@20": 0.1143,
+      "max_precision@20": 0.25,
+      "avg_mrr": 0.9286,
+      "max_mrr": 1.0,
+      "avg_ndcg@1": 0.6571,
+      "max_ndcg@1": 1.0,
+      "avg_ndcg@3": 0.8637,
+      "max_ndcg@3": 1.0,
+      "avg_ndcg@5": 0.8598,
+      "max_ndcg@5": 1.0,
+      "avg_ndcg@10": 0.8637,
+      "max_ndcg@10": 1.0,
+      "avg_ndcg@20": 0.8668,
+      "max_ndcg@20": 1.0,
+      "avg_map": 0.894,
+      "hit_rate@1": 0.8571,
+      "hit_rate@3": 1.0,
+      "hit_rate@5": 1.0,
+      "hit_rate@10": 1.0,
+      "hit_rate@20": 1.0,
+      "pairwise_ranking_loss": 0.25,
+      "coverage": 1.0,
+      "count": 7
     },
     "skill+years": {
-      "count": 3,
-      "avg_recall@5": 0.0,
-      "avg_recall@10": 0.3333,
-      "avg_mrr": 0.0779,
-      "avg_ndcg@10": 0.1353
+      "avg_recall@1": 0.5,
+      "max_recall@1": 1.0,
+      "avg_recall@3": 0.6333,
+      "max_recall@3": 1.0,
+      "avg_recall@5": 0.7667,
+      "max_recall@5": 1.0,
+      "avg_recall@10": 0.8333,
+      "max_recall@10": 1.0,
+      "avg_recall@20": 0.8333,
+      "max_recall@20": 1.0,
+      "avg_precision@1": 0.6667,
+      "max_precision@1": 1.0,
+      "avg_precision@3": 0.4444,
+      "max_precision@3": 0.6667,
+      "avg_precision@5": 0.4,
+      "max_precision@5": 0.8,
+      "avg_precision@10": 0.2333,
+      "max_precision@10": 0.5,
+      "avg_precision@20": 0.1167,
+      "max_precision@20": 0.25,
+      "avg_mrr": 0.8333,
+      "max_mrr": 1.0,
+      "avg_ndcg@1": 0.6667,
+      "max_ndcg@1": 1.0,
+      "avg_ndcg@3": 0.839,
+      "max_ndcg@3": 1.0,
+      "avg_ndcg@5": 0.8527,
+      "max_ndcg@5": 1.0,
+      "avg_ndcg@10": 0.8624,
+      "max_ndcg@10": 1.0,
+      "avg_ndcg@20": 0.8624,
+      "max_ndcg@20": 1.0,
+      "avg_map": 0.7367,
+      "hit_rate@1": 0.6667,
+      "hit_rate@3": 1.0,
+      "hit_rate@5": 1.0,
+      "hit_rate@10": 1.0,
+      "hit_rate@20": 1.0,
+      "pairwise_ranking_loss": 0.125,
+      "coverage": 1.0,
+      "count": 3
     },
     "job_title": {
-      "count": 1,
-      "avg_recall@5": 0.0,
-      "avg_recall@10": 0.0,
-      "avg_mrr": 0.0,
-      "avg_ndcg@10": 0.082
+      "avg_recall@1": 0.0,
+      "max_recall@1": 0.0,
+      "avg_recall@3": 0.0,
+      "max_recall@3": 0.0,
+      "avg_recall@5": 0.2,
+      "max_recall@5": 0.2,
+      "avg_recall@10": 0.8,
+      "max_recall@10": 0.8,
+      "avg_recall@20": 1.0,
+      "max_recall@20": 1.0,
+      "avg_precision@1": 0.0,
+      "max_precision@1": 0.0,
+      "avg_precision@3": 0.0,
+      "max_precision@3": 0.0,
+      "avg_precision@5": 0.2,
+      "max_precision@5": 0.2,
+      "avg_precision@10": 0.4,
+      "max_precision@10": 0.4,
+      "avg_precision@20": 0.25,
+      "max_precision@20": 0.25,
+      "avg_mrr": 0.25,
+      "max_mrr": 0.25,
+      "avg_ndcg@1": 0.0,
+      "max_ndcg@1": 0.0,
+      "avg_ndcg@3": 0.0,
+      "max_ndcg@3": 0.0,
+      "avg_ndcg@5": 0.0353,
+      "max_ndcg@5": 0.0353,
+      "avg_ndcg@10": 0.3422,
+      "max_ndcg@10": 0.3422,
+      "avg_ndcg@20": 0.3703,
+      "max_ndcg@20": 0.3703,
+      "avg_map": 0.3092,
+      "hit_rate@1": 0.0,
+      "hit_rate@3": 0.0,
+      "hit_rate@5": 1.0,
+      "hit_rate@10": 1.0,
+      "hit_rate@20": 1.0,
+      "pairwise_ranking_loss": 0.5714,
+      "coverage": 1.0,
+      "count": 1
     },
     "job_title+city": {
-      "count": 1,
-      "avg_recall@5": 0.0,
-      "avg_recall@10": 0.0,
-      "avg_mrr": 0.0,
-      "avg_ndcg@10": 0.082
+      "avg_recall@1": 0.2,
+      "max_recall@1": 0.2,
+      "avg_recall@3": 0.4,
+      "max_recall@3": 0.4,
+      "avg_recall@5": 0.4,
+      "max_recall@5": 0.4,
+      "avg_recall@10": 0.4,
+      "max_recall@10": 0.4,
+      "avg_recall@20": 0.4,
+      "max_recall@20": 0.4,
+      "avg_precision@1": 1.0,
+      "max_precision@1": 1.0,
+      "avg_precision@3": 0.6667,
+      "max_precision@3": 0.6667,
+      "avg_precision@5": 0.4,
+      "max_precision@5": 0.4,
+      "avg_precision@10": 0.2,
+      "max_precision@10": 0.2,
+      "avg_precision@20": 0.1,
+      "max_precision@20": 0.1,
+      "avg_mrr": 1.0,
+      "max_mrr": 1.0,
+      "avg_ndcg@1": 1.0,
+      "max_ndcg@1": 1.0,
+      "avg_ndcg@3": 0.9561,
+      "max_ndcg@3": 0.9561,
+      "avg_ndcg@5": 0.892,
+      "max_ndcg@5": 0.892,
+      "avg_ndcg@10": 0.892,
+      "max_ndcg@10": 0.892,
+      "avg_ndcg@20": 0.892,
+      "max_ndcg@20": 0.892,
+      "avg_map": 0.4,
+      "hit_rate@1": 1.0,
+      "hit_rate@3": 1.0,
+      "hit_rate@5": 1.0,
+      "hit_rate@10": 1.0,
+      "hit_rate@20": 1.0,
+      "pairwise_ranking_loss": 0.0,
+      "coverage": 0.4,
+      "count": 1
     },
     "combined": {
-      "count": 1,
-      "avg_recall@5": 0.0,
-      "avg_recall@10": 0.0,
-      "avg_mrr": 0.0,
-      "avg_ndcg@10": 0.0551
+      "avg_recall@1": 0.2,
+      "max_recall@1": 0.2,
+      "avg_recall@3": 0.2,
+      "max_recall@3": 0.2,
+      "avg_recall@5": 0.2,
+      "max_recall@5": 0.2,
+      "avg_recall@10": 0.6,
+      "max_recall@10": 0.6,
+      "avg_recall@20": 0.8,
+      "max_recall@20": 0.8,
+      "avg_precision@1": 1.0,
+      "max_precision@1": 1.0,
+      "avg_precision@3": 0.3333,
+      "max_precision@3": 0.3333,
+      "avg_precision@5": 0.2,
+      "max_precision@5": 0.2,
+      "avg_precision@10": 0.3,
+      "max_precision@10": 0.3,
+      "avg_precision@20": 0.2,
+      "max_precision@20": 0.2,
+      "avg_mrr": 1.0,
+      "max_mrr": 1.0,
+      "avg_ndcg@1": 1.0,
+      "max_ndcg@1": 1.0,
+      "avg_ndcg@3": 0.8785,
+      "max_ndcg@3": 0.8785,
+      "avg_ndcg@5": 0.8196,
+      "max_ndcg@5": 0.8196,
+      "avg_ndcg@10": 0.8701,
+      "max_ndcg@10": 0.8701,
+      "avg_ndcg@20": 0.9022,
+      "max_ndcg@20": 0.9022,
+      "avg_map": 0.3894,
+      "hit_rate@1": 1.0,
+      "hit_rate@3": 1.0,
+      "hit_rate@5": 1.0,
+      "hit_rate@10": 1.0,
+      "hit_rate@20": 1.0,
+      "pairwise_ranking_loss": 0.2857,
+      "coverage": 0.8,
+      "count": 1
     }
   },
   "per_query": [
     {
       "query": "找5年工作经验",
+      "query_type": "years_only",
       "retrieved": [
-        "0d0ce106c131",
-        "t5-resume",
-        "0c0a2519adff",
+        "0a795895e08a",
+        "0f5198167eeb",
         "0a2df74bbc31",
-        "0ac186229aa0",
-        "0dbadf51adb4",
-        "0dedfe53f7ac",
-        "0ebd6cfd45fa",
-        "0d099f8b9a7a",
-        "0a795895e08a"
+        "0c0d1adb4698",
+        "0ba6300a26c5",
+        "0d0ce106c131"
       ],
       "relevant": [
-        [
-          "0a2df74bbc31",
-          1.0
-        ],
-        [
-          "0a795895e08a",
-          0.2
-        ],
-        [
-          "0d0ce106c131",
-          0.2
-        ],
-        [
-          "0f5198167eeb",
-          0.1
-        ]
-      ]
+        {
+          "resume_id": "0a2df74bbc31",
+          "relevance": 1.0,
+          "reasons": [
+            "self"
+          ]
+        },
+        {
+          "resume_id": "0a795895e08a",
+          "relevance": 0.2,
+          "reasons": [
+            "same_city",
+            "similar_years"
+          ]
+        },
+        {
+          "resume_id": "0d0ce106c131",
+          "relevance": 0.2,
+          "reasons": [
+            "same_city",
+            "similar_years"
+          ]
+        },
+        {
+          "resume_id": "0f5198167eeb",
+          "relevance": 0.1,
+          "reasons": [
+            "similar_years"
+          ]
+        }
+      ],
+      "recall@5": 0.75,
+      "recall@10": 1.0,
+      "recall@20": 1.0,
+      "mrr": 1.0,
+      "ndcg@10": 0.6573,
+      "ap": 0.9167,
+      "pairwise_swaps": 3,
+      "pairwise_pairs": 5
     },
     {
       "query": "找5年工作经验",
+      "query_type": "years_only",
       "retrieved": [
-        "0d0ce106c131",
-        "t5-resume",
-        "0c0a2519adff",
+        "0a795895e08a",
+        "0f5198167eeb",
         "0a2df74bbc31",
-        "0ac186229aa0",
-        "0dbadf51adb4",
-        "0dedfe53f7ac",
-        "0ebd6cfd45fa",
-        "0d099f8b9a7a",
-        "0a795895e08a"
+        "0c0d1adb4698",
+        "0ba6300a26c5",
+        "0d0ce106c131"
       ],
       "relevant": [
-        [
-          "0a795895e08a",
-          1.0
-        ],
-        [
-          "0a2df74bbc31",
-          0.2
-        ],
-        [
-          "0d0ce106c131",
-          0.2
-        ],
-        [
-          "0f5198167eeb",
-          0.1
-        ]
-      ]
+        {
+          "resume_id": "0a795895e08a",
+          "relevance": 1.0,
+          "reasons": [
+            "self"
+          ]
+        },
+        {
+          "resume_id": "0a2df74bbc31",
+          "relevance": 0.2,
+          "reasons": [
+            "same_city",
+            "similar_years"
+          ]
+        },
+        {
+          "resume_id": "0d0ce106c131",
+          "relevance": 0.2,
+          "reasons": [
+            "same_city",
+            "similar_years"
+          ]
+        },
+        {
+          "resume_id": "0f5198167eeb",
+          "relevance": 0.1,
+          "reasons": [
+            "similar_years"
+          ]
+        }
+      ],
+      "recall@5": 0.75,
+      "recall@10": 1.0,
+      "recall@20": 1.0,
+      "mrr": 1.0,
+      "ndcg@10": 0.9725,
+      "ap": 0.9167,
+      "pairwise_swaps": 2,
+      "pairwise_pairs": 5
     },
     {
       "query": "找会全国计算机二级(C语言) 大学英语4级（CET4） 信息安全工程师（软考中级）的候选人",
+      "query_type": "skill",
       "retrieved": [
-        "0c8b004b8b4b",
         "0b3915da3907",
         "0e19830f79a6",
+        "0bfdfb5cede0",
+        "0cb1f40caf07",
         "0d099f8b9a7a",
-        "0c9c7d0b1170",
-        "0dbadf51adb4",
+        "0d578da00cfb",
+        "0f5198167eeb",
+        "0d2cce6f0de6",
         "0dedfe53f7ac",
-        "0c0a2519adff",
-        "0ac186229aa0"
+        "0ac186229aa0",
+        "0d6efd507554",
+        "0c0d1adb4698",
+        "0a2df74bbc31"
       ],
       "relevant": [
-        [
-          "0b3915da3907",
-          1.0
-        ],
-        [
-          "0e19830f79a6",
-          0.3
-        ]
-      ]
+        {
+          "resume_id": "0b3915da3907",
+          "relevance": 1.0,
+          "reasons": [
+            "self"
+          ]
+        },
+        {
+          "resume_id": "0e19830f79a6",
+          "relevance": 0.3,
+          "reasons": [
+            "skill_match"
+          ]
+        }
+      ],
+      "recall@5": 1.0,
+      "recall@10": 1.0,
+      "recall@20": 1.0,
+      "mrr": 1.0,
+      "ndcg@10": 1.0,
+      "ap": 1.0,
+      "pairwise_swaps": 0,
+      "pairwise_pairs": 1
     },
     {
       "query": "找会视频拍摄 视频剪辑 特效合成的候选人",
+      "query_type": "skill",
       "retrieved": [
         "0ba6300a26c5",
-        "0c9c7d0b1170",
-        "0d099f8b9a7a",
-        "0ac186229aa0",
-        "0c0a2519adff",
-        "0dedfe53f7ac",
+        "0c0d1adb4698",
         "0dbadf51adb4",
+        "0dedfe53f7ac",
+        "0f5198167eeb",
+        "0a795895e08a",
         "0a2df74bbc31",
-        "t5-resume",
-        "0a795895e08a"
+        "0b3915da3907",
+        "0e19830f79a6",
+        "0d0ce106c131",
+        "0d099f8b9a7a",
+        "0d578da00cfb",
+        "0d2cce6f0de6",
+        "0cd92051a9b6"
       ],
       "relevant": [
-        [
-          "0ba6300a26c5",
-          1.0
-        ]
-      ]
+        {
+          "resume_id": "0ba6300a26c5",
+          "relevance": 1.0,
+          "reasons": [
+            "self"
+          ]
+        }
+      ],
+      "recall@5": 1.0,
+      "recall@10": 1.0,
+      "recall@20": 1.0,
+      "mrr": 1.0,
+      "ndcg@10": 1.0,
+      "ap": 1.0,
+      "pairwise_swaps": 0,
+      "pairwise_pairs": 0
     },
     {
       "query": "找8年以上视频拍摄 视频剪辑 特效合成经验",
+      "query_type": "skill+years",
       "retrieved": [
-        "0c9c7d0b1170",
-        "0cefc2f0cccf",
-        "0c0d1adb4698",
-        "0ebd6cfd45fa",
-        "0d28f1a59e01",
-        "0e338a49c435",
         "0ba6300a26c5",
-        "0f5198167eeb",
-        "0d0ce106c131",
-        "0cb1f40caf07"
+        "0c0d1adb4698"
       ],
       "relevant": [
-        [
-          "0ba6300a26c5",
-          1.0
-        ]
-      ]
+        {
+          "resume_id": "0ba6300a26c5",
+          "relevance": 1.0,
+          "reasons": [
+            "self"
+          ]
+        }
+      ],
+      "recall@5": 1.0,
+      "recall@10": 1.0,
+      "recall@20": 1.0,
+      "mrr": 1.0,
+      "ndcg@10": 1.0,
+      "ap": 1.0,
+      "pairwise_swaps": 0,
+      "pairwise_pairs": 0
     },
     {
       "query": "找8年工作经验",
+      "query_type": "years_only",
       "retrieved": [
-        "0d0ce106c131",
-        "0c0a2519adff",
-        "0a2df74bbc31",
-        "t5-resume",
-        "0ac186229aa0",
-        "0dbadf51adb4",
-        "0dedfe53f7ac",
-        "0ebd6cfd45fa",
-        "0c9c7d0b1170",
-        "0d2cce6f0de6"
+        "0ba6300a26c5",
+        "0c0d1adb4698"
       ],
       "relevant": [
-        [
-          "0ba6300a26c5",
-          1.0
-        ]
-      ]
+        {
+          "resume_id": "0ba6300a26c5",
+          "relevance": 1.0,
+          "reasons": [
+            "self"
+          ]
+        }
+      ],
+      "recall@5": 1.0,
+      "recall@10": 1.0,
+      "recall@20": 1.0,
+      "mrr": 1.0,
+      "ndcg@10": 1.0,
+      "ap": 1.0,
+      "pairwise_swaps": 0,
+      "pairwise_pairs": 0
     },
     {
       "query": "找会Python Java SQL的候选人",
+      "query_type": "skill",
       "retrieved": [
-        "0c0a2519adff",
+        "0a795895e08a",
+        "0f5198167eeb",
+        "0c0d1adb4698",
         "0dbadf51adb4",
-        "0ac186229aa0",
+        "0a2df74bbc31",
         "0d0ce106c131",
         "0dedfe53f7ac",
+        "0ba6300a26c5",
         "0d099f8b9a7a",
-        "0a2df74bbc31",
-        "t5-resume",
-        "0a795895e08a",
-        "0c9c7d0b1170"
+        "0d578da00cfb",
+        "0b3915da3907",
+        "0e19830f79a6",
+        "0bfdfb5cede0",
+        "0cd92051a9b6",
+        "0ac186229aa0",
+        "0cb1f40caf07",
+        "0aee98c8a561"
       ],
       "relevant": [
-        [
-          "0c0d1adb4698",
-          1.0
-        ],
-        [
-          "0f5198167eeb",
-          0.14
-        ]
-      ]
+        {
+          "resume_id": "0c0d1adb4698",
+          "relevance": 1.0,
+          "reasons": [
+            "self"
+          ]
+        },
+        {
+          "resume_id": "0f5198167eeb",
+          "relevance": 0.14,
+          "reasons": [
+            "same_city"
+          ]
+        }
+      ],
+      "recall@5": 1.0,
+      "recall@10": 1.0,
+      "recall@20": 1.0,
+      "mrr": 0.5,
+      "ndcg@10": 0.5406,
+      "ap": 0.5833,
+      "pairwise_swaps": 1,
+      "pairwise_pairs": 1
     },
     {
       "query": "找13年以上Python Java SQL经验",
+      "query_type": "skill+years",
       "retrieved": [
-        "0d0ce106c131",
-        "0e19830f79a6",
-        "t5-resume",
-        "0a2df74bbc31",
-        "0ebd6cfd45fa",
-        "0dedfe53f7ac",
-        "0d6efd507554",
-        "0ac4e25ad645",
-        "0bc0a0dc8a03",
-        "0cefc2f0cccf"
+        "0c0d1adb4698"
       ],
       "relevant": [
-        [
-          "0c0d1adb4698",
-          1.0
-        ],
-        [
-          "0f5198167eeb",
-          0.14
-        ]
-      ]
+        {
+          "resume_id": "0c0d1adb4698",
+          "relevance": 1.0,
+          "reasons": [
+            "self"
+          ]
+        },
+        {
+          "resume_id": "0f5198167eeb",
+          "relevance": 0.14,
+          "reasons": [
+            "same_city"
+          ]
+        }
+      ],
+      "recall@5": 0.5,
+      "recall@10": 0.5,
+      "recall@20": 0.5,
+      "mrr": 1.0,
+      "ndcg@10": 0.9188,
+      "ap": 0.5,
+      "pairwise_swaps": 0,
+      "pairwise_pairs": 1
     },
     {
       "query": "找13年工作经验",
+      "query_type": "years_only",
       "retrieved": [
-        "0d0ce106c131",
-        "t5-resume",
-        "0c0a2519adff",
-        "0a2df74bbc31",
-        "0ac186229aa0",
-        "0dedfe53f7ac",
-        "0dbadf51adb4",
-        "0ebd6cfd45fa",
-        "0b5233e7a638",
-        "0bc0a0dc8a03"
+        "0c0d1adb4698"
       ],
       "relevant": [
-        [
-          "0c0d1adb4698",
-          1.0
-        ],
-        [
-          "0f5198167eeb",
-          0.14
-        ]
-      ]
+        {
+          "resume_id": "0c0d1adb4698",
+          "relevance": 1.0,
+          "reasons": [
+            "self"
+          ]
+        },
+        {
+          "resume_id": "0f5198167eeb",
+          "relevance": 0.14,
+          "reasons": [
+            "same_city"
+          ]
+        }
+      ],
+      "recall@5": 0.5,
+      "recall@10": 0.5,
+      "recall@20": 0.5,
+      "mrr": 1.0,
+      "ndcg@10": 0.9188,
+      "ap": 0.5,
+      "pairwise_swaps": 0,
+      "pairwise_pairs": 1
     },
     {
       "query": "找会全国计算机等级考试 数据库简单维护 软件开发工程师证的候选人",
+      "query_type": "skill",
       "retrieved": [
         "0d099f8b9a7a",
-        "0c8b004b8b4b",
+        "0d578da00cfb",
         "0b3915da3907",
         "0e19830f79a6",
-        "0c0a2519adff",
-        "0dbadf51adb4",
-        "0ac186229aa0",
+        "0bfdfb5cede0",
         "0dedfe53f7ac",
-        "0d0ce106c131",
-        "t5-resume"
+        "0cb1f40caf07",
+        "0c0d1adb4698",
+        "0ac186229aa0",
+        "0a795895e08a",
+        "0d6efd507554",
+        "0f5198167eeb",
+        "0a2df74bbc31",
+        "0cd92051a9b6"
       ],
       "relevant": [
-        [
-          "0d099f8b9a7a",
-          1.0
-        ],
-        [
-          "0d578da00cfb",
-          0.3
-        ]
-      ]
+        {
+          "resume_id": "0d099f8b9a7a",
+          "relevance": 1.0,
+          "reasons": [
+            "self"
+          ]
+        },
+        {
+          "resume_id": "0d578da00cfb",
+          "relevance": 0.3,
+          "reasons": [
+            "skill_match"
+          ]
+        }
+      ],
+      "recall@5": 1.0,
+      "recall@10": 1.0,
+      "recall@20": 1.0,
+      "mrr": 1.0,
+      "ndcg@10": 1.0,
+      "ap": 1.0,
+      "pairwise_swaps": 0,
+      "pairwise_pairs": 1
     },
     {
       "query": "找5年工作经验",
+      "query_type": "years_only",
       "retrieved": [
-        "0d0ce106c131",
-        "t5-resume",
-        "0c0a2519adff",
+        "0a795895e08a",
+        "0f5198167eeb",
         "0a2df74bbc31",
-        "0ac186229aa0",
-        "0dbadf51adb4",
-        "0dedfe53f7ac",
-        "0ebd6cfd45fa",
-        "0d099f8b9a7a",
-        "0a795895e08a"
+        "0c0d1adb4698",
+        "0ba6300a26c5",
+        "0d0ce106c131"
       ],
       "relevant": [
-        [
-          "0d0ce106c131",
-          1.0
-        ],
-        [
-          "0a2df74bbc31",
-          0.2
-        ],
-        [
-          "0a795895e08a",
-          0.2
-        ],
-        [
-          "0f5198167eeb",
-          0.1
-        ]
-      ]
+        {
+          "resume_id": "0d0ce106c131",
+          "relevance": 1.0,
+          "reasons": [
+            "self"
+          ]
+        },
+        {
+          "resume_id": "0a2df74bbc31",
+          "relevance": 0.2,
+          "reasons": [
+            "same_city",
+            "similar_years"
+          ]
+        },
+        {
+          "resume_id": "0a795895e08a",
+          "relevance": 0.2,
+          "reasons": [
+            "same_city",
+            "similar_years"
+          ]
+        },
+        {
+          "resume_id": "0f5198167eeb",
+          "relevance": 0.1,
+          "reasons": [
+            "similar_years"
+          ]
+        }
+      ],
+      "recall@5": 0.75,
+      "recall@10": 1.0,
+      "recall@20": 1.0,
+      "mrr": 1.0,
+      "ndcg@10": 0.5667,
+      "ap": 0.9167,
+      "pairwise_swaps": 4,
+      "pairwise_pairs": 5
     },
     {
       "query": "找会全国计算机等级考试 数据库简单维护 软件开发工程师证的候选人",
+      "query_type": "skill",
       "retrieved": [
         "0d099f8b9a7a",
-        "0c8b004b8b4b",
+        "0d578da00cfb",
         "0b3915da3907",
         "0e19830f79a6",
-        "0c0a2519adff",
-        "0dbadf51adb4",
-        "0ac186229aa0",
+        "0bfdfb5cede0",
         "0dedfe53f7ac",
-        "0d0ce106c131",
-        "t5-resume"
+        "0cb1f40caf07",
+        "0c0d1adb4698",
+        "0ac186229aa0",
+        "0a795895e08a",
+        "0d6efd507554",
+        "0f5198167eeb",
+        "0a2df74bbc31",
+        "0cd92051a9b6"
       ],
       "relevant": [
-        [
-          "0d578da00cfb",
-          1.0
-        ],
-        [
-          "0d099f8b9a7a",
-          0.3
-        ]
-      ]
+        {
+          "resume_id": "0d578da00cfb",
+          "relevance": 1.0,
+          "reasons": [
+            "self"
+          ]
+        },
+        {
+          "resume_id": "0d099f8b9a7a",
+          "relevance": 0.3,
+          "reasons": [
+            "skill_match"
+          ]
+        }
+      ],
+      "recall@5": 1.0,
+      "recall@10": 1.0,
+      "recall@20": 1.0,
+      "mrr": 1.0,
+      "ndcg@10": 0.7828,
+      "ap": 1.0,
+      "pairwise_swaps": 1,
+      "pairwise_pairs": 1
     },
     {
       "query": "找2年工作经验",
+      "query_type": "years_only",
       "retrieved": [
-        "0c0a2519adff",
-        "0d099f8b9a7a",
-        "0d0ce106c131",
         "0dbadf51adb4",
-        "0a2df74bbc31",
-        "t5-resume",
-        "0ac186229aa0",
         "0dedfe53f7ac",
-        "0ebd6cfd45fa",
-        "0e19830f79a6"
+        "0c0d1adb4698",
+        "0ba6300a26c5",
+        "0a795895e08a",
+        "0f5198167eeb",
+        "0a2df74bbc31",
+        "0d0ce106c131"
       ],
       "relevant": [
-        [
-          "0dbadf51adb4",
-          1.0
-        ],
-        [
-          "0dedfe53f7ac",
-          0.1
-        ]
-      ]
+        {
+          "resume_id": "0dbadf51adb4",
+          "relevance": 1.0,
+          "reasons": [
+            "self"
+          ]
+        },
+        {
+          "resume_id": "0dedfe53f7ac",
+          "relevance": 0.1,
+          "reasons": [
+            "similar_years"
+          ]
+        }
+      ],
+      "recall@5": 1.0,
+      "recall@10": 1.0,
+      "recall@20": 1.0,
+      "mrr": 1.0,
+      "ndcg@10": 1.0,
+      "ap": 1.0,
+      "pairwise_swaps": 0,
+      "pairwise_pairs": 1
     },
     {
       "query": "找2年工作经验",
+      "query_type": "years_only",
       "retrieved": [
-        "0c0a2519adff",
-        "0d099f8b9a7a",
-        "0d0ce106c131",
         "0dbadf51adb4",
-        "0a2df74bbc31",
-        "t5-resume",
-        "0ac186229aa0",
         "0dedfe53f7ac",
-        "0ebd6cfd45fa",
-        "0e19830f79a6"
+        "0c0d1adb4698",
+        "0ba6300a26c5",
+        "0a795895e08a",
+        "0f5198167eeb",
+        "0a2df74bbc31",
+        "0d0ce106c131"
       ],
       "relevant": [
-        [
-          "0dedfe53f7ac",
-          1.0
-        ],
-        [
-          "0dbadf51adb4",
-          0.1
-        ]
-      ]
+        {
+          "resume_id": "0dedfe53f7ac",
+          "relevance": 1.0,
+          "reasons": [
+            "self"
+          ]
+        },
+        {
+          "resume_id": "0dbadf51adb4",
+          "relevance": 0.1,
+          "reasons": [
+            "similar_years"
+          ]
+        }
+      ],
+      "recall@5": 1.0,
+      "recall@10": 1.0,
+      "recall@20": 1.0,
+      "mrr": 1.0,
+      "ndcg@10": 0.6876,
+      "ap": 1.0,
+      "pairwise_swaps": 1,
+      "pairwise_pairs": 1
     },
     {
       "query": "找会全国计算机二级(C语言) 大学英语4级（CET4） 信息安全工程师（软考中级）的候选人",
+      "query_type": "skill",
       "retrieved": [
-        "0c8b004b8b4b",
         "0b3915da3907",
         "0e19830f79a6",
+        "0bfdfb5cede0",
+        "0cb1f40caf07",
         "0d099f8b9a7a",
-        "0c9c7d0b1170",
-        "0dbadf51adb4",
+        "0d578da00cfb",
+        "0f5198167eeb",
+        "0d2cce6f0de6",
         "0dedfe53f7ac",
-        "0c0a2519adff",
-        "0ac186229aa0"
+        "0ac186229aa0",
+        "0d6efd507554",
+        "0c0d1adb4698",
+        "0a2df74bbc31"
       ],
       "relevant": [
-        [
-          "0e19830f79a6",
-          1.0
-        ],
-        [
-          "0b3915da3907",
-          0.3
-        ]
-      ]
+        {
+          "resume_id": "0e19830f79a6",
+          "relevance": 1.0,
+          "reasons": [
+            "self"
+          ]
+        },
+        {
+          "resume_id": "0b3915da3907",
+          "relevance": 0.3,
+          "reasons": [
+            "skill_match"
+          ]
+        }
+      ],
+      "recall@5": 1.0,
+      "recall@10": 1.0,
+      "recall@20": 1.0,
+      "mrr": 1.0,
+      "ndcg@10": 0.7828,
+      "ap": 1.0,
+      "pairwise_swaps": 1,
+      "pairwise_pairs": 1
     },
     {
       "query": "找高级工程师",
+      "query_type": "job_title",
       "retrieved": [
-        "0d0ce106c131",
-        "0c0a2519adff",
-        "0c9c7d0b1170",
-        "0ac186229aa0",
         "0d099f8b9a7a",
-        "0dedfe53f7ac",
+        "0ba6300a26c5",
         "0b3915da3907",
-        "0c8b004b8b4b",
-        "0dbadf51adb4",
-        "t5-resume"
-      ],
-      "relevant": [
-        [
-          "0f5198167eeb",
-          1.0
-        ],
-        [
-          "0c0d1adb4698",
-          0.14
-        ],
-        [
-          "0a2df74bbc31",
-          0.1
-        ],
-        [
-          "0a795895e08a",
-          0.1
-        ],
-        [
-          "0d0ce106c131",
-          0.1
-        ]
-      ]
-    },
-    {
-      "query": "找北京的高级工程师",
-      "retrieved": [
-        "0d0ce106c131",
-        "0c0a2519adff",
-        "0bfdfb5cede0",
+        "0a795895e08a",
+        "0e19830f79a6",
         "0ac186229aa0",
-        "0c9c7d0b1170",
+        "0dbadf51adb4",
+        "0f5198167eeb",
+        "0d0ce106c131",
+        "0a2df74bbc31",
         "0dedfe53f7ac",
+        "0d578da00cfb",
         "0d6efd507554",
         "0cb1f40caf07",
         "0cd92051a9b6",
-        "0d099f8b9a7a"
+        "0c0d1adb4698"
       ],
       "relevant": [
-        [
-          "0f5198167eeb",
-          1.0
-        ],
-        [
-          "0c0d1adb4698",
-          0.14
-        ],
-        [
-          "0a2df74bbc31",
-          0.1
-        ],
-        [
-          "0a795895e08a",
-          0.1
-        ],
-        [
-          "0d0ce106c131",
-          0.1
-        ]
-      ]
+        {
+          "resume_id": "0f5198167eeb",
+          "relevance": 1.0,
+          "reasons": [
+            "self"
+          ]
+        },
+        {
+          "resume_id": "0c0d1adb4698",
+          "relevance": 0.14,
+          "reasons": [
+            "same_city"
+          ]
+        },
+        {
+          "resume_id": "0a2df74bbc31",
+          "relevance": 0.1,
+          "reasons": [
+            "similar_years"
+          ]
+        },
+        {
+          "resume_id": "0a795895e08a",
+          "relevance": 0.1,
+          "reasons": [
+            "similar_years"
+          ]
+        },
+        {
+          "resume_id": "0d0ce106c131",
+          "relevance": 0.1,
+          "reasons": [
+            "similar_years"
+          ]
+        }
+      ],
+      "recall@5": 0.2,
+      "recall@10": 0.8,
+      "recall@20": 1.0,
+      "mrr": 0.25,
+      "ndcg@10": 0.3422,
+      "ap": 0.3092,
+      "pairwise_swaps": 4,
+      "pairwise_pairs": 7
+    },
+    {
+      "query": "找北京的高级工程师",
+      "query_type": "job_title+city",
+      "retrieved": [
+        "0f5198167eeb",
+        "0c0d1adb4698"
+      ],
+      "relevant": [
+        {
+          "resume_id": "0f5198167eeb",
+          "relevance": 1.0,
+          "reasons": [
+            "self"
+          ]
+        },
+        {
+          "resume_id": "0c0d1adb4698",
+          "relevance": 0.14,
+          "reasons": [
+            "same_city"
+          ]
+        },
+        {
+          "resume_id": "0a2df74bbc31",
+          "relevance": 0.1,
+          "reasons": [
+            "similar_years"
+          ]
+        },
+        {
+          "resume_id": "0a795895e08a",
+          "relevance": 0.1,
+          "reasons": [
+            "similar_years"
+          ]
+        },
+        {
+          "resume_id": "0d0ce106c131",
+          "relevance": 0.1,
+          "reasons": [
+            "similar_years"
+          ]
+        }
+      ],
+      "recall@5": 0.4,
+      "recall@10": 0.4,
+      "recall@20": 0.4,
+      "mrr": 1.0,
+      "ndcg@10": 0.892,
+      "ap": 0.4,
+      "pairwise_swaps": 0,
+      "pairwise_pairs": 7
     },
     {
       "query": "找会Java Spring Boot MySQL的候选人",
+      "query_type": "skill",
       "retrieved": [
-        "0dedfe53f7ac",
-        "0d099f8b9a7a",
-        "0c0a2519adff",
+        "0f5198167eeb",
         "0dbadf51adb4",
-        "0ac186229aa0",
+        "0c0d1adb4698",
         "0a2df74bbc31",
-        "t5-resume",
+        "0ba6300a26c5",
+        "0dedfe53f7ac",
+        "0a795895e08a",
+        "0ac186229aa0",
+        "0cd92051a9b6",
+        "0d099f8b9a7a",
+        "0d578da00cfb",
+        "0b3915da3907",
         "0d0ce106c131",
-        "0a8de09be1dc",
-        "0e9182529e95"
+        "0e19830f79a6",
+        "0cb1f40caf07",
+        "0aee98c8a561"
       ],
       "relevant": [
-        [
-          "0f5198167eeb",
-          1.0
-        ],
-        [
-          "0c0d1adb4698",
-          0.14
-        ],
-        [
-          "0a2df74bbc31",
-          0.1
-        ],
-        [
-          "0a795895e08a",
-          0.1
-        ],
-        [
-          "0d0ce106c131",
-          0.1
-        ]
-      ]
+        {
+          "resume_id": "0f5198167eeb",
+          "relevance": 1.0,
+          "reasons": [
+            "self"
+          ]
+        },
+        {
+          "resume_id": "0c0d1adb4698",
+          "relevance": 0.14,
+          "reasons": [
+            "same_city"
+          ]
+        },
+        {
+          "resume_id": "0a2df74bbc31",
+          "relevance": 0.1,
+          "reasons": [
+            "similar_years"
+          ]
+        },
+        {
+          "resume_id": "0a795895e08a",
+          "relevance": 0.1,
+          "reasons": [
+            "similar_years"
+          ]
+        },
+        {
+          "resume_id": "0d0ce106c131",
+          "relevance": 0.1,
+          "reasons": [
+            "similar_years"
+          ]
+        }
+      ],
+      "recall@5": 0.6,
+      "recall@10": 0.8,
+      "recall@20": 1.0,
+      "mrr": 1.0,
+      "ndcg@10": 0.9396,
+      "ap": 0.6745,
+      "pairwise_swaps": 0,
+      "pairwise_pairs": 7
     },
     {
       "query": "找5年以上Java Spring Boot MySQL经验",
+      "query_type": "skill+years",
       "retrieved": [
-        "0ebd6cfd45fa",
-        "0e19830f79a6",
-        "0d0ce106c131",
-        "t5-resume",
+        "0ba6300a26c5",
+        "0f5198167eeb",
         "0a2df74bbc31",
-        "0d6efd507554",
-        "0ac186229aa0",
-        "0c9c7d0b1170",
-        "0cd92051a9b6",
-        "0e9182529e95"
+        "0c0d1adb4698",
+        "0a795895e08a",
+        "0d0ce106c131"
       ],
       "relevant": [
-        [
-          "0f5198167eeb",
-          1.0
-        ],
-        [
-          "0c0d1adb4698",
-          0.14
-        ],
-        [
-          "0a2df74bbc31",
-          0.1
-        ],
-        [
-          "0a795895e08a",
-          0.1
-        ],
-        [
-          "0d0ce106c131",
-          0.1
-        ]
-      ]
+        {
+          "resume_id": "0f5198167eeb",
+          "relevance": 1.0,
+          "reasons": [
+            "self"
+          ]
+        },
+        {
+          "resume_id": "0c0d1adb4698",
+          "relevance": 0.14,
+          "reasons": [
+            "same_city"
+          ]
+        },
+        {
+          "resume_id": "0a2df74bbc31",
+          "relevance": 0.1,
+          "reasons": [
+            "similar_years"
+          ]
+        },
+        {
+          "resume_id": "0a795895e08a",
+          "relevance": 0.1,
+          "reasons": [
+            "similar_years"
+          ]
+        },
+        {
+          "resume_id": "0d0ce106c131",
+          "relevance": 0.1,
+          "reasons": [
+            "similar_years"
+          ]
+        }
+      ],
+      "recall@5": 0.8,
+      "recall@10": 1.0,
+      "recall@20": 1.0,
+      "mrr": 0.5,
+      "ndcg@10": 0.6684,
+      "ap": 0.71,
+      "pairwise_swaps": 1,
+      "pairwise_pairs": 7
     },
     {
       "query": "找高级工程师 要求Java Spring Boot",
+      "query_type": "combined",
       "retrieved": [
-        "0d099f8b9a7a",
-        "0c0a2519adff",
-        "0c9c7d0b1170",
+        "0f5198167eeb",
+        "0ba6300a26c5",
+        "0cb1f40caf07",
         "0b3915da3907",
-        "0dedfe53f7ac",
+        "0ac186229aa0",
+        "0dbadf51adb4",
+        "0e19830f79a6",
         "0a795895e08a",
-        "t5-resume",
-        "0a2df74bbc31",
-        "0ac186229aa0"
+        "0d0ce106c131",
+        "0dedfe53f7ac",
+        "0c0d1adb4698",
+        "0d6efd507554",
+        "0d099f8b9a7a",
+        "0d578da00cfb",
+        "0cd92051a9b6"
       ],
       "relevant": [
-        [
-          "0f5198167eeb",
-          1.0
-        ],
-        [
-          "0c0d1adb4698",
-          0.14
-        ],
-        [
-          "0a2df74bbc31",
-          0.1
-        ],
-        [
-          "0a795895e08a",
-          0.1
-        ],
-        [
-          "0d0ce106c131",
-          0.1
-        ]
-      ]
+        {
+          "resume_id": "0f5198167eeb",
+          "relevance": 1.0,
+          "reasons": [
+            "self"
+          ]
+        },
+        {
+          "resume_id": "0c0d1adb4698",
+          "relevance": 0.14,
+          "reasons": [
+            "same_city"
+          ]
+        },
+        {
+          "resume_id": "0a2df74bbc31",
+          "relevance": 0.1,
+          "reasons": [
+            "similar_years"
+          ]
+        },
+        {
+          "resume_id": "0a795895e08a",
+          "relevance": 0.1,
+          "reasons": [
+            "similar_years"
+          ]
+        },
+        {
+          "resume_id": "0d0ce106c131",
+          "relevance": 0.1,
+          "reasons": [
+            "similar_years"
+          ]
+        }
+      ],
+      "recall@5": 0.2,
+      "recall@10": 0.6,
+      "recall@20": 0.8,
+      "mrr": 1.0,
+      "ndcg@10": 0.8701,
+      "ap": 0.3894,
+      "pairwise_swaps": 2,
+      "pairwise_pairs": 7
+    },
+    {
+      "query": "找5年工作经验",
+      "query_type": "years_only",
+      "retrieved": [
+        "0a795895e08a",
+        "0f5198167eeb",
+        "0a2df74bbc31",
+        "0c0d1adb4698",
+        "0ba6300a26c5",
+        "0d0ce106c131"
+      ],
+      "relevant": [
+        {
+          "resume_id": "0f5198167eeb",
+          "relevance": 1.0,
+          "reasons": [
+            "self"
+          ]
+        },
+        {
+          "resume_id": "0c0d1adb4698",
+          "relevance": 0.14,
+          "reasons": [
+            "same_city"
+          ]
+        },
+        {
+          "resume_id": "0a2df74bbc31",
+          "relevance": 0.1,
+          "reasons": [
+            "similar_years"
+          ]
+        },
+        {
+          "resume_id": "0a795895e08a",
+          "relevance": 0.1,
+          "reasons": [
+            "similar_years"
+          ]
+        },
+        {
+          "resume_id": "0d0ce106c131",
+          "relevance": 0.1,
+          "reasons": [
+            "similar_years"
+          ]
+        }
+      ],
+      "recall@5": 0.8,
+      "recall@10": 1.0,
+      "recall@20": 1.0,
+      "mrr": 1.0,
+      "ndcg@10": 0.7187,
+      "ap": 0.9667,
+      "pairwise_swaps": 3,
+      "pairwise_pairs": 7
     }
   ]
 }

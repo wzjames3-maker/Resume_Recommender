@@ -55,6 +55,12 @@ services:
     environment:
       - PYTHONPATH=/app
       - API_BASE_URL=http://app:8000/api/v1
+      - MONGODB_URL=mongodb://${MONGODB_USER:-admin}:${MONGODB_PASSWORD:-password}@mongodb:27017/resume_rag?authSource=admin
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - REDIS_PASSWORD=${REDIS_PASSWORD:-password}
+      - MILVUS_HOST=milvus-standalone
+      - MILVUS_PORT=19530
     volumes:
       - ./src:/app/src
       - ./.streamlit:/app/.streamlit
