@@ -18,7 +18,6 @@ from rest_framework import serializers
 
 from local_model.models import Model
 from local_model.serializers.rsa_util import rsa_long_decrypt
-from models_provider.impl.local_model_provider.local_model_provider import LocalModelProvider
 
 from common.cache.mem_cache import MemCache
 
@@ -74,6 +73,8 @@ class ModelManage:
 
 
 def get_local_model(model, **kwargs):
+    from models_provider.impl.local_model_provider.local_model_provider import LocalModelProvider
+
     return LocalModelProvider().get_model(model.model_type, model.model_name,
                                           json.loads(
                                               rsa_long_decrypt(model.credential)),
@@ -120,6 +121,8 @@ class ValidateModelSerializers(serializers.Serializer):
     def validate_model(self, with_valid=True):
         if with_valid:
             self.is_valid(raise_exception=True)
+        from models_provider.impl.local_model_provider.local_model_provider import LocalModelProvider
+
         LocalModelProvider().is_valid_credential(self.data.get('model_type'), self.data.get('model_name'),
                                                  self.data.get('model_credential'), model_params={},
                                                  raise_exception=True)

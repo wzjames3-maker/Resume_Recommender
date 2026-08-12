@@ -3,8 +3,12 @@ import os
 import re
 import shlex
 
-from deepagents.backends import LocalShellBackend
-from deepagents.backends.protocol import ExecuteResponse
+try:
+    from deepagents.backends import LocalShellBackend
+    from deepagents.backends.protocol import ExecuteResponse
+except ImportError:  # deepagents 已裁剪：模块仍可加载，仅 agent 编排功能不可用
+    LocalShellBackend = object
+    ExecuteResponse = None
 
 from common.utils.logger import maxkb_logger
 from maxkb.const import CONFIG
@@ -293,6 +297,8 @@ class SandboxShellBackend(LocalShellBackend):
         *,
         timeout: int | None = None,
     ) -> ExecuteResponse:
+        if ExecuteResponse is None:
+            raise RuntimeError("deepagents 已裁剪，sandbox 执行不可用")
         if self.virtual_mode:
             command = self._translate_virtual_paths(command)
 

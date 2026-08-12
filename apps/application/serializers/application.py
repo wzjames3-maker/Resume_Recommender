@@ -51,7 +51,6 @@ from django.utils.translation import gettext_lazy as _
 from knowledge.models import File, FileSourceType, Knowledge, KnowledgeScope
 from knowledge.serializers.common import BatchMoveSerializer, BatchSerializer
 from knowledge.serializers.knowledge import KnowledgeModelSerializer, KnowledgeSerializer
-from langchain_mcp_adapters.client import MultiServerMCPClient
 from maxkb.conf import PROJECT_DIR
 from maxkb.const import CONFIG
 from models_provider.models import Model
@@ -1075,6 +1074,8 @@ class PlayDemoTextRequest(serializers.Serializer):
 
 
 async def get_mcp_tools(servers):
+    from langchain_mcp_adapters.client import MultiServerMCPClient
+
     client = MultiServerMCPClient(servers)
     return await client.get_tools()
 

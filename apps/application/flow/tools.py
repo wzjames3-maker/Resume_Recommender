@@ -37,7 +37,6 @@ import uuid_utils.compat as uuid
 from asgiref.sync import sync_to_async
 from common.result import result
 from common.utils.logger import maxkb_logger
-from deepagents import create_deep_agent
 from django.db.models import OuterRef, QuerySet, Subquery
 from django.http import StreamingHttpResponse
 from knowledge.models import File
@@ -45,8 +44,6 @@ from knowledge.models.knowledge_action import State
 from langchain_core.messages import AIMessageChunk, BaseMessage, BaseMessageChunk, ToolMessage
 from langchain_core.tools import StructuredTool
 from langchain_core.utils._merge import merge_lists as _original_merge_lists
-from langchain_mcp_adapters.client import MultiServerMCPClient
-from langgraph.checkpoint.memory import MemorySaver
 from maxkb.const import CONFIG
 from pydantic import Field, create_model
 from tools.models import Tool, ToolRecord, ToolScope, ToolType, ToolWorkflowVersion
@@ -435,6 +432,8 @@ async def _initialize_skills(mcp_servers, temp_dir):
 
         os.system("chmod -R g+rx " + temp_dir)  # 确保技能目录可访问
 
+    from langchain_mcp_adapters.client import MultiServerMCPClient
+
     client = MultiServerMCPClient(mcp_config)
 
     return client
@@ -454,6 +453,8 @@ async def _yield_mcp_response(
     extra_tools=None,
 ):
     try:
+        from langgraph.checkpoint.memory import MemorySaver
+
         checkpointer = MemorySaver()
         client = await _initialize_skills(mcp_servers, temp_dir)
         tools = await client.get_tools()
@@ -462,6 +463,8 @@ async def _yield_mcp_response(
         if extra_tools:
             for tool in extra_tools:
                 tools.append(tool)
+
+        from deepagents import create_deep_agent
 
         agent = create_deep_agent(
             model=chat_model,

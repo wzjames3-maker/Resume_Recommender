@@ -36,7 +36,6 @@ from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
 from knowledge.models import File, FileSourceType, Knowledge
 from langchain_core.messages import AIMessage, HumanMessage
-from langchain_mcp_adapters.client import MultiServerMCPClient
 from maxkb.const import CONFIG, PROJECT_DIR
 from models_provider.models import Model
 from rest_framework import serializers, status
@@ -158,6 +157,8 @@ def encryption(message: str):
 
 def validate_mcp_config(servers: Dict):
     async def validate():
+        from langchain_mcp_adapters.client import MultiServerMCPClient
+
         client = MultiServerMCPClient(servers)
         await client.get_tools()
 

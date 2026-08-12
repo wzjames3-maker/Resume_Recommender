@@ -4,7 +4,6 @@ import json
 from typing import List
 
 from django.db.models import QuerySet
-from langchain_mcp_adapters.client import MultiServerMCPClient
 
 from application.flow.i_step_node import NodeResult
 from application.flow.step_node.mcp_node.i_mcp_node import IMcpNode
@@ -46,6 +45,8 @@ class BaseMcpNode(IMcpNode):
         params = self.handle_variables(params)
 
         async def call_tool(t, a):
+            from langchain_mcp_adapters.client import MultiServerMCPClient
+
             client = MultiServerMCPClient(servers)
             async with client.session(mcp_server) as s:
                 return await s.call_tool(t, a)
