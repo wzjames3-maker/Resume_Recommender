@@ -91,3 +91,36 @@ pnpm exec vite build
 pnpm exec vite build --mode chat
 pnpm exec eslint .
 ```
+
+---
+
+## 审查修复阶段验收记录（2026-08-13 补充）
+
+执行环境：`.worktrees/slim-local-core`（`slim-local-core` 分支），docker `pgvector/pgvector:pg16`（127.0.0.1:5432）。
+
+### 验收命令与结果
+
+| 命令 | 结果 |
+|------|------|
+| `compileall -q apps main.py` | PASS |
+| `manage.py check` | System check identified no issues (0 silenced) |
+| `manage.py makemigrations --check --dry-run` | No changes detected |
+| `manage.py test application.tests knowledge.tests models_provider.tests --keepdb` | 12/12 PASS |
+| `ui: node scripts/check-local-core-surface.mjs` | PASS |
+| `ui: vue-tsc --build` | PASS |
+| `ui: vite build` / `vite build --mode chat` | PASS；产物无 `/workflow|/mcp_tools|/text_to_speech|/speech_to_text|/play_demo_text` |
+| Provider 注册表 | 仅 `model_openai_provider` |
+
+### v2 → 精简内核升级演练（隔离库 maxkb_v2，PostgreSQL 16 + pgvector）
+
+准备：从已迁移 schema 克隆库 → 回滚 `application.0015` / `knowledge.0012` / `models_provider.0002`（noop 反向）→
+按 v2 状态注入数据（`model_local_provider`/`model_deepseek_provider` 模型、已发布 `WORK_FLOW` 应用与版本、
+`type=4` 工作流知识库、`trigger:fake-1` 与 `clean_chat_log` APScheduler job）→ 重放迁移。
+
+| 验证项 | 结果 |
+|--------|------|
+| `model` 表旧 Provider | 均为 `ERROR`，`meta.disabled_reason=provider_removed_by_local_core` |
+| `application` 表 `type=WORK_FLOW` | `is_publish=false`；聊天/调试入口抛 `ChatException`（not supported） |
+| `knowledge` 表 `type=4` | `meta.disabled_reason=workflow_knowledge_removed_by_local_core`；Operate/HitTest 抛 400 |
+| `django_apscheduler_djangojob` | `trigger:*` 在 scheduler import 时被清理；`clean_chat_log` 保留 |
+| `get_provider('model_local_provider')` | `AppApiException`，消息含 provider 名，无裸 `KeyError` |
