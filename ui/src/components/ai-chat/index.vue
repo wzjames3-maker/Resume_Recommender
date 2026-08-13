@@ -157,13 +157,6 @@
               </div>
             </template>
           </el-checkbox-group>
-          <TransitionContent
-            v-if="transcribing"
-            :text="t('aiChat.inputPlaceholder.recorderLoading')"
-            :type="type"
-            :application="applicationDetails"
-          >
-          </TransitionContent>
         </div>
       </el-scrollbar>
       <div style="position: relative">
@@ -249,7 +242,6 @@ import { debounce } from 'lodash'
 import { useElementSize } from '@vueuse/core'
 import AnswerContent from '@/components/ai-chat/component/answer-content/index.vue'
 import QuestionContent from '@/components/ai-chat/component/question-content/index.vue'
-import TransitionContent from '@/components/ai-chat/component/transition-content/index.vue'
 import ChatInputOperate from '@/components/ai-chat/component/chat-input-operate/index.vue'
 import PrologueContent from '@/components/ai-chat/component/prologue-content/index.vue'
 import UserForm from '@/components/ai-chat/component/user-form/index.vue'
@@ -284,7 +276,6 @@ provide('chatUserProfile', () => {
   return Promise.resolve(null)
 })
 
-const transcribing = ref<boolean>(false)
 defineOptions({ name: 'AiChat' })
 const route = useRoute()
 const {
@@ -917,14 +908,6 @@ onMounted(() => {
   )
 
   window.sendMessage = sendMessage
-  bus.on('on:transcribing', (status: boolean) => {
-    transcribing.value = status
-    nextTick(() => {
-      if (scorll.value) {
-        scrollDiv.value.setScrollTop(getMaxHeight())
-      }
-    })
-  })
   bus.on('click:share', (id: string) => {
     multipleSelectionChat.value.push(id)
     checkAll.value = multipleSelectionChat.value.length === chatList.value.length

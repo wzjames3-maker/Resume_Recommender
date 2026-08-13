@@ -141,24 +141,6 @@
                   <AppIcon iconName="app-share"></AppIcon>
                 </el-button>
               </el-tooltip>
-              <el-dropdown class="ml-8" v-if="!showSelection">
-                <el-button text>
-                  <AppIcon iconName="app-export" :title="$t('aiChat.exportRecords')"></AppIcon>
-                </el-button>
-                <template #dropdown>
-                  <el-dropdown-menu>
-                    <el-dropdown-item @click="exportMarkdown"
-                      >{{ $t('common.export') }} Markdown</el-dropdown-item
-                    >
-                    <el-dropdown-item @click="exportHTML"
-                      >{{ $t('common.export') }} HTML</el-dropdown-item
-                    >
-                    <el-dropdown-item @click="openPDFExport"
-                      >{{ $t('common.export') }} PDF</el-dropdown-item
-                    >
-                  </el-dropdown-menu>
-                </template>
-              </el-dropdown>
             </span>
           </div>
           <div class="right-height chat-width">
@@ -241,15 +223,11 @@
       emitConfirm
       @confirm="handleResetPassword"
     ></ResetPassword>
-    <PdfExport ref="pdfExportRef"></PdfExport>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, nextTick, onMounted, provide, ref } from 'vue'
-import { marked } from 'marked'
-import { saveAs } from 'file-saver'
-import sanitizeHtml from 'sanitize-html'
 import chatAPI from '@/api/chat/chat'
 import useStore from '@/stores'
 import useResize from '@/layout/hooks/useResize'
@@ -265,19 +243,14 @@ import HistoryPanel from '@/views/chat/component/HistoryPanel.vue'
 import { ChatManagement } from '@/api/type/application'
 import { cloneDeep } from 'lodash'
 import { getFileUrl } from '@/utils/common'
-import PdfExport from '@/components/pdf-export/index.vue'
 import JSEncrypt from 'jsencrypt'
 
 useResize()
 
 provide('scrollData', loadInfiniteScroll)
 provide('chatLogPagination', () => chatLogPagination)
-const pdfExportRef = ref<InstanceType<typeof PdfExport>>()
 const { common, chatUser } = useStore()
 const router = useRouter()
-const openPDFExport = () => {
-  pdfExportRef.value?.open(document.getElementById('chatListId'))
-}
 const route = useRoute()
 const isPcCollapse = ref(false)
 // watch(
@@ -524,91 +497,6 @@ function refresh(id: string) {
   chatLogPagination.value.current_page = 1
   chatLogData.value = []
   getChatLog(true)
-}
-
-async function exportMarkdown(): Promise<void> {
-  const suggestedName: string = `${currentChatId.value}.md`
-  const markdownContent: string = currentRecordList.value
-    .map((record: any) => {
-      let answerText = ''
-      if (Array.isArray(record.answer_text_list)) {
-        answerText = record.answer_text_list
-          .flat()
-          .map((item: any) => item?.content || '')
-          .join('\n\n')
-      } else {
-        answerText = record.answer_text || ''
-      }
-      return `# ${record.problem_text}\n\n${answerText}\n\n`
-    })
-    .join('\n')
-
-  const blob: Blob = new Blob([markdownContent], { type: 'text/markdown;charset=utf-8' })
-  saveAs(blob, suggestedName)
-}
-
-async function exportHTML(): Promise<void> {
-  const suggestedName: string = `${currentChatId.value}.html`
-  const markdownContent: string = currentRecordList.value
-    .map((record: any) => {
-      let answerText = ''
-      if (Array.isArray(record.answer_text_list)) {
-        answerText = record.answer_text_list
-          .flat()
-          .map((item: any) => item?.content || '')
-          .join('\n\n')
-      } else {
-        answerText = record.answer_text || ''
-      }
-      return `# ${record.problem_text}\n\n${answerText}\n\n`
-    })
-    .join('\n')
-  const rawHtmlContent = await marked(markdownContent)
-  const htmlContent = sanitizeHtml(rawHtmlContent, {
-    allowedTags: [
-      'h1',
-      'h2',
-      'h3',
-      'h4',
-      'h5',
-      'h6',
-      'p',
-      'br',
-      'hr',
-      'blockquote',
-      'pre',
-      'code',
-      'em',
-      'strong',
-      'del',
-      'ul',
-      'ol',
-      'li',
-      'table',
-      'thead',
-      'tbody',
-      'tr',
-      'th',
-      'td',
-      'a',
-      'img',
-    ],
-    allowedAttributes: {
-      a: ['href', 'name', 'target', 'title'],
-      img: ['src', 'alt', 'title'],
-      code: ['class'],
-      th: ['align'],
-      td: ['align'],
-    },
-    allowedSchemes: ['http', 'https', 'mailto', 'tel'],
-    allowedSchemesByTag: {
-      img: ['http', 'https'],
-    },
-    allowProtocolRelative: false,
-  })
-
-  const blob: Blob = new Blob([htmlContent], { type: 'text/html;charset=utf-8' })
-  saveAs(blob, suggestedName)
 }
 
 /**

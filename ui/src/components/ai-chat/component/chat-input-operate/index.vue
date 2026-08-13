@@ -190,16 +190,7 @@
         </div>
       </el-scrollbar>
 
-      <TouchChat
-        v-if="isMicrophone"
-        @TouchStart="startRecording"
-        @TouchEnd="TouchEnd"
-        :time="recorderTime"
-        :start="recorderStatus === 'START'"
-        :disabled="loading"
-      />
       <el-input
-        v-else
         ref="quickInputRef"
         v-model="inputValue"
         :autosize="{ minRows: 1, maxRows: isMobile ? 4 : 10 }"
@@ -216,46 +207,7 @@
           <slot name="inlineParams" />
         </div>
         <div class="flex align-center">
-          <template v-if="props.applicationDetails.stt_model_enable">
-            <span v-if="mode === 'mobile'">
-              <el-button text @click="switchMicrophone(!isMicrophone)">
-                <!-- 键盘 -->
-                <AppIcon v-if="isMicrophone" iconName="app-keyboard" :size="20"></AppIcon>
-                <el-icon v-else :size="20">
-                  <!-- 录音 -->
-                  <Microphone />
-                </el-icon>
-              </el-button>
-            </span>
-            <span class="flex align-center" v-else>
-              <el-button
-                :disabled="loading"
-                text
-                @click="startRecording"
-                v-if="recorderStatus === 'STOP'"
-              >
-                <el-icon :size="20">
-                  <Microphone />
-                </el-icon>
-              </el-button>
-
-              <div v-else class="operate flex align-center">
-                <el-text type="info"
-                  >00:{{ recorderTime < 10 ? `0${recorderTime}` : recorderTime }}</el-text
-                >
-                <el-button
-                  text
-                  type="primary"
-                  @click="stopRecording"
-                  :loading="recorderStatus === 'TRANSCRIBING'"
-                >
-                  <AppIcon iconName="app-video-stop" :size="20"></AppIcon>
-                </el-button>
-              </div>
-            </span>
-          </template>
-
-          <template v-if="recorderStatus === 'STOP' || mode === 'mobile'">
+          <template>
             <span v-if="props.applicationDetails.file_upload_enable" class="flex align-center ml-4">
               <!-- 如果URL地址 -->
               <el-button
@@ -302,10 +254,7 @@
             </span>
             <el-divider
               direction="vertical"
-              v-if="
-                props.applicationDetails.file_upload_enable ||
-                props.applicationDetails.stt_model_enable
-              "
+              v-if="props.applicationDetails.file_upload_enable"
             />
             <el-button
               text
@@ -396,18 +345,14 @@
   </div>
 </template>
 <script setup lang="ts">
-import { computed, nextTick, onMounted, reactive, ref, type Ref } from 'vue'
+import { computed, nextTick, onMounted, reactive, ref } from 'vue'
 import { t } from '@/locales'
-import Recorder from 'recorder-core'
-import TouchChat from './TouchChat.vue'
 import applicationApi from '@/api/application/application'
-import { MsgAlert, MsgWarning } from '@/utils/message'
+import { MsgWarning } from '@/utils/message'
 import { type chatType } from '@/api/type/application'
 import { useRoute, useRouter } from 'vue-router'
 import { getImgUrl } from '@/utils/common'
 import bus from '@/bus'
-import 'recorder-core/src/engine/mp3'
-import 'recorder-core/src/engine/mp3-engine'
 import chatAPI from '@/api/chat/chat'
 
 const router = useRouter()
@@ -448,8 +393,7 @@ const chatId_context = computed({
     emit('update:chatId', v)
   },
 })
-// 语音转写的请求 spinner, 独立于 loading prop(loading 现在是父级单向传入的"当前会话生成态")
-const speechLoading = ref(false)
+const inputPlaceholder = computed(() => `${t('aiChat.inputPlaceholder.default')}`)
 
 const showURLSetting = ref(false)
 const urlForm = reactive({
@@ -459,14 +403,6 @@ const urlForm = reactive({
 
 const uploadLoading = computed(() => {
   return Object.values(filePromisionDict.value).length > 0
-})
-
-const inputPlaceholder = computed(() => {
-  return recorderStatus.value === 'START'
-    ? `${t('aiChat.inputPlaceholder.speaking')}...`
-    : recorderStatus.value === 'TRANSCRIBING'
-      ? `${t('aiChat.inputPlaceholder.recorderLoading')}...`
-      : `${t('aiChat.inputPlaceholder.default')}`
 })
 
 const upload = ref()
@@ -618,12 +554,6 @@ const handleDrop = (event: DragEvent) => {
     uploadFile(elFile, [elFile])
   })
 }
-// 语音录制任务id
-const intervalId = ref<any | null>(null)
-// 语音录制开始秒数
-const recorderTime = ref(0)
-// START:开始录音 TRANSCRIBING:转换文字中
-const recorderStatus = ref<'START' | 'TRANSCRIBING' | 'STOP'>('STOP')
 
 const inputValue = ref<string>('')
 
@@ -659,220 +589,6 @@ const isDisabledChat = computed(
       (props.appId || props.applicationDetails?.name)
     ),
 )
-
-// 是否显示移动端语音按钮
-const isMicrophone = ref(false)
-const switchMicrophone = (status: boolean) => {
-  if (status) {
-    // 如果显示就申请麦克风权限
-    recorderManage.open(() => {
-      isMicrophone.value = true
-    })
-  } else {
-    // 关闭麦克风
-    recorderManage.close()
-    isMicrophone.value = false
-  }
-}
-
-const TouchEnd = (bool?: boolean) => {
-  if (bool) {
-    stopRecording()
-    recorderStatus.value = 'STOP'
-  } else {
-    stopTimer()
-    recorderStatus.value = 'STOP'
-  }
-}
-// 取消录音控制台日志
-Recorder.CLog = function () {}
-
-class RecorderManage {
-  recorder?: any
-  uploadRecording: (blob: Blob, duration: number) => void
-
-  constructor(uploadRecording: (blob: Blob, duration: number) => void) {
-    this.uploadRecording = uploadRecording
-  }
-
-  open(callback?: () => void) {
-    const recorder = new Recorder({
-      type: 'mp3',
-      bitRate: 128,
-      sampleRate: 16000,
-    })
-    if (!this.recorder) {
-      recorder.open(() => {
-        this.recorder = recorder
-        if (callback) {
-          callback()
-        }
-      }, this.errorCallBack)
-    }
-  }
-
-  start() {
-    if (this.recorder) {
-      this.recorder.start()
-      recorderStatus.value = 'START'
-      handleTimeChange()
-    } else {
-      const recorder = new Recorder({
-        type: 'mp3',
-        bitRate: 128,
-        sampleRate: 16000,
-      })
-      recorder.open(() => {
-        this.recorder = recorder
-        recorder.start()
-        recorderStatus.value = 'START'
-        handleTimeChange()
-      }, this.errorCallBack)
-    }
-  }
-
-  stop() {
-    if (this.recorder) {
-      this.recorder.stop(
-        (blob: Blob, duration: number) => {
-          if (mode !== 'mobile') {
-            this.close()
-          }
-          this.uploadRecording(blob, duration)
-        },
-        (err: any) => {
-          MsgAlert(t('common.tip'), err, {
-            confirmButtonText: t('aiChat.tip.confirm'),
-            dangerouslyUseHTMLString: true,
-            customClass: 'record-tip-confirm',
-          })
-        },
-      )
-    }
-  }
-
-  close() {
-    if (this.recorder) {
-      this.recorder.close()
-      this.recorder = undefined
-    }
-  }
-
-  private errorCallBack(err: any, isUserNotAllow: boolean) {
-    if (isUserNotAllow) {
-      MsgAlert(t('common.tip'), err, {
-        confirmButtonText: t('aiChat.tip.confirm'),
-        dangerouslyUseHTMLString: true,
-        customClass: 'record-tip-confirm',
-      })
-    } else {
-      MsgAlert(
-        t('common.tip'),
-        `${err}
-        <div style="width: 100%;height:1px;border-top:1px var(--el-border-color) var(--el-border-style);margin:10px 0;"></div>
-        ${t('aiChat.tip.recorderTip')}
-    <img src="${new URL(`/tipIMG.jpg`, import.meta.url).href}" style="width: 100%;" />`,
-        {
-          confirmButtonText: t('aiChat.tip.confirm'),
-          dangerouslyUseHTMLString: true,
-          customClass: 'record-tip-confirm',
-        },
-      )
-    }
-  }
-}
-
-const getSpeechToTextAPI = () => {
-  if (props.type === 'ai-chat') {
-    return (id?: any, data?: any, loading?: Ref<boolean>) => {
-      return chatAPI.speechToText(data, loading)
-    }
-  } else {
-    return applicationApi.speechToText
-  }
-}
-const speechToTextAPI = getSpeechToTextAPI()
-// 上传录音文件
-const uploadRecording = async (audioBlob: Blob) => {
-  try {
-    // 非自动发送切换输入框
-    if (!props.applicationDetails.stt_autosend) {
-      switchMicrophone(false)
-    }
-    recorderStatus.value = 'TRANSCRIBING'
-    const formData = new FormData()
-    formData.append('file', audioBlob, 'recording.mp3')
-    if (props.applicationDetails.stt_autosend) {
-      bus.emit('on:transcribing', true)
-    }
-    speechToTextAPI(props.applicationDetails.id as string, formData, speechLoading)
-      .then((response) => {
-        const newText = typeof response.data === 'string' ? response.data : ''
-        inputValue.value = inputValue.value ? `${inputValue.value} ${newText}` : newText
-        // 自动发送
-        if (props.applicationDetails.stt_autosend) {
-          nextTick(() => {
-            autoSendMessage()
-          })
-        } else {
-          switchMicrophone(false)
-        }
-      })
-      .catch((error) => {
-        console.error(`${t('aiChat.uploadFile.errorMessage')}:`, error)
-      })
-      .finally(() => {
-        recorderStatus.value = 'STOP'
-        bus.emit('on:transcribing', false)
-      })
-  } catch (error) {
-    recorderStatus.value = 'STOP'
-    console.error(`${t('aiChat.uploadFile.errorMessage')}:`, error)
-  }
-}
-const recorderManage = new RecorderManage(uploadRecording)
-// 开始录音
-const startRecording = () => {
-  recorderManage.start()
-}
-
-// 停止录音
-const stopRecording = () => {
-  recorderManage.stop()
-}
-
-const handleTimeChange = () => {
-  recorderTime.value = 0
-  if (intervalId.value) {
-    return
-  }
-  intervalId.value = setInterval(() => {
-    if (recorderStatus.value === 'STOP') {
-      clearInterval(intervalId.value!)
-      intervalId.value = null
-      return
-    }
-
-    recorderTime.value++
-
-    if (recorderTime.value === 60) {
-      if (mode !== 'mobile') {
-        stopRecording()
-        clearInterval(intervalId.value!)
-        intervalId.value = null
-        recorderStatus.value = 'STOP'
-      }
-    }
-  }, 1000)
-}
-// 停止计时的函数
-const stopTimer = () => {
-  if (intervalId.value !== null) {
-    clearInterval(intervalId.value)
-    recorderTime.value = 0
-    intervalId.value = null
-  }
-}
 
 const getQuestion = () => {
   if (!inputValue.value.trim()) {
