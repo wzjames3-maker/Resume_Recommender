@@ -20,4 +20,7 @@ urlpatterns = [
     path("workspace/<str:workspace_id>/hr/assignments/<str:assignment_id>/interviews", views.InterviewAPI.as_view()),
     path("workspace/<str:workspace_id>/hr/interviews/<str:interview_id>", views.InterviewDetailAPI.as_view()),
     path("workspace/<str:workspace_id>/hr/resumes/<str:resume_id>", views.ResumeDetailAPI.as_view()),
+    path("workspace/<str:workspace_id>/hr/ai/config", views.HrAIConfigAPI.as_view()),
+    path("workspace/<str:workspace_id>/hr/ai/search-parse", views.HrSearchParseAPI.as_view()),
+    path("workspace/<str:workspace_id>/hr/ai/extract-skills", views.HrSkillExtractAPI.as_view()),
 ]

@@ -11,6 +11,7 @@ from .recruitment import (
     ResumeDetailAPI,
     ResumeListAPI,
 )
+from .ai import HrAIConfigAPI, HrSearchParseAPI, HrSkillExtractAPI
 
 __all__ = [
     "AssignmentAPI",
@@ -24,4 +25,7 @@ __all__ = [
     "ResumeAPI",
     "ResumeDetailAPI",
     "ResumeListAPI",
+    "HrAIConfigAPI",
+    "HrSearchParseAPI",
+    "HrSkillExtractAPI",
 ]
