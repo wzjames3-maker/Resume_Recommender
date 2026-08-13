@@ -13,3 +13,10 @@
 ## 新增模块
 - apps/hr：人事业务 Django app（骨架）
 - ui/src/views/hr：人事占位页
+
+## 旧版参考
+
+- `references/agentkb/` 是旧版 AgentKB 的固定源码快照，仅用于业务规则、状态机、接口和测试迁移参考。
+- 旧版参考代码不参与 MaxKB 的运行、构建或部署，不应从该目录直接导入模块。
+- 新版实现以本仓库的 MaxKB 内核、产品 PRD 和当前设计规格为准；旧版行为仅作为迁移参考。
+- 参考快照来源：`maxkb-replica`，commit `40278bc0cbd48855ebf017214da22d7419cea88b`。
