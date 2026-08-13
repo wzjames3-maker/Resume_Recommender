@@ -6,6 +6,7 @@ from enum import Enum
 # gemini(langchain-google-genai) / local_model(torch+sentence-transformers) / ollama(langchain-ollama)
 # tencent_cloud / tencent(tencentcloud-sdk) / volcanic_engine(volcengine) / wenxin(qianfan)
 # xf(langchain-community) / xinference(xinference-client) / vllm(cohere) / minimax(dashscope)
+# local_model 已删除（torch+sentence-transformers，本地推理运行时已移除）
 from models_provider.impl.azure_model_provider.azure_model_provider import AzureModelProvider
 from models_provider.impl.deepseek_model_provider.deepseek_model_provider import DeepSeekModelProvider
 from models_provider.impl.docker_ai_model_provider.docker_ai_model_provider import DockerModelProvider
