@@ -1,5 +1,5 @@
 import { Result } from '@/request/Result'
-import { get, post, postStream, del, put, request, download, exportFile } from '@/request/index'
+import { get, post, postStream, del, put, request } from '@/request/index'
 import type { pageRequest } from '@/api/type/common'
 import type { ApplicationFormType } from '@/api/type/application'
 import { type Ref } from 'vue'
@@ -189,73 +189,11 @@ const publish: (
  * @param loading
  * @returns
  */
-const playDemoText: (application_id: string, data: any, loading?: Ref<boolean>) => Promise<any> = (
-  application_id,
-  data,
-  loading,
-) => {
-  return download(`${prefix}/${application_id}/play_demo_text`, 'post', data, undefined, loading)
-}
-
-/**
- * 文本转语音
- */
-const postTextToSpeech: (
-  application_id: string,
-  data: any,
-  loading?: Ref<boolean>,
-) => Promise<Result<any>> = (application_id, data, loading) => {
-  return download(`${prefix}/${application_id}/text_to_speech`, 'post', data, undefined, loading)
-}
-/**
- * 语音转文本
- */
-const speechToText: (
-  application_id: string,
-  data: any,
-  loading?: Ref<boolean>,
-) => Promise<Result<any>> = (application_id, data, loading) => {
-  return post(`${prefix}/${application_id}/speech_to_text`, data, undefined, loading)
-}
-
-/**
- * 获取应用设置
- * @param application_id 应用id
- * @param loading 加载器
- * @returns
- */
 const getApplicationSetting: (
   application_id: string,
   loading?: Ref<boolean>,
 ) => Promise<Result<any>> = (application_id, loading) => {
   return get(`${prefix}/${application_id}/setting`, undefined, loading)
-}
-
-/**
- * 导出应用
- */
-
-const exportApplication = (
-  application_id: string,
-  application_name: string,
-  loading?: Ref<boolean>,
-) => {
-  return exportFile(
-    application_name + '.mk',
-    `${prefix}/${application_id}/export`,
-    undefined,
-    loading,
-  )
-}
-
-/**
- * 导入应用
- */
-const importApplication: (data: any, loading?: Ref<boolean>) => Promise<Result<any>> = (
-  data,
-  loading,
-) => {
-  return post(`${prefix}/import`, data, undefined, loading)
 }
 
 /**
@@ -313,16 +251,6 @@ const updatePlatformConfig: (
   return post(`${prefix}/${application_id}/platform/${type}`, data, undefined, loading)
 }
 
-/**
- * mcp 节点
- */
-const getMcpTools: (application_id: string, loading?: Ref<boolean>) => Promise<Result<any>> = (
-  application_id,
-  loading,
-) => {
-  return get(`${prefix}/${application_id}/mcp_tools`, undefined, loading)
-}
-
 export default {
   getAllApplication,
   getApplication,
@@ -331,8 +259,6 @@ export default {
   getApplicationDetail,
   getAccessToken,
   putAccessToken,
-  exportApplication,
-  importApplication,
   getStatistics,
   open,
   chat,
@@ -343,10 +269,6 @@ export default {
   getPlatformConfig,
   publish,
   updatePlatformConfig,
-  playDemoText,
-  postTextToSpeech,
-  speechToText,
-  getMcpTools,
   putXpackAccessToken,
   generate_prompt,
   getTokenUsage,

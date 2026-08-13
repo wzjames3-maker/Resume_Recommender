@@ -197,16 +197,6 @@ const systemRouter = {
           new ComplexPermission(
             [RoleConst.ADMIN, RoleConst.WORKSPACE_MANAGE],
             [
-              PermissionConst.TOOL_WORKSPACE_USER_RESOURCE_PERMISSION_READ,
-              PermissionConst.TOOL_WORKSPACE_USER_RESOURCE_PERMISSION_READ
-                .getWorkspacePermissionWorkspaceManageRole,
-            ],
-            [],
-            'OR',
-          ),
-          new ComplexPermission(
-            [RoleConst.ADMIN, RoleConst.WORKSPACE_MANAGE],
-            [
               PermissionConst.MODEL_WORKSPACE_USER_RESOURCE_PERMISSION_READ,
               PermissionConst.MODEL_WORKSPACE_USER_RESOURCE_PERMISSION_READ
                 .getWorkspacePermissionWorkspaceManageRole,
@@ -259,31 +249,6 @@ const systemRouter = {
                 [
                   PermissionConst.KNOWLEDGE_WORKSPACE_USER_RESOURCE_PERMISSION_READ,
                   PermissionConst.KNOWLEDGE_WORKSPACE_USER_RESOURCE_PERMISSION_READ
-                    .getWorkspacePermissionWorkspaceManageRole,
-                ],
-                [],
-                'OR',
-              ),
-            ],
-          },
-          component: () => import('@/views/system/resource-authorization/index.vue'),
-        },
-        {
-          path: '/system/authorization/tool',
-          name: 'authorizationTool',
-          meta: {
-            title: 'views.tool.title',
-            activeMenu: '/system',
-            parentPath: '/system',
-            parentName: 'system',
-            resource: 'TOOL',
-            sameRoute: 'authorization',
-            permission: [
-              new ComplexPermission(
-                [RoleConst.ADMIN, RoleConst.WORKSPACE_MANAGE],
-                [
-                  PermissionConst.TOOL_WORKSPACE_USER_RESOURCE_PERMISSION_READ,
-                  PermissionConst.TOOL_WORKSPACE_USER_RESOURCE_PERMISSION_READ
                     .getWorkspacePermissionWorkspaceManageRole,
                 ],
                 [],

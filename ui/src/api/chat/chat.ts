@@ -7,7 +7,6 @@ import {
   del,
   put,
   request,
-  download,
   exportFile,
 } from '@/request/chat/index'
 import { type ChatProfile } from '@/api/type/chat'
@@ -263,25 +262,6 @@ const getChatRecord: (
   return get(`historical_conversation/${chat_id}/record/${chat_record_id}`, {}, loading)
 }
 /**
- * 文本转语音
- */
-const textToSpeech: (data: any, loading?: Ref<boolean>) => Promise<Result<any>> = (
-  data,
-  loading,
-) => {
-  return download(`text_to_speech`, 'post', data, undefined, loading)
-}
-
-/**
- * 语音转文本
- */
-const speechToText: (data: any, loading?: Ref<boolean>) => Promise<Result<any>> = (
-  data,
-  loading,
-) => {
-  return post(`speech_to_text`, data, undefined, loading)
-}
-/**
  *
  * @param chat_id  对话ID
  * @param loading
@@ -430,8 +410,6 @@ export default {
   resetCurrentPassword,
   getChatUserProfile,
   getChatRecord,
-  textToSpeech,
-  speechToText,
   deleteChat,
   clearChat,
   modifyChat,

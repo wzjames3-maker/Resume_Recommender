@@ -285,13 +285,6 @@
                     {{ $t('views.system.resourceAuthorization.title') }}
                   </el-dropdown-item>
                   <el-dropdown-item
-                    @click.stop="exportApplication(row)"
-                    v-if="permissionPrecise.export()"
-                  >
-                    <AppIcon iconName="app-export" class="color-secondary"></AppIcon>
-                    {{ $t('common.export') }}
-                  </el-dropdown-item>
-                  <el-dropdown-item
                     :disabled="!row.is_publish"
                   </el-dropdown-item>
                   <el-dropdown-item
@@ -427,16 +420,6 @@ function deleteApplication(row: any) {
     })
     .catch(() => {
     })
-}
-
-const exportApplication = (application: any) => {
-  ApplicationResourceApi.exportApplication(application.id, application.name, loading).catch((e) => {
-    if (e.response.status !== 403) {
-      e.response.data.text().then((res: string) => {
-        MsgError(`${t('views.application.tip.ExportError')}:${JSON.parse(res).message}`)
-      })
-    }
-  })
 }
 
 const search_type = ref('name')

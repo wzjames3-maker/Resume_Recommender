@@ -113,15 +113,11 @@ const settingTags = reactive([
     type: SourceTypeEnum.APPLICATION,
   },
   {
-    label: t('views.tool.title'),
-    type: SourceTypeEnum.TOOL,
-  },
-  {
     label: t('views.model.title'),
     type: SourceTypeEnum.MODEL,
   },
 ])
-// 当前激活的数据类型（应用/知识库/模型/工具）
+// 当前激活的数据类型（应用/知识库/模型）
 const activeData = computed(() => {
   const lastIndex = route.path.lastIndexOf('/')
   const currentPathType = route.path.substring(lastIndex + 1).toUpperCase()

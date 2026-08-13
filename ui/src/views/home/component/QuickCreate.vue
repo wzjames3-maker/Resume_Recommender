@@ -53,30 +53,6 @@
                 </div>
               </div>
             </el-dropdown-item>
-            <el-upload
-              class="import-button"
-              ref="ApplicationUploadRef"
-              :file-list="[]"
-              action="#"
-              multiple
-              :auto-upload="false"
-              :show-file-list="false"
-              :limit="1"
-              :on-change="(file: any, fileList: any) => importApplication(file)"
-            >
-              <el-dropdown-item>
-                <div class="flex align-center w-full">
-                  <el-avatar shape="square" :size="32" style="background: none">
-                    <img src="@/assets/icon_import.svg" alt="" />
-                  </el-avatar>
-                  <div class="pre-wrap ml-8">
-                    <div class="lighter">
-                      {{ $t('views.application.importApplication') }}
-                    </div>
-                  </div>
-                </div>
-              </el-dropdown-item>
-            </el-upload>
           </el-dropdown-menu>
         </template>
       </el-dropdown>
@@ -214,7 +190,6 @@
 <script setup lang="ts">
 import { ref, shallowRef, nextTick, computed } from 'vue'
 import CreateApplicationDialog from '@/views/application/component/CreateApplicationDialog.vue'
-import ApplicationApi from '@/api/application/application'
 import CreateKnowledgeDialog from '@/views/knowledge/create-component/CreateKnowledgeDialog.vue'
 import CreateWebKnowledgeDialog from '@/views/knowledge/create-component/CreateWebKnowledgeDialog.vue'
 import CreateLarkKnowledgeDialog from '@/views/knowledge/create-component/CreateLarkKnowledgeDialog.vue'
@@ -262,29 +237,6 @@ const CreateApplicationDialogRef = ref()
 
 function openCreateApplicationDialog() {
   CreateApplicationDialogRef.value.open(user.getWorkspaceId() ?? 'default')
-}
-const ApplicationUploadRef = ref()
-const importApplication = (file: any) => {
-  const formData = new FormData()
-  formData.append('file', file.raw, file.name)
-  ApplicationUploadRef.value.clearFiles()
-  ApplicationApi.importApplication(user.getWorkspaceId() ?? 'default', formData)
-    .then(async (res: any) => {
-      if (res?.data) {
-        user.profile()
-        router.push({ path: `/application` })
-      }
-    })
-    .catch((e) => {
-      if (e.code === 400) {
-        MsgConfirm(t('common.tip'), t('views.application.tip.professionalMessage'), {
-          cancelButtonText: t('common.confirm'),
-          confirmButtonText: t('common.professional'),
-        }).then(() => {
-          window.open('https://maxkb.cn/pricing.html', '_blank')
-        })
-      }
-    })
 }
 
 // 知识库快捷方式

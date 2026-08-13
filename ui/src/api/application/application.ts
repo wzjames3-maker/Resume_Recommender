@@ -7,8 +7,6 @@ import {
   del,
   put,
   request,
-  download,
-  exportFile,
 } from '@/request/index'
 import type { pageRequest } from '@/api/type/common'
 import type { ApplicationFormType } from '@/api/type/application'
@@ -176,34 +174,6 @@ const putXpackAccessToken: (
 }
 
 /**
- * 导出应用
- */
-
-const exportApplication = (
-  application_id: string,
-  application_name: string,
-  loading?: Ref<boolean>,
-) => {
-  return exportFile(
-    application_name + '.mk',
-    `${prefix.value}/${application_id}/export`,
-    undefined,
-    loading,
-  )
-}
-
-/**
- * 导入应用
- */
-const importApplication: (
-  folder_id: string,
-  data: any,
-  loading?: Ref<boolean>,
-) => Promise<Result<any>> = (folder_id, data, loading) => {
-  return post(`${prefix.value}/folder/${folder_id}/import`, data, undefined, loading)
-}
-
-/**
  * 统计
  * @param application_id
  * @param data
@@ -341,65 +311,6 @@ const publish: (
 }
 
 /**
- *
- * @param application_id
- * @param data
- * @param loading
- * @returns
- */
-const playDemoText: (application_id: string, data: any, loading?: Ref<boolean>) => Promise<any> = (
-  application_id,
-  data,
-  loading,
-) => {
-  return download(
-    `${prefix.value}/${application_id}/play_demo_text`,
-    'post',
-    data,
-    undefined,
-    loading,
-  )
-}
-
-/**
- * 文本转语音
- */
-const postTextToSpeech: (
-  application_id: string,
-  data: any,
-  loading?: Ref<boolean>,
-) => Promise<Result<any>> = (application_id, data, loading) => {
-  return download(
-    `${prefix.value}/${application_id}/text_to_speech`,
-    'post',
-    data,
-    undefined,
-    loading,
-  )
-}
-/**
- * 语音转文本
- */
-const speechToText: (
-  application_id: string,
-  data: any,
-  loading?: Ref<boolean>,
-) => Promise<Result<any>> = (application_id, data, loading) => {
-  return post(`${prefix.value}/${application_id}/speech_to_text`, data, undefined, loading)
-}
-
-/**
- * mcp 节点
- */
-const getMcpTools: (
-  application_id: string,
-  mcp_servers: any,
-  loading?: Ref<boolean>,
-) => Promise<Result<any>> = (application_id, mcp_servers, loading) => {
-  return post(`${prefix.value}/${application_id}/mcp_tools`, { mcp_servers }, {}, loading)
-}
-
-/**
  * 上传文件
  * @param file
  * @param sourceId
@@ -529,8 +440,6 @@ export default {
   getAccessToken,
   putAccessToken,
   putXpackAccessToken,
-  exportApplication,
-  importApplication,
   getStatistics,
   open,
   chat,
@@ -541,10 +450,6 @@ export default {
   getPlatformConfig,
   publish,
   updatePlatformConfig,
-  playDemoText,
-  postTextToSpeech,
-  speechToText,
-  getMcpTools,
   postUploadFile,
   postUploadFileProgress,
   generate_prompt,

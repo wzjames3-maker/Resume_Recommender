@@ -109,28 +109,6 @@
                       </div>
                     </div>
                   </el-dropdown-item>
-                  <el-upload
-                    class="import-button"
-                    ref="elUploadRef"
-                    :file-list="[]"
-                    action="#"
-                    multiple
-                    :auto-upload="false"
-                    :show-file-list="false"
-                    :limit="1"
-                    :on-change="(file: any, fileList: any) => importApplication(file)"
-                  >
-                    <el-dropdown-item>
-                      <div class="flex align-center w-full">
-                        <el-avatar shape="square" :size="32" style="background: none">
-                          <img src="@/assets/icon_import.svg" alt="" />
-                        </el-avatar>
-                        <div class="pre-wrap ml-8">
-                          <div class="lighter">{{ $t('views.application.importApplication') }}</div>
-                        </div>
-                      </div>
-                    </el-dropdown-item>
-                  </el-upload>
                   <el-dropdown-item @click="openCreateFolder" divided>
                     <div class="flex align-center">
                       <AppIcon iconName="app-folder" style="font-size: 32px"></AppIcon>
@@ -195,10 +173,7 @@
                     <template #tag>
                       <el-checkbox :value="item.id" v-if="isBatch" @change="checkboxChange(item)" />
                       <div v-else>
-                        <el-tag size="small" v-if="isWorkFlow(item.type)" class="warning-tag">
-                          {{ $t('views.application.senior') }}
-                        </el-tag>
-                        <el-tag size="small" class="blue-tag" v-else>
+                        <el-tag size="small" class="blue-tag">
                           {{ $t('views.application.simple') }}
                         </el-tag>
                       </div>
@@ -284,14 +259,6 @@
                               >
                                 <AppIcon iconName="app-copy" class="color-secondary"></AppIcon>
                                 {{ $t('common.copy') }}
-                              </el-dropdown-item>
-                              <el-dropdown-item
-                                divided
-                                @click.stop="exportApplication(item)"
-                                v-if="permissionPrecise.export(item.id)"
-                              >
-                                <AppIcon iconName="app-export" class="color-secondary"></AppIcon>
-                                {{ $t('common.export') }}
                               </el-dropdown-item>
                               <el-dropdown-item
                                 divided
@@ -388,7 +355,6 @@ import ApplicationApi from '@/api/application/application'
 import WorkspaceApi from '@/api/workspace/workspace'
 import { MsgSuccess, MsgConfirm, MsgError } from '@/utils/message'
 import { i18n_name, resetUrl } from '@/utils/common'
-import { isWorkFlow } from '@/utils/application'
 import { dateFormat } from '@/utils/time'
 import { SourceTypeEnum } from '@/enums/common'
 import permissionMap from '@/permission'
@@ -605,11 +571,7 @@ const get_route = (item: any) => {
       'OR',
     )
   ) {
-    if (item.type == 'WORK_FLOW') {
-      return `/application/workspace/${item.id}/workflow`
-    } else {
-      return `/application/workspace/${item.id}/${item.type}/setting`
-    }
+    return `/application/workspace/${item.id}/${item.type}/setting`
   } else if (
     hasPermission(
       [
@@ -702,50 +664,9 @@ const search_type_change = () => {
 }
 
 function toChat(row: any) {
-  const api =
-    row.type == 'WORK_FLOW'
-      ? (id: string) => ApplicationApi.getApplicationDetail(id)
-      : (id: string) => Promise.resolve({ data: row })
-  api(row.id).then((ok) => {
-    let aips = ok.data?.work_flow?.nodes
-      ?.filter((v: any) => v.id === 'base-node')
-      .map((v: any) => {
-        return v.properties.api_input_field_list
-          ? v.properties.api_input_field_list.map((v: any) => {
-              return {
-                name: v.variable,
-                value: v.default_value,
-              }
-            })
-          : v.properties.input_field_list
-            ? v.properties.input_field_list
-                .filter((v: any) => v.assignment_method === 'api_input')
-                .map((v: any) => {
-                  return {
-                    name: v.variable,
-                    value: v.default_value,
-                  }
-                })
-            : []
-      })
-      .reduce((x: Array<any>, y: Array<any>) => [...x, ...y])
-    aips = aips ? aips : []
-    const apiParams = mapToUrlParams(aips) ? '?' + mapToUrlParams(aips) : ''
-    ApplicationApi.getAccessToken(row.id, loading).then((res: any) => {
-      const newUrl = application.location + res?.data?.access_token + apiParams
-      window.open(newUrl)
-    })
+  ApplicationApi.getAccessToken(row.id, loading).then((res: any) => {
+    window.open(application.location + res?.data?.access_token)
   })
-}
-
-function mapToUrlParams(map: any[]) {
-  const params = new URLSearchParams()
-
-  map.forEach((item: any) => {
-    params.append(encodeURIComponent(item.name), encodeURIComponent(item.value))
-  })
-
-  return params.toString() // 返回 URL 查询字符串
 }
 
 function copyApplication(row: any) {
@@ -760,17 +681,13 @@ function copyApplication(row: any) {
 }
 
 function settingApplication(event: any, row: any) {
-  if (isWorkFlow(row.type)) {
-    if (event?.ctrlKey) {
-      event?.preventDefault()
-      event.stopPropagation()
-      const newUrl = router.resolve({
-        path: `/application/workspace/${row.id}/workflow`,
-      }).href
-      window.open(newUrl)
-    } else {
-      router.push({ path: `/application/workspace/${row.id}/workflow` })
-    }
+  if (event?.ctrlKey) {
+    event?.preventDefault()
+    event.stopPropagation()
+    const newUrl = router.resolve({
+      path: `/application/workspace/${row.id}/${row.type}/setting`,
+    }).href
+    window.open(newUrl)
   } else {
     router.push({ path: `/application/workspace/${row.id}/${row.type}/setting` })
   }
@@ -796,43 +713,6 @@ function deleteApplication(row: any) {
       })
     })
     .catch(() => {})
-}
-
-const exportApplication = (application: any) => {
-  ApplicationApi.exportApplication(application.id, application.name, loading).catch((e) => {
-    if (e.response.status !== 403) {
-      e.response.data.text().then((res: string) => {
-        MsgError(`${t('views.application.tip.ExportError')}:${JSON.parse(res).message}`)
-      })
-    }
-  })
-}
-
-const elUploadRef = ref()
-const importApplication = (file: any) => {
-  const formData = new FormData()
-  formData.append('file', file.raw, file.name)
-  elUploadRef.value.clearFiles()
-  ApplicationApi.importApplication(folder.currentFolder.id, formData, loading)
-    .then(async (res: any) => {
-      if (res?.data) {
-        applicationList.value = []
-        user.profile()
-      }
-    })
-    .then(() => {
-      getList()
-    })
-    .catch((e) => {
-      if (e.code === 400) {
-        MsgConfirm(t('common.tip'), t('views.application.tip.professionalMessage'), {
-          cancelButtonText: t('common.confirm'),
-          confirmButtonText: t('common.professional'),
-        }).then(() => {
-          window.open('https://maxkb.cn/pricing.html', '_blank')
-        })
-      }
-    })
 }
 
 // 文件夹相关
