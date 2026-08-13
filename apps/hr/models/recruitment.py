@@ -51,6 +51,7 @@ class Job(models.Model):
     level = models.CharField(max_length=64, blank=True, default="")
     headcount = models.PositiveSmallIntegerField(default=1)
     description = models.TextField(blank=True, default="")
+    skill_requirements = models.JSONField(default=list)
     status = models.CharField(max_length=16, choices=JobStatus.choices, default=JobStatus.OPEN)
     user_id = models.UUIDField(null=True, blank=True)
     create_time = models.DateTimeField(auto_now_add=True)

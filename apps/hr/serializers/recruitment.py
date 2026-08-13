@@ -69,6 +69,13 @@ class RecruitmentService:
         return [skill.strip() for skill in skills]
 
     @staticmethod
+    def _skill_requirements(data):
+        value = data.get("skill_requirements", [])
+        if not isinstance(value, list) or any(not isinstance(skill, str) or not skill.strip() for skill in value):
+            raise AppApiException(400, "skill_requirements must be a list of non-empty strings")
+        return [skill.strip() for skill in value]
+
+    @staticmethod
     def _candidate_output(candidate):
         return {
             "id": str(candidate.id),
@@ -97,6 +104,7 @@ class RecruitmentService:
             "level": job.level,
             "headcount": job.headcount,
             "description": job.description,
+            "skill_requirements": job.skill_requirements,
             "status": job.status,
             "active_assignment_count": getattr(job, "active_assignment_count", 0),
             "create_time": job.create_time,
@@ -148,7 +156,9 @@ class RecruitmentService:
         status = query.get("status")
         skills = query.get("skills")
         years_min = query.get("years_min")
+        years_max = query.get("years_max")
         source = query.get("source")
+        highest_degree = query.get("highest_degree")
         if name:
             queryset = queryset.filter(name__icontains=name)
         if city:
@@ -162,12 +172,20 @@ class RecruitmentService:
                 skill = skill.strip()
                 if skill:
                     queryset = queryset.filter(skills__contains=[skill])
+        if highest_degree:
+            queryset = queryset.filter(highest_degree=highest_degree)
         if years_min:
             try:
                 years_min = int(years_min)
             except (TypeError, ValueError) as exc:
                 raise AppApiException(400, "years_min is invalid") from exc
             queryset = queryset.filter(years_experience__gte=years_min)
+        if years_max:
+            try:
+                years_max = int(years_max)
+            except (TypeError, ValueError) as exc:
+                raise AppApiException(400, "years_max is invalid") from exc
+            queryset = queryset.filter(years_experience__lte=years_max)
         if source:
             queryset = queryset.filter(source=source)
         total = queryset.count()
@@ -245,6 +263,7 @@ class RecruitmentService:
             level=self._optional_string(data, "level", 64),
             headcount=headcount,
             description=self._optional_string(data, "description", 4096),
+            skill_requirements=self._skill_requirements(data),
         )
         return self._job_output(job)
 
@@ -306,6 +325,9 @@ class RecruitmentService:
                 raise AppApiException(400, "headcount must be between 1 and 999")
             job.headcount = headcount
             update_fields.append("headcount")
+        if "skill_requirements" in data:
+            job.skill_requirements = self._skill_requirements(data)
+            update_fields.append("skill_requirements")
         if "status" in data:
             if data["status"] not in JobStatus.values:
                 raise AppApiException(400, "status is invalid")

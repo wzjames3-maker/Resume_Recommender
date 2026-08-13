@@ -235,3 +235,36 @@ class ResumeServiceTests(TestCase):
         self.service.upload_resumes([(path2, name, ext)], "OTHER")
         first_resume = ResumeFile.objects.get(id=first["resume_id"])
         self.assertEqual(first_resume.status, "SUCCESS")
+
+
+class AdvancedSearchTests(TestCase):
+    def setUp(self):
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=uuid.uuid7(), is_workspace_manage=True)
+        self.alice = Candidate.objects.create(
+            name="Alice", workspace_id="workspace-a", skills=["Python", "Django"],
+            highest_degree="本科", years_experience=5, source="JOB_SITE",
+        )
+        self.bob = Candidate.objects.create(
+            name="Bob", workspace_id="workspace-a", skills=["Java", "Spring"],
+            highest_degree="硕士", years_experience=3, source="REFERRAL",
+        )
+
+    def test_multi_skill_and_semantics(self):
+        result = self.service.page_candidates(1, 20, {"skills": "Python,Django"})
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(result["records"][0]["name"], "Alice")
+
+    def test_degree_and_years_range_filter(self):
+        result = self.service.page_candidates(1, 20, {"highest_degree": "硕士", "years_min": "2", "years_max": "4"})
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(result["records"][0]["name"], "Bob")
+
+    def test_source_filter(self):
+        result = self.service.page_candidates(1, 20, {"source": "REFERRAL"})
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(result["records"][0]["name"], "Bob")
+
+    def test_years_range_excludes_null_experience(self):
+        Candidate.objects.create(name="NullExp", workspace_id="workspace-a", skills=[], years_experience=None)
+        result = self.service.page_candidates(1, 20, {"years_min": "1"})
+        self.assertEqual(result["total"], 2)
