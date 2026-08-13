@@ -4,6 +4,7 @@ import type {
   Assignment,
   Candidate,
   CandidateDetail,
+  Interview,
   Job,
   JobDetail,
   JobMatchPage,
@@ -68,20 +69,32 @@ const deleteResume = (resumeId: string) => del(`${prefix.value}/resumes/${resume
 const getJobMatches = (jobId: string, page: pageRequest) =>
   get(`${prefix.value}/jobs/${jobId}/matches/${page.current_page}/${page.page_size}`) as Promise<Result<JobMatchPage>>
 
+const createInterview = (assignmentId: string, data: Record<string, unknown>) =>
+  post(`${prefix.value}/assignments/${assignmentId}/interviews`, data) as Promise<Result<Interview>>
+
+const getInterviews = (assignmentId: string) =>
+  get(`${prefix.value}/assignments/${assignmentId}/interviews`) as Promise<Result<Interview[]>>
+
+const updateInterview = (interviewId: string, data: Partial<Interview>) =>
+  put(`${prefix.value}/interviews/${interviewId}`, data) as Promise<Result<Interview>>
+
 export default {
   archiveCandidate,
   createAssignment,
   createCandidate,
+  createInterview,
   createJob,
   deleteResume,
   getCandidate,
   getCandidateResumes,
   getCandidates,
+  getInterviews,
   getJob,
   getJobMatches,
   getJobs,
   updateAssignment,
   updateCandidate,
+  updateInterview,
   updateJob,
   uploadResumes,
 }

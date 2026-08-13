@@ -1,6 +1,19 @@
 export type CandidateStatus = 'ACTIVE' | 'ARCHIVED'
 export type JobStatus = 'OPEN' | 'CLOSED'
-export type AssignmentStatus = 'PENDING_SCREEN' | 'SCREEN_PASSED' | 'REJECTED' | 'CLOSED'
+export type AssignmentStatus = 'PENDING_SCREEN' | 'SCREEN_PASSED' | 'INTERVIEWING' | 'OFFER' | 'HIRED' | 'REJECTED' | 'CLOSED'
+export type InterviewStatus = 'PENDING' | 'PASSED' | 'FAILED' | 'NO_SHOW' | 'CANCELLED'
+
+export interface Interview {
+  id: string
+  assignment_id: string
+  round_no: number
+  interviewer: string
+  scheduled_at: string | null
+  status: InterviewStatus
+  feedback: string
+  create_time: string
+  update_time: string
+}
 
 export interface Candidate {
   id: string

@@ -31,12 +31,20 @@
                         <el-select v-model="assignment.status" size="small" @change="updateAssignmentStatus(assignment)">
                           <el-option label="待筛选" value="PENDING_SCREEN" />
                           <el-option label="筛选通过" value="SCREEN_PASSED" />
+                          <el-option label="面试中" value="INTERVIEWING" />
+                          <el-option label="Offer 中" value="OFFER" />
+                          <el-option label="已入职" value="HIRED" />
                           <el-option label="已淘汰" value="REJECTED" />
                           <el-option label="已关闭" value="CLOSED" />
                         </el-select>
                       </template>
                     </el-table-column>
                     <el-table-column prop="note" label="备注" show-overflow-tooltip />
+                    <el-table-column label="操作" width="90">
+                      <template #default="{ row: assignment }">
+                        <el-button link type="primary" size="small" @click="openInterviewDrawer(row, assignment)">面试</el-button>
+                      </template>
+                    </el-table-column>
                   </el-table>
                 </el-tab-pane>
                 <el-tab-pane label="匹配候选人" name="matches">
@@ -91,6 +99,47 @@
       </el-form>
       <template #footer><el-button @click="jobDialogVisible = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveJob">保存</el-button></template>
     </el-dialog>
+
+    <el-dialog v-model="interviewDrawerVisible" title="面试记录" width="640px">
+      <div class="flex-between mb-16">
+        <span>{{ interviewCandidateName }} · 第 {{ interviewAssignment?.id?.slice(0, 8) }} 指派</span>
+        <el-button type="primary" size="small" @click="addInterviewFormVisible = true">安排面试</el-button>
+      </div>
+      <el-form v-if="addInterviewFormVisible" label-width="88px" class="mb-16 p-16 border rounded">
+        <el-row :gutter="16">
+          <el-col :span="12"><el-form-item label="面试官"><el-input v-model="interviewForm.interviewer" /></el-form-item></el-col>
+          <el-col :span="12"><el-form-item label="面试时间"><el-date-picker v-model="interviewForm.scheduled_at" type="datetime" value-format="YYYY-MM-DDTHH:mm:ssZ" style="width: 100%" /></el-form-item></el-col>
+        </el-row>
+        <div class="text-right">
+          <el-button size="small" @click="addInterviewFormVisible = false">取消</el-button>
+          <el-button size="small" type="primary" @click="createInterviewRecord">保存</el-button>
+        </div>
+      </el-form>
+      <el-table :data="interviewList" size="small">
+        <el-table-column prop="round_no" label="轮次" width="60" />
+        <el-table-column prop="interviewer" label="面试官" min-width="100" />
+        <el-table-column prop="scheduled_at" label="时间" min-width="150">
+          <template #default="{ row }">{{ row.scheduled_at ? new Date(row.scheduled_at).toLocaleString() : '-' }}</template>
+        </el-table-column>
+        <el-table-column label="结果" width="130">
+          <template #default="{ row }">
+            <el-select v-model="row.status" size="small" @change="updateInterviewRecord(row)">
+              <el-option label="待面试" value="PENDING" />
+              <el-option label="通过" value="PASSED" />
+              <el-option label="未通过" value="FAILED" />
+              <el-option label="未到场" value="NO_SHOW" />
+              <el-option label="取消" value="CANCELLED" />
+            </el-select>
+          </template>
+        </el-table-column>
+        <el-table-column label="反馈" min-width="160">
+          <template #default="{ row }">
+            <el-input v-model="row.feedback" size="small" @change="updateInterviewRecord(row)" placeholder="填写反馈" />
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer><el-button @click="interviewDrawerVisible = false">关闭</el-button></template>
+    </el-dialog>
   </div>
 </template>
 
@@ -98,7 +147,7 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import AppTable from '@/components/app-table/index.vue'
 import HrApi from '@/api/hr/recruitment'
-import type { Assignment, Job, JobDetail, JobMatchCandidate, JobMatchPage } from '@/api/type/hr'
+import type { Assignment, Interview, Job, JobDetail, JobMatchCandidate, JobMatchPage } from '@/api/type/hr'
 import { MsgConfirm, MsgError, MsgSuccess } from '@/utils/message'
 import { hasPermission } from '@/utils/permission'
 import { RoleConst } from '@/utils/permission/data'
@@ -117,6 +166,12 @@ const jobSkillsText = ref('')
 const expandTab = reactive<Record<string, string>>({})
 const jobForm = reactive({ name: '', department: '', city: '', level: '', headcount: 1, description: '' })
 const isWorkspaceManage = computed(() => hasPermission([RoleConst.WORKSPACE_MANAGE.getWorkspaceRole], 'OR'))
+const interviewDrawerVisible = ref(false)
+const interviewList = ref<Interview[]>([])
+const interviewAssignment = ref<Assignment | null>(null)
+const interviewCandidateName = ref('')
+const addInterviewFormVisible = ref(false)
+const interviewForm = reactive({ interviewer: '', scheduled_at: null as string | null })
 
 function resetJobForm(job?: Job) {
   jobForm.name = job?.name || ''
@@ -214,6 +269,42 @@ function addMatchToJob(job: Job, match: JobMatchCandidate) {
       loadJobDetail(job)
       refresh()
     })
+    .catch(() => {})
+}
+
+function openInterviewDrawer(job: Job, assignment: Assignment) {
+  interviewAssignment.value = assignment
+  interviewCandidateName.value = assignment.candidate_name || ''
+  interviewList.value = []
+  addInterviewFormVisible.value = false
+  interviewForm.interviewer = ''
+  interviewForm.scheduled_at = null
+  interviewDrawerVisible.value = true
+  HrApi.getInterviews(assignment.id).then((response) => {
+    interviewList.value = response.data
+  })
+}
+
+function createInterviewRecord() {
+  if (!interviewAssignment.value) return
+  HrApi.createInterview(interviewAssignment.value.id, interviewForm)
+    .then(() => {
+      MsgSuccess('面试已安排')
+      addInterviewFormVisible.value = false
+      interviewForm.interviewer = ''
+      interviewForm.scheduled_at = null
+      if (interviewAssignment.value) {
+        HrApi.getInterviews(interviewAssignment.value.id).then((response) => {
+          interviewList.value = response.data
+        })
+      }
+    })
+    .catch(() => {})
+}
+
+function updateInterviewRecord(interview: Interview) {
+  HrApi.updateInterview(interview.id, { status: interview.status, feedback: interview.feedback })
+    .then(() => MsgSuccess('面试记录已更新'))
     .catch(() => {})
 }
 
