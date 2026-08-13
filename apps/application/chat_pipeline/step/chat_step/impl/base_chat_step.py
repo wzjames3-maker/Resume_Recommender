@@ -609,33 +609,6 @@ class BaseChatStep(IChatStep):
                 _("Sorry, the AI model is not configured. Please go to the application to set up the AI model first.")
             ), False
         else:
-            runtime_user_id = get_runtime_user_id(chat_user_id=chat_user_id, chat_user_type=chat_user_type)
-            # 过滤tool_id
-            all_tool_ids = list(set((mcp_tool_ids or []) + (tool_ids or []) + (skill_tool_ids or [])))
-            authorized_set = set(filter_authorized_ids("tool", all_tool_ids, workspace_id, user_id=runtime_user_id))
-
-            mcp_tool_ids = [i for i in (mcp_tool_ids or []) if i in authorized_set]
-            tool_ids = [i for i in (tool_ids or []) if i in authorized_set]
-            skill_tool_ids = [i for i in (skill_tool_ids or []) if i in authorized_set]
-            # 处理 MCP 请求
-            mcp_result = self._handle_mcp_request(
-                mcp_source,
-                mcp_servers,
-                mcp_tool_ids,
-                tool_ids,
-                application_ids,
-                skill_tool_ids,
-                mcp_output_enable,
-                chat_model,
-                "",
-                message_list,
-                application_id,
-                chat_id,
-                workspace_id,
-                runtime_user_id,
-            )
-            if mcp_result:
-                return mcp_result, True
             return chat_model.invoke(message_list), True
 
     def execute_block(
