@@ -175,7 +175,7 @@ class AiParserTests(TestCase):
         self.assertEqual(extract_skills(model, "描述"), ["Python", "Django"])
 
     def test_extract_skills_truncates_to_20(self):
-        model = _StubModel('{"skills": ["s%d" % i for i in range(30)]}')
+        model = _StubModel('{"skills": [' + ', '.join('"s%d"' % i for i in range(30)) + ']}')
         self.assertEqual(len(extract_skills(model, "描述")), 20)
 
     def test_extract_skills_non_list_returns_empty(self):
