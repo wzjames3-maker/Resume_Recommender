@@ -611,7 +611,7 @@ from .ai import HrAIConfigAPI, HrSearchParseAPI, HrSkillExtractAPI
 uv run python apps/manage.py test hr.tests --keepdb && uv run python apps/manage.py check && uv run python apps/manage.py makemigrations --check --dry-run
 ```
 
-预期：hr 全部测试 OK（hr.tests 单独 35 旧 + 23 新 = 58；四 app 全量基线 47，任务 9 汇总为 74），check 无问题，无待生成迁移。
+预期：hr 全部测试 OK（hr.tests 单独 35 旧 + 27 新 = 62；四 app 全量基线 47，任务 9 汇总为 74），check 无问题，无待生成迁移。
 
 - [ ] **步骤 5：Commit**
 
