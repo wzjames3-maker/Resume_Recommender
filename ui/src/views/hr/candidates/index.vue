@@ -7,7 +7,7 @@
       </div>
       <el-button type="primary" @click="openCandidateDialog()">新建候选人</el-button>
       <el-button type="primary" plain @click="openResumeUpload()">上传简历</el-button>
-      <el-button plain @click="aiSettingVisible = true">AI 设置</el-button>
+      <el-button v-if="isWorkspaceManage" plain @click="aiSettingVisible = true">AI 设置</el-button>
       <input ref="resumeInputRef" type="file" multiple accept=".docx,.txt" class="hidden-input" @change="handleResumeFiles" />
     </div>
 

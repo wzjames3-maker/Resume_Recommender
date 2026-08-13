@@ -80,16 +80,16 @@ const getInterviews = (assignmentId: string) =>
 const updateInterview = (interviewId: string, data: Partial<Interview>) =>
   put(`${prefix.value}/interviews/${interviewId}`, data) as Promise<Result<Interview>>
 
-const getAiConfig = () => get(`${prefix.value}/hr/ai/config`) as Promise<Result<HrConfig>>
+const getAiConfig = () => get(`${prefix.value}/ai/config`) as Promise<Result<HrConfig>>
 
 const putAiConfig = (data: Record<string, unknown>) =>
-  put(`${prefix.value}/hr/ai/config`, data) as Promise<Result<HrConfig>>
+  put(`${prefix.value}/ai/config`, data) as Promise<Result<HrConfig>>
 
 const parseSearch = (query: string) =>
-  post(`${prefix.value}/hr/ai/search-parse`, { query }) as Promise<Result<{ conditions: AiConditions }>>
+  post(`${prefix.value}/ai/search-parse`, { query }) as Promise<Result<{ conditions: AiConditions }>>
 
 const extractSkills = (description: string) =>
-  post(`${prefix.value}/hr/ai/extract-skills`, { description }) as Promise<Result<{ skills: string[] }>>
+  post(`${prefix.value}/ai/extract-skills`, { description }) as Promise<Result<{ skills: string[] }>>
 
 export default {
   archiveCandidate,

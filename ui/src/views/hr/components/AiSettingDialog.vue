@@ -36,6 +36,9 @@ onMounted(() => {
 watch(visible, (show) => {
   if (show) {
     modelId.value = ''
+    ModelApi.getSelectModelList({ model_type: 'LLM' }).then((response) => {
+      llmModels.value = response.data
+    })
     HrApi.getAiConfig().then((response) => {
       modelId.value = response.data.llm_model_id || ''
     })

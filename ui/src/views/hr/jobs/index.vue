@@ -6,7 +6,7 @@
         <span class="color-secondary">维护开放职位与候选人筛选进度</span>
       </div>
       <el-button v-if="isWorkspaceManage" type="primary" @click="openJobDialog()">新建职位</el-button>
-      <el-button plain @click="aiSettingVisible = true">AI 设置</el-button>
+      <el-button v-if="isWorkspaceManage" plain @click="aiSettingVisible = true">AI 设置</el-button>
     </div>
 
     <el-card style="--el-card-padding: 0" v-loading="loading">
