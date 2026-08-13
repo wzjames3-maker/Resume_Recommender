@@ -1,10 +1,14 @@
 import tempfile
+from types import SimpleNamespace
+from unittest.mock import patch
+
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 import uuid_utils.compat as uuid
 
 from common.exception.app_exception import AppApiException, AppUnauthorizedFailed, NotFound404
-from hr.models import AssignmentStatus, Candidate, CandidateAssignment, Interview, Job, ResumeFile
+from hr.models import AssignmentStatus, Candidate, CandidateAssignment, HrConfig, Interview, Job, ResumeFile
+from hr.serializers.ai import AiService
 from hr.serializers.recruitment import RecruitmentService
 from hr.services.ai_parser import extract_skills, parse_search_conditions
 from hr.services.resume_parser import parse_resume_text
@@ -464,3 +468,95 @@ class AiParserTests(TestCase):
     def test_extract_skills_non_list_returns_empty(self):
         model = _StubModel('{"skills": "Python"}')
         self.assertEqual(extract_skills(model, "描述"), [])
+
+
+class AiServiceTests(TestCase):
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.service = AiService(workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=True)
+
+    def test_config_default_is_null(self):
+        self.assertEqual(self.service.get_config(), {"llm_model_id": None})
+
+    @patch("hr.serializers.ai.get_model_by_id")
+    def test_save_and_get_config(self, mock_get_model):
+        mock_get_model.return_value = SimpleNamespace(model_type="LLM")
+        saved = self.service.save_config({"llm_model_id": "model-1"})
+        self.assertEqual(saved, {"llm_model_id": "model-1"})
+        self.assertEqual(self.service.get_config(), {"llm_model_id": "model-1"})
+        mock_get_model.assert_called_once_with("model-1", "workspace-a")
+
+    @patch("hr.serializers.ai.get_model_by_id")
+    def test_save_config_rejects_non_llm_model(self, mock_get_model):
+        mock_get_model.return_value = SimpleNamespace(model_type="EMBEDDING")
+        with self.assertRaisesRegex(AppApiException, "LLM"):
+            self.service.save_config({"llm_model_id": "model-1"})
+
+    @patch("hr.serializers.ai.get_model_by_id")
+    def test_save_config_rejects_missing_model(self, mock_get_model):
+        mock_get_model.side_effect = Exception("Model does not exist")
+        with self.assertRaisesRegex(AppApiException, "模型不存在"):
+            self.service.save_config({"llm_model_id": "model-1"})
+
+    def test_save_config_requires_model_id(self):
+        with self.assertRaisesRegex(AppApiException, "llm_model_id is required"):
+            self.service.save_config({})
+
+    def test_member_cannot_save_config(self):
+        member_service = AiService(workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=False)
+        with self.assertRaises(AppUnauthorizedFailed):
+            member_service.save_config({"llm_model_id": "model-1"})
+
+    def test_parse_search_requires_config(self):
+        with self.assertRaisesRegex(AppApiException, "AI 设置"):
+            self.service.parse_search("找 Python 后端")
+
+    def test_extract_skills_requires_config(self):
+        with self.assertRaisesRegex(AppApiException, "AI 设置"):
+            self.service.extract_skills("招聘 Python 工程师")
+
+    def test_parse_search_rejects_empty_query(self):
+        HrConfig.objects.create(workspace_id="workspace-a", llm_model_id="model-1")
+        with self.assertRaisesRegex(AppApiException, "query is required"):
+            self.service.parse_search("   ")
+
+    def test_parse_search_rejects_long_query(self):
+        HrConfig.objects.create(workspace_id="workspace-a", llm_model_id="model-1")
+        with self.assertRaisesRegex(AppApiException, "query is too long"):
+            self.service.parse_search("x" * 2001)
+
+    def test_extract_skills_rejects_empty_description(self):
+        HrConfig.objects.create(workspace_id="workspace-a", llm_model_id="model-1")
+        with self.assertRaisesRegex(AppApiException, "description is required"):
+            self.service.extract_skills("   ")
+
+    def test_extract_skills_rejects_long_description(self):
+        HrConfig.objects.create(workspace_id="workspace-a", llm_model_id="model-1")
+        with self.assertRaisesRegex(AppApiException, "description is too long"):
+            self.service.extract_skills("x" * 4097)
+
+    @patch("hr.serializers.ai.get_model_instance_by_model_workspace_id")
+    def test_parse_search_with_mock_model(self, mock_instance):
+        HrConfig.objects.create(workspace_id="workspace-a", llm_model_id="model-1")
+        mock_instance.return_value = _StubModel(
+            '{"skills": ["Python"], "city": "上海", "years_min": 3, "years_max": null, '
+            '"highest_degree": null, "status": null}'
+        )
+        result = self.service.parse_search("找上海3年Python经验的人")
+        self.assertEqual(result["conditions"]["skills"], ["Python"])
+        self.assertEqual(result["conditions"]["city"], "上海")
+        self.assertEqual(result["conditions"]["years_min"], 3)
+
+    @patch("hr.serializers.ai.get_model_instance_by_model_workspace_id")
+    def test_extract_skills_with_mock_model(self, mock_instance):
+        HrConfig.objects.create(workspace_id="workspace-a", llm_model_id="model-1")
+        mock_instance.return_value = _StubModel('{"skills": ["Python", "Django"]}')
+        result = self.service.extract_skills("负责 Python/Django 开发")
+        self.assertEqual(result["skills"], ["Python", "Django"])
+
+    @patch("hr.serializers.ai.get_model_instance_by_model_workspace_id")
+    def test_parse_search_model_instance_error_returns_config_hint(self, mock_instance):
+        HrConfig.objects.create(workspace_id="workspace-a", llm_model_id="model-1")
+        mock_instance.side_effect = Exception("broken")
+        with self.assertRaisesRegex(AppApiException, "AI 设置"):
+            self.service.parse_search("找 Python 后端")
