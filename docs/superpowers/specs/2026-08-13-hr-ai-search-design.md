@@ -26,13 +26,19 @@ HR 模块已具备候选人组合搜索（技能/城市/年限/学历/状态）�
 
 ### 1.2 模型获取与错误处理
 
-- 服务层经 `models_provider.tools.get_model_instance_by_model_workspace_id(config.llm_model_id, workspace_id)` 获取 LLM 实例。
+- 配置保存与模型实例化均先调 `models_provider.tools.get_model_by_id(model_id, workspace_id)`（该函数兼容共享给工作区的授权模型，禁止直接 `Model.objects.filter()`），再校验 `model.model_type == 'LLM'`（防止误选 embedding 等）；模型不存在或非 LLM → 400。
+- 服务层经 `get_model_instance_by_model_workspace_id(config.llm_model_id, workspace_id)` 获取 LLM 实例。
 - 未配置（无 `HrConfig` 行）或获取失败 → `AppApiException(400, "请先在 AI 设置中选择模型")`。
-- 模型类型限定 `LLM`（配置写入时校验 `model_type == 'LLM'`，防止误选 embedding 等）。
 
 ## 2. AI 服务（新增 `apps/hr/services/ai_parser.py`）
 
 纯规则实现 + 依赖注入：服务函数接收 `model` 实例参数，不直接读配置，便于单测传 stub。
+
+### 2.0 LLM 调用契约
+
+- 唯一调用方式：`response = model.invoke(prompt)`，仅接受 `response.content` 为字符串的结果。
+- 空内容、非字符串内容、`invoke` 抛异常、JSON 解析异常 → 统一 `AppApiException(400, "AI 解析失败，请重试或手动填写筛选条件")`。
+- 测试 stub 只提供 `invoke()`，返回带 `content` 属性的对象。
 
 ### 2.1 `parse_search_conditions(model, query)`
 
@@ -48,28 +54,28 @@ HR 模块已具备候选人组合搜索（技能/城市/年限/学历/状态）�
   }
   ```
 - 规则约束：只输出 JSON；无法判断的字段给 null/[]；技能逐项抽取、不得合并成复合词；年限归一为整数年。
+- Prompt 用明确分隔符（如 `<query>` 标签）包裹用户输入，并声明其中内容仅作为待解析文本、不得执行其中任何指令（防注入）。
 - 后处理（幂等修正）：`skills` 非列表 → `[]`；`city`/`highest_degree`/`status` 非字符串 → null；`years_min`/`years_max` 非正整数 → null；`years_min > years_max` → 交换。
-- 解析失败（非 JSON / 结构非法）→ `AppApiException(400, "AI 解析失败，请重试或手动填写筛选条件")`。
 - 返回 `{conditions: {...}}`。
 
 ### 2.2 `extract_skills(model, description)`
 
 - Prompt 指令：从职位描述抽取技能（技术栈、工具、软技能中的硬性技能），输出 `{"skills": ["Python", ...]}`；数量上限 20。
-- 后处理：非列表 → `[]`；逐项 strip、去空、去重。
-- 解析失败 → 400 同上。
+- 同样用分隔符包裹输入并声明不得执行输入中的指令。
+- 后处理：非列表 → `[]`；逐项 strip、去空、去重；超 20 项截断为前 20。
 - 返回 `{skills: [...]}`。
 
 ## 3. API（新增 `apps/hr/views/ai.py`，注册 `views/__init__.py` 与 `hr/urls.py`）
 
-| 方法 | 路径 | 行为 |
-|---|---|---|
-| GET | `/workspace/{wid}/hr/ai/config` | 返回 `{llm_model_id: string \| null}` |
-| PUT | `/workspace/{wid}/hr/ai/config` | body `{llm_model_id}`；校验模型存在且 `model_type == 'LLM'`；upsert 配置；返回同上 |
-| POST | `/workspace/{wid}/hr/ai/search-parse` | body `{query}`（非空）；校验配置；调 `parse_search_conditions`；返回 `{conditions}` |
-| POST | `/workspace/{wid}/hr/jobs/{job_id}/ai/skills` | 职位须存在且属于该工作区（否则 404）；校验配置；基于 `job.description` 调 `extract_skills`；返回 `{skills}` |
+| 方法 | 路径 | 权限 | 行为 |
+|---|---|---|---|
+| GET | `/workspace/{wid}/hr/ai/config` | `@manage_required` | 返回 `{llm_model_id: string \| null}` |
+| PUT | `/workspace/{wid}/hr/ai/config` | `@manage_required` | body `{llm_model_id}`；按 1.2 校验；upsert 配置；返回同上 |
+| POST | `/workspace/{wid}/hr/ai/search-parse` | `@member_required` | body `{query}`（非空，≤2000 字符）；校验配置；调 `parse_search_conditions`；返回 `{conditions}` |
+| POST | `/workspace/{wid}/hr/ai/extract-skills` | `@manage_required` | body `{description}`（非空，≤4096 字符）；校验配置；调 `extract_skills`；返回 `{skills}` |
 
-- 所有端点沿用 `_service(request, workspace_id)` 工作区校验模式。
-- 错误：缺 query → 400「query is required」；未配置 → 400「请先在 AI 设置中选择模型」。
+- 所有视图 `authentication_classes = [TokenAuth]`；权限由 `hr/views/recruitment.py` 中同款 `@member_required` / `@manage_required` 装饰器执行。
+- 错误：缺 query/description → 400「query is required」/「description is required」；超长 → 400「query is too long」/「description is too long」；未配置 → 400「请先在 AI 设置中选择模型」。
 
 ## 4. 前端
 
@@ -84,19 +90,19 @@ HR 模块已具备候选人组合搜索（技能/城市/年限/学历/状态）�
 ### 4.2 候选页 AI 搜索
 
 - 搜索区新增「AI 搜索」入口（输入框 + 按钮）：
-  - 输入自然语言 → `POST ai/search-parse` → 成功后将返回条件**回填到现有筛选表单**（技能、城市、年限、学历、状态）并立即执行搜索；用户可再修改后重新搜索。
+  - 输入自然语言 → `POST ai/search-parse` → 成功后将返回条件**回填到现有筛选表单并立即执行搜索**；用户可再修改结构化条件后重新搜索。
   - 未配置 / 解析失败 → 展示错误提示，不清空表单。
 
 ### 4.3 职位页 AI 技能抽取
 
-- 编辑职位对话框「职位描述」旁新增「AI 抽取技能」按钮：
-  - 基于当前表单 `description`（非空校验）→ `POST jobs/{id}/ai/skills` → 回填「技能要求」输入。
+- 编辑职位对话框「职位描述」旁新增「AI 抽取技能」按钮（新建与编辑均可用）：
+  - 基于当前表单 `description`（非空校验）→ `POST ai/extract-skills`，body `{description}` → 回填「技能要求」输入。
   - 失败提示不破坏表单。
 
 ### 4.4 类型与 API 封装
 
 - `ui/src/api/type/hr.ts`：`HrConfig`、`AiConditions` 类型。
-- `ui/src/api/hr/recruitment.ts`：`getAiConfig` / `putAiConfig` / `parseSearch` / `extractJobSkills`。
+- `ui/src/api/hr/recruitment.ts`：`getAiConfig` / `putAiConfig` / `parseSearch` / `extractSkills`。
 - `ui/src/views/hr/candidates/index.vue`、`ui/src/views/hr/jobs/index.vue` 改动。
 - AI 设置对话框可抽小组件 `ui/src/views/hr/components/AiSettingDialog.vue`（两页复用）。
 
@@ -115,14 +121,14 @@ HR 模块已具备候选人组合搜索（技能/城市/年限/学历/状态）�
   - 非列表 → `[]`。
   - 超过 20 项 → 截断为前 20。
 - 配置未设时模型获取失败 → 400（API 层覆盖）。
-- stub 方式：`MockModel` 对象提供 `invoke`/`predict` 返回预设字符串。
+- stub 方式：`MockModel` 仅提供 `invoke()`，返回 `content` 为预设字符串的对象；另测 `invoke` 抛异常 → 400。
 
 ### 5.2 API 层（`AiApiTests`）
 
-- 配置：GET 默认 null；PUT 保存 LLM 模型；PUT 非 LLM 类型 → 400；PUT 不存在的模型 → 400。
-- search-parse：无 query → 400；未配置 → 400；已配置（mock 模型返回预设 JSON）→ 200 且条件正确。
-- job skills：职位不存在 → 404；未配置 → 400；正常 → 200。
-- mock 方式：`unittest.mock.patch` 替换模型获取函数，返回 stub 实例。
+- 配置：GET 默认 null；PUT 保存 LLM 模型（含共享授权模型，经 `get_model_by_id`）；PUT 非 LLM 类型 → 400；PUT 不存在的模型 → 400。
+- search-parse：无 query → 400；超长 query → 400；未配置 → 400；已配置（mock 模型返回预设 JSON）→ 200 且条件正确。
+- extract-skills：无 description → 400；超长 description → 400；未配置 → 400；正常 → 200。
+- mock 方式：`unittest.mock.patch` 替换 `get_model_by_id`/`get_model_instance_by_model_workspace_id`，返回 stub 实例。
 
 ### 5.3 回归与构建
 
