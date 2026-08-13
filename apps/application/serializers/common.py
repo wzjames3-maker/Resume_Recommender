@@ -104,6 +104,8 @@ class ChatInfo:
             ]
             self.knowledge_id_list = knowledge_id_list
             self.exclude_document_id_list = exclude_document_id_list
+        else:
+            raise ChatException(400, _("Workflow applications are not supported by the local core"))
         self.application = application
         return application
 

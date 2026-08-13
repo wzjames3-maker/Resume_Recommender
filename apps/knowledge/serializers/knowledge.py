@@ -324,6 +324,11 @@ class KnowledgeSerializer(serializers.Serializer):
                 query_set = query_set.filter(workspace_id=workspace_id)
             if not query_set.exists():
                 raise AppApiException(500, _("Knowledge id does not exist"))
+            knowledge = query_set.first()
+            if (knowledge.meta or {}).get("disabled_reason") == "workflow_knowledge_removed_by_local_core":
+                raise AppApiException(
+                    400, _("Workflow knowledge bases are not supported by the local core")
+                )
 
         @transaction.atomic
         def embedding(self, with_valid=True):
@@ -1323,6 +1328,11 @@ class KnowledgeSerializer(serializers.Serializer):
                 raise AppApiException(500, _("Knowledge id does not exist"))
             if not QuerySet(Knowledge).filter(id=self.data.get("knowledge_id")).exists():
                 raise AppApiException(300, _("id does not exist"))
+            knowledge = query_set.first()
+            if (knowledge.meta or {}).get("disabled_reason") == "workflow_knowledge_removed_by_local_core":
+                raise AppApiException(
+                    400, _("Workflow knowledge bases are not supported by the local core")
+                )
 
         def hit_test(self):
             self.is_valid()

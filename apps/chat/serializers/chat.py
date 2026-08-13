@@ -438,6 +438,8 @@ class ChatSerializers(serializers.Serializer):
         if not self.data.get('debug'):
             self.is_valid_chat_user()
         self.is_valid_application_simple(raise_exception=True, chat_info=chat_info)
+        if chat_info.application.type != ApplicationTypeChoices.SIMPLE.value:
+            raise ChatException(400, _("Workflow applications are not supported by the local core"))
         return self.chat_simple(chat_info, instance, base_to_response)
 
     def get_chat_info(self):

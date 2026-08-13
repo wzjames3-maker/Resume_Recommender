@@ -9,7 +9,6 @@
 from django.utils.translation import gettext_lazy as _
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter
-from rest_framework import serializers
 
 from application.serializers.application import ApplicationCreateSerializer, ApplicationListResponse, \
     ApplicationEditSerializer, BatchCleanTimeSerializer
@@ -19,7 +18,7 @@ from knowledge.serializers.common import BatchSerializer, BatchMoveSerializer
 
 
 class ApplicationCreateRequest(ApplicationCreateSerializer.SimplateRequest):
-    work_flow = serializers.DictField(required=True, label=_("Workflow Objects"))
+    pass
 
 
 class ApplicationCreateResponse(ResultSerializer):

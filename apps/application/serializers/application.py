@@ -30,6 +30,7 @@ from django.db import models, transaction
 from django.db.models import Q, QuerySet
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
+from knowledge.models import Knowledge
 from knowledge.serializers.common import BatchMoveSerializer, BatchSerializer
 from knowledge.serializers.knowledge import KnowledgeModelSerializer, KnowledgeSerializer
 from maxkb.conf import PROJECT_DIR
@@ -173,16 +174,10 @@ class ApplicationCreateSerializer(serializers.Serializer):
             required=False, max_length=102400, label=_("Question completion prompt")
         )
         # 应用类型
-        type = serializers.CharField(
+        type = serializers.ChoiceField(
             required=True,
+            choices=[ApplicationTypeChoices.SIMPLE.value],
             label=_("Application Type"),
-            validators=[
-                validators.RegexValidator(
-                    regex=re.compile("^SIMPLE|WORK_FLOW$"),
-                    message=_("Application type only supports SIMPLE|WORK_FLOW"),
-                    code=500,
-                )
-            ],
         )
         model_params_setting = serializers.DictField(required=False, label=_("Model parameters"))
 
