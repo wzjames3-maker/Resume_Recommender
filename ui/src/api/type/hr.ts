@@ -114,3 +114,16 @@ export interface ResumeUploadResult {
   candidate_id: string | null
   error_message: string
 }
+
+export interface HrConfig {
+  llm_model_id: string | null
+}
+
+export interface AiConditions {
+  skills: string[]
+  city: string | null
+  years_min: number | null
+  years_max: number | null
+  highest_degree: string | null
+  status: string | null
+}

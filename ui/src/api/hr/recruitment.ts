@@ -1,9 +1,11 @@
 import type { Result } from '@/request/Result'
 import { del, get, post, put } from '@/request'
 import type {
+  AiConditions,
   Assignment,
   Candidate,
   CandidateDetail,
+  HrConfig,
   Interview,
   Job,
   JobDetail,
@@ -78,6 +80,17 @@ const getInterviews = (assignmentId: string) =>
 const updateInterview = (interviewId: string, data: Partial<Interview>) =>
   put(`${prefix.value}/interviews/${interviewId}`, data) as Promise<Result<Interview>>
 
+const getAiConfig = () => get(`${prefix.value}/hr/ai/config`) as Promise<Result<HrConfig>>
+
+const putAiConfig = (data: Record<string, unknown>) =>
+  put(`${prefix.value}/hr/ai/config`, data) as Promise<Result<HrConfig>>
+
+const parseSearch = (query: string) =>
+  post(`${prefix.value}/hr/ai/search-parse`, { query }) as Promise<Result<{ conditions: AiConditions }>>
+
+const extractSkills = (description: string) =>
+  post(`${prefix.value}/hr/ai/extract-skills`, { description }) as Promise<Result<{ skills: string[] }>>
+
 export default {
   archiveCandidate,
   createAssignment,
@@ -85,6 +98,8 @@ export default {
   createInterview,
   createJob,
   deleteResume,
+  extractSkills,
+  getAiConfig,
   getCandidate,
   getCandidateResumes,
   getCandidates,
@@ -92,6 +107,8 @@ export default {
   getJob,
   getJobMatches,
   getJobs,
+  parseSearch,
+  putAiConfig,
   updateAssignment,
   updateCandidate,
   updateInterview,
