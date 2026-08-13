@@ -1,0 +1,59 @@
+export type CandidateStatus = 'ACTIVE' | 'ARCHIVED'
+export type JobStatus = 'OPEN' | 'CLOSED'
+export type AssignmentStatus = 'PENDING_SCREEN' | 'SCREEN_PASSED' | 'REJECTED' | 'CLOSED'
+
+export interface Candidate {
+  id: string
+  name: string
+  email: string | null
+  phone: string
+  current_city: string
+  target_city: string
+  highest_degree: string
+  years_experience: number | null
+  skills: string[]
+  source: string
+  note: string
+  status: CandidateStatus
+  create_time: string
+  update_time: string
+}
+
+export interface Assignment {
+  id: string
+  candidate_id: string
+  candidate_name?: string
+  job_id: string
+  job_name?: string
+  status: AssignmentStatus
+  note: string
+  create_time: string
+  update_time: string
+}
+
+export interface CandidateDetail extends Candidate {
+  assignments: Assignment[]
+}
+
+export interface Job {
+  id: string
+  name: string
+  department: string
+  city: string
+  level: string
+  headcount: number
+  description: string
+  status: JobStatus
+  active_assignment_count: number
+  create_time: string
+  update_time: string
+}
+
+export interface JobDetail extends Job {
+  assignments: Assignment[]
+}
+
+export interface PageResult<T> {
+  total: number
+  records: T[]
+}
