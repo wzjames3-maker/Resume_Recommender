@@ -83,6 +83,15 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
 - 检查：`manage.py check` 无问题；`makemigrations --check --dry-run` 无变更。
 - 前端：HR 菜单、候选人管理、职位管理、加入职位和筛选状态更新可构建；`vue-tsc`、管理端和聊天端 Vite 构建均 PASS。
 
+## 人事二期验收（2026-08-13）
+
+- 简历上传：候选人页支持批量上传 `docx`/`txt` 简历并同步规则解析，按 `(workspace_id, sha256)` 去重。
+- 解析回填：抽取姓名、邮箱、手机、城市、学历、年限、技能与经历摘要；无法确定字段留空。
+- 检索扩展：候选人列表支持技能、最低工作年限、来源渠道筛选。
+- 测试：`hr.tests application.tests knowledge.tests models_provider.tests`，31/31 PASS。
+- 检查：`manage.py check` 无问题；`makemigrations --check --dry-run` 无变更。
+- 前端：上传入口、结果展示与检索筛选可构建；`vue-tsc`、管理端和聊天端 Vite 构建均 PASS。
+
 ## 旧版参考
 
 - `references/agentkb/` 是旧版 AgentKB 的固定源码快照，仅用于业务规则、状态机、接口和测试迁移参考。

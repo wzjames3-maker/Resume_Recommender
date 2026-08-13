@@ -141,3 +141,20 @@ pnpm exec eslint .
 | `ui: vue-tsc --build` | PASS |
 | `ui: vite build` / `vite build --mode chat` | PASS；产物无已裁剪端点 |
 | HR 约束测试 | 有效指派唯一、终态可重新指派、HC 大于 0、关闭职位/归档候选人约束、跨工作区资源读写 404、管理员写权限均覆盖 |
+
+---
+
+## 人事二期验收记录（2026-08-13）
+
+实现范围：`ResumeFile` 模型与 `(workspace_id, sha256)` 去重约束、docx/txt 规则解析、上传/列表/删除 API、候选人检索扩展与候选人页上传 UI。
+本期未引入 LLM 画像、PII 加密、PDF/CSV 简历或异步 worker。
+
+| 验证项 | 结果 |
+|--------|------|
+| `manage.py test hr.tests application.tests knowledge.tests models_provider.tests --keepdb` | 31/31 PASS |
+| `manage.py check` | System check identified no issues (0 silenced) |
+| `manage.py makemigrations --check --dry-run` | No changes detected |
+| `ui: node scripts/check-local-core-surface.mjs` | PASS |
+| `ui: vue-tsc --build` | PASS |
+| `ui: vite build` / `vite build --mode chat` | PASS；产物无已裁剪端点 |
+| 简历功能测试 | 解析回填、同工作区去重、跨工作区独立、格式/大小拒绝、解析失败保留错误原因均覆盖 |
