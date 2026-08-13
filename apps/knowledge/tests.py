@@ -2,12 +2,13 @@ import uuid_utils.compat as uuid
 from django.test import TestCase
 
 from common.exception.app_exception import AppApiException
-from knowledge.models import Knowledge
+from knowledge.models import Knowledge, KnowledgeFolder
 from knowledge.serializers.knowledge import KnowledgeSerializer
 
 
 class WorkflowKnowledgeRejectionTests(TestCase):
     def setUp(self):
+        KnowledgeFolder.objects.get_or_create(id="default", defaults={"name": "root", "workspace_id": "default"})
         self.knowledge = Knowledge.objects.create(
             id=uuid.uuid7(),
             name="legacy-workflow-kb",

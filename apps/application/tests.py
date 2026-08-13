@@ -6,7 +6,7 @@ from rest_framework.exceptions import ValidationError
 
 from application.api.application_api import ApplicationCreateAPI
 from application.chat_pipeline.step.chat_step.impl.base_chat_step import BaseChatStep
-from application.models import Application, ApplicationTypeChoices, ApplicationVersion
+from application.models import Application, ApplicationFolder, ApplicationTypeChoices, ApplicationVersion
 from application.serializers.application import ApplicationCreateSerializer
 from application.serializers.common import ChatInfo
 from common.exception.app_exception import ChatException
@@ -34,6 +34,7 @@ class SimpleChatRuntimeTests(SimpleTestCase):
 
 class WorkflowApplicationRejectionTests(TestCase):
     def setUp(self):
+        ApplicationFolder.objects.create(id="default", name="root", workspace_id="default")
         self.app = Application.objects.create(
             id=uuid.uuid7(),
             name="legacy-workflow-app",
