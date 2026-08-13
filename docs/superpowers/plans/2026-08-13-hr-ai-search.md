@@ -941,7 +941,7 @@ git commit -m "feat(人事): 职位编辑新增 AI 技能抽取"
 uv run python apps/manage.py test hr.tests application.tests knowledge.tests models_provider.tests --keepdb && uv run python apps/manage.py check && uv run python apps/manage.py makemigrations --check --dry-run
 ```
 
-预期：全部 PASS（47 旧 + 26 新 = 73），check 无问题，无待生成迁移。
+预期：全部 PASS（47 旧 + 27 新 = 74），check 无问题，无待生成迁移。
 
 - [ ] **步骤 2：前端全量构建与产物扫描**
 

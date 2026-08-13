@@ -469,6 +469,11 @@ class AiParserTests(TestCase):
         model = _StubModel('{"skills": "Python"}')
         self.assertEqual(extract_skills(model, "描述"), [])
 
+    def test_extract_skills_rejects_non_dict_json(self):
+        model = _StubModel("[1, 2, 3]")
+        with self.assertRaisesRegex(AppApiException, "AI 解析失败"):
+            extract_skills(model, "描述")
+
 
 class AiServiceTests(TestCase):
     def setUp(self):
@@ -573,3 +578,17 @@ class AiServiceTests(TestCase):
         mock_instance.side_effect = Exception("broken")
         with self.assertRaisesRegex(AppApiException, "AI 设置"):
             self.service.parse_search("找 Python 后端")
+
+
+class AiRouteSmokeTests(TestCase):
+    def _paths(self):
+        return [
+            "/admin/api/workspace/workspace-a/hr/ai/config",
+            "/admin/api/workspace/workspace-a/hr/ai/search-parse",
+            "/admin/api/workspace/workspace-a/hr/ai/extract-skills",
+        ]
+
+    def test_ai_routes_are_registered(self):
+        for path in self._paths():
+            response = self.client.get(path)
+            self.assertIn(response.status_code, (401, 403), f"{path} 未注册或未受保护: {response.status_code}")
