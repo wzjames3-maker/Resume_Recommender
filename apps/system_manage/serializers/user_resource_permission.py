@@ -31,7 +31,6 @@ from maxkb.conf import PROJECT_DIR
 from maxkb.settings import edition
 from models_provider.models import Model
 from system_manage.models import WorkspaceUserResourcePermission
-from tools.models import Tool
 from users.serializers.user import is_workspace_manage
 
 
@@ -84,14 +83,12 @@ class UpdateUserResourcePermissionRequest(serializers.Serializer):
 
 m_map = {
     "KNOWLEDGE": Knowledge,
-    'TOOL': Tool,
     'MODEL': Model,
     'APPLICATION': Application,
 }
 
 sql_map = {
     "KNOWLEDGE": 'get_knowledge_user_resource_permission.sql',
-    'TOOL': 'get_tool_user_resource_permission.sql',
     'MODEL': 'get_model_user_resource_permission.sql',
     'APPLICATION': 'get_application_user_resource_permission.sql'
 }
@@ -325,7 +322,6 @@ class ResourceUserPermissionSerializer(serializers.Serializer):
     RESOURCE_MODEL_MAP = {
         'APPLICATION': Application,
         'KNOWLEDGE': Knowledge,
-        'TOOL': Tool
     }
 
     def get_queryset(self, instance, is_x_pack_ee: bool):

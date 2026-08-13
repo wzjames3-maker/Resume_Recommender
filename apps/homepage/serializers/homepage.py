@@ -30,7 +30,6 @@ from maxkb.conf import PROJECT_DIR
 from models_provider.base_model_provider import ModelTypeConst
 from models_provider.models import Model
 from system_manage.models import WorkspaceUserResourcePermission
-from tools.models import Tool, ToolType
 
 _PERM_WITH_ROLE = ["VIEW", "MANAGE", "ROLE"]
 _PERM_DEFAULT = ["VIEW", "MANAGE"]
@@ -819,53 +818,6 @@ class HomePageSerializer(serializers.Serializer):
                 "total": result["total"] or 0,
                 "document_count": result["document_count"] or 0,
                 "failure_count": result["failure_count"] or 0,
-            }
-
-    class Tool(serializers.Serializer):
-        workspace_id = serializers.CharField(required=False, label=_('Workspace ID'))
-        user_id = serializers.UUIDField(required=True, label=_("User ID"))
-
-        def get_aggregation_query_set(self, auth):
-            workspace_id = self.data.get("workspace_id")
-            user_id = self.data.get("user_id")
-            if is_workspace_manage(auth, workspace_id):
-                return QuerySet(Tool).filter(workspace_id=workspace_id)
-            if is_extends_workspace_manage(auth, workspace_id):
-                if has_extends_workspace_manage_permission(auth, "TOOL:READ", workspace_id):
-                    return QuerySet(Tool).filter(workspace_id=workspace_id)
-            if not has_all_permission(auth, 'TOOL:READ', workspace_id):
-                return QuerySet(Tool).none()
-            permission_list = ["VIEW", "MANAGE", "ROLE"] if hasPermission(auth, "TOOL:READ") else ['VIEW',
-                                                                                                   'MANAGE']
-            return QuerySet(Tool).filter(
-                id__in=QuerySet(WorkspaceUserResourcePermission).filter(workspace_id=workspace_id,
-                                                                        user_id=user_id,
-                                                                        auth_target_type="TOOL",
-                                                                        permission_list__overlap=permission_list
-                                                                        )
-                .exclude(target='default').annotate(
-                    target_uuid=Cast("target", output_field=UUIDField()))
-                .values_list("target_uuid", flat=True))
-
-        def aggregation(self, auth, with_valid=True):
-            if with_valid:
-                self.is_valid(raise_exception=True)
-            query_set = self.get_aggregation_query_set(auth)
-            result = query_set.aggregate(
-                total=Count("id"),
-                custom_count=Count("id", filter=Q(tool_type=ToolType.CUSTOM)),
-                skill_count=Count("id", filter=Q(tool_type=ToolType.SKILL)),
-                mcp_count=Count("id", filter=Q(tool_type=ToolType.MCP)),
-                workflow_count=Count("id", filter=Q(tool_type=ToolType.WORKFLOW)),
-                data_source_count=Count("id", filter=Q(tool_type=ToolType.DATA_SOURCE)),
-            )
-            return {
-                "total": result["total"] or 0,
-                "custom_count": result["custom_count"] or 0,
-                "skill_count": result["skill_count"] or 0,
-                "mcp_count": result["mcp_count"] or 0,
-                "workflow_count": result["workflow_count"] or 0,
-                "data_source_count": result["data_source_count"] or 0,
             }
 
     class Model(serializers.Serializer):

@@ -8,62 +8,9 @@ from django.db.models import QuerySet
 from knowledge.models import Knowledge
 
 
-def get_initialization_resource_mapping():
-    from django.db.models import QuerySet
-    from application.flow.tools import get_workflow_resource, get_node_handle_callback, \
-        get_instance_resource
-    from system_manage.models.resource_mapping import ResourceType
-    from application.models import Application
-    from knowledge.models import KnowledgeWorkflow
-    from application.flow.tools import application_instance_field_call_dict, knowledge_instance_field_call_dict
-    from application.models.application import ApplicationKnowledgeMapping
-    from system_manage.models.resource_mapping import ResourceMapping
-    resource_mapping_list = []
-    ids = list(Application.objects.values_list('id', flat=True))
-    for app_id in ids:
-        try:
-            application = Application.objects.get(id=app_id)
-            workflow_mapping = get_workflow_resource(application.work_flow,
-                                                     get_node_handle_callback(ResourceType.APPLICATION,
-                                                                              application.id))
-            instance_mapping = get_instance_resource(application, ResourceType.APPLICATION, str(application.id),
-                                                     application_instance_field_call_dict)
-            resource_mapping_list += workflow_mapping
-            resource_mapping_list += instance_mapping
-        except:
-            pass
-    knowledge_ids = list(Knowledge.objects.values_list('id', flat=True))
-    for knowledge_id in knowledge_ids:
-        try:
-            knowledge = Knowledge.objects.get(id=knowledge_id)
-            if knowledge.type == 4:
-                knowledge_workflow = QuerySet(KnowledgeWorkflow).filter(knowledge_id=knowledge_id).first()
-                if knowledge_workflow:
-                    workflow_mapping = get_workflow_resource(knowledge_workflow.work_flow,
-                                                             get_node_handle_callback(ResourceType.KNOWLEDGE,
-                                                                                      str(knowledge_workflow.knowledge_id)))
-                    resource_mapping_list += workflow_mapping
-            instance_mapping = get_instance_resource(knowledge, ResourceType.KNOWLEDGE, str(knowledge.id),
-                                                     knowledge_instance_field_call_dict)
-
-            resource_mapping_list += instance_mapping
-        except:
-            pass
-    application_knowledge_mapping = [
-        ResourceMapping(source_type=ResourceType.APPLICATION, target_type=ResourceType.KNOWLEDGE,
-                        source_id=str(akm.application_id), target_id=str(akm.knowledge_id)) for akm in
-        QuerySet(ApplicationKnowledgeMapping).all()]
-    resource_mapping_list += application_knowledge_mapping
-    return {(str(item.target_type) + str(item.target_id) + str(item.source_type) + str(item.source_id)): item for item
-            in resource_mapping_list}.values()
-
-
 def resource_mapping(apps, schema_editor):
-    from system_manage.models.resource_mapping import ResourceMapping
-    with ThreadPoolExecutor(max_workers=3) as executor:
-        future = executor.submit(get_initialization_resource_mapping)
-        resource_mapping_list = future.result()
-        QuerySet(ResourceMapping).bulk_create(resource_mapping_list)
+    # 本地精简内核：不执行基于 workflow/flow 的历史资源映射回填
+    return
 
 
 class Migration(migrations.Migration):

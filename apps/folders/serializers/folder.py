@@ -19,9 +19,6 @@ from knowledge.serializers.knowledge import KnowledgeSerializer
 from knowledge.serializers.knowledge_folder import KnowledgeFolderTreeSerializer
 from system_manage.models import WorkspaceUserResourcePermission
 from system_manage.serializers.user_resource_permission import UserResourcePermissionSerializer
-from tools.models import ToolFolder, Tool
-from tools.serializers.tool import ToolSerializer
-from tools.serializers.tool_folder import ToolFolderTreeSerializer
 from users.serializers.user import is_workspace_manage
 
 
@@ -41,9 +38,7 @@ def has_exact_permission_by_role(user_id: str, workspace_id: str, permission_id:
 
 
 def get_source_type(source):
-    if source == Group.TOOL.name:
-        return Tool
-    elif source == Group.APPLICATION.name:
+    if source == Group.APPLICATION.name:
         return Application
     elif source == Group.KNOWLEDGE.name:
         return Knowledge
@@ -52,9 +47,7 @@ def get_source_type(source):
 
 
 def get_folder_type(source):
-    if source == Group.TOOL.name:
-        return ToolFolder
-    elif source == Group.APPLICATION.name:
+    if source == Group.APPLICATION.name:
         return ApplicationFolder
     elif source == Group.KNOWLEDGE.name:
         return KnowledgeFolder
@@ -63,9 +56,7 @@ def get_folder_type(source):
 
 
 def get_folder_tree_serializer(source):
-    if source == Group.TOOL.name:
-        return ToolFolderTreeSerializer
-    elif source == Group.APPLICATION.name:
+    if source == Group.APPLICATION.name:
         return ApplicationFolderTreeSerializer
     elif source == Group.KNOWLEDGE.name:
         return KnowledgeFolderTreeSerializer
@@ -291,12 +282,7 @@ class FolderSerializer(serializers.Serializer):
             source = self.data.get('source')
 
             for source_id in source_ids:
-                if source == Group.TOOL.name:
-                    ToolSerializer.Operate(data={
-                        'workspace_id': self.data.get('workspace_id'),
-                        'id': source_id,
-                    }).delete()
-                elif source == Group.APPLICATION.name:
+                if source == Group.APPLICATION.name:
                     ApplicationOperateSerializer(data={
                         'workspace_id': self.data.get('workspace_id'),
                         'application_id': source_id,

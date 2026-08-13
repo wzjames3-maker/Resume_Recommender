@@ -328,43 +328,6 @@ class KnowledgeAggregationAPI(APIMixin):
         ]
 
 
-class ToolAggregationAPI(APIMixin):
-
-    @staticmethod
-    def get_request():
-        return None
-
-    @staticmethod
-    def get_response():
-        return inline_serializer(
-            name="ToolAggregationResponse",
-            fields={
-                "code": serializers.IntegerField(help_text=_("Response code")),
-                "message": serializers.CharField(help_text=_("Response message")),
-                "data": inline_serializer(
-                    name="ToolAggregationData",
-                    fields={
-                        "total": serializers.IntegerField(help_text=_("Total tool count")),
-                        "active": serializers.IntegerField(help_text=_("Active tool count")),
-                        "inactive": serializers.IntegerField(help_text=_("Inactive tool count")),
-                    },
-                ),
-            },
-        )
-
-    @staticmethod
-    def get_parameters():
-        return [
-            OpenApiParameter(
-                name="workspace_id",
-                type=OpenApiTypes.STR,
-                location=OpenApiParameter.PATH,
-                required=True,
-                description=_("Workspace ID"),
-            ),
-        ]
-
-
 class ModelAggregationAPI(APIMixin):
 
     @staticmethod

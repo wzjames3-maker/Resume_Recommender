@@ -35,7 +35,6 @@ INSTALLED_APPS = [
     'drf_spectacular',
     'drf_spectacular_sidecar',
     'users.apps.UsersConfig',
-    'tools.apps.ToolConfig',
     'knowledge',
     'common',
     'system_manage',
@@ -44,7 +43,6 @@ INSTALLED_APPS = [
     'application',
     'chat',
     'oss',
-    'trigger',
     'django_apscheduler',
 ]
 

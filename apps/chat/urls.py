@@ -1,7 +1,6 @@
 from django.urls import path
 
 from application.views import ChatRecordDetailView, ChatRecordLinkView
-from chat.views.mcp import mcp_view
 from . import views
 
 app_name = 'chat'
@@ -9,14 +8,11 @@ app_name = 'chat'
 # fmt: off
 urlpatterns = [
     path('embed', views.ChatEmbedView.as_view()),
-    path('mcp', mcp_view),
     path('auth/anonymous', views.AnonymousAuthentication.as_view()),
     path('profile', views.AuthProfile.as_view()),
     path('application/profile', views.ApplicationProfile.as_view(), name='profile'),
     path('chat_message/<str:chat_id>', views.ChatView.as_view(), name='chat'),
     path('open', views.OpenView.as_view(), name='open'),
-    path('text_to_speech', views.TextToSpeech.as_view()),
-    path('speech_to_text', views.SpeechToText.as_view()),
     path('captcha', views.CaptchaView.as_view(), name='captcha'),
     path('<str:application_id>/chat/completions', views.OpenAIView.as_view(), name='application/chat_completions'),
     path('vote/chat/<str:chat_id>/chat_record/<str:chat_record_id>', views.VoteView.as_view(), name='vote'),

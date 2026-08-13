@@ -24,10 +24,6 @@ from application.chat_pipeline.step.generate_human_message_step.impl.base_genera
     BaseGenerateHumanMessageStep
 from application.chat_pipeline.step.reset_problem_step.impl.base_reset_problem_step import BaseResetProblemStep
 from application.chat_pipeline.step.search_dataset_step.impl.base_search_dataset_step import BaseSearchDatasetStep
-from application.flow.common import Answer, Workflow
-from application.flow.i_step_node import WorkFlowPostHandler
-from application.flow.tools import to_stream_response_simple
-from application.flow.workflow_manage import WorkflowManage
 from application.models import Application, ApplicationTypeChoices, \
     ChatUserType, ApplicationChatUserStats, ApplicationAccessToken, ChatRecord, Chat, ApplicationVersion
 from application.serializers.application import ApplicationOperateSerializer
@@ -95,6 +91,36 @@ class ChatMessageSerializers(serializers.Serializer):
     other_list = serializers.ListField(required=False, label=_("Other"))
     child_node = serializers.DictField(required=False, allow_null=True,
                                        label=_("Child Nodes"))
+
+
+
+class Answer:
+    def __init__(self, content, view_type, runtime_node_id, chat_record_id, child_node, real_node_id,
+                 reasoning_content):
+        self.view_type = view_type
+        self.content = content
+        self.reasoning_content = reasoning_content
+        self.runtime_node_id = runtime_node_id
+        self.chat_record_id = chat_record_id
+        self.child_node = child_node
+        self.real_node_id = real_node_id
+
+    def to_dict(self):
+        return {'view_type': self.view_type, 'content': self.content, 'runtime_node_id': self.runtime_node_id,
+                'chat_record_id': self.chat_record_id,
+                'child_node': self.child_node,
+                'reasoning_content': self.reasoning_content,
+                'real_node_id': self.real_node_id}
+
+
+def to_stream_response_simple(stream_event):
+    from django.http import StreamingHttpResponse
+
+    r = StreamingHttpResponse(
+        streaming_content=stream_event, content_type="text/event-stream;charset=utf-8", charset="utf-8"
+    )
+    r["Cache-Control"] = "no-cache"
+    return r
 
 
 def get_post_handler(chat_info: ChatInfo):
@@ -292,9 +318,6 @@ class ChatSerializers(serializers.Serializer):
     ip_address = serializers.CharField(required=False, label=_("IP Address"), allow_null=True, allow_blank=True)
     source = serializers.JSONField(required=False, label=_("Source"))
 
-    def is_valid_application_workflow(self, *, raise_exception=False):
-        self.is_valid_intraday_access_num()
-
     def is_valid_chat_id(self, chat_info: ChatInfo):
         if self.data.get('application_id') is not None and self.data.get('application_id') != str(
                 chat_info.application_id):
@@ -389,54 +412,6 @@ class ChatSerializers(serializers.Serializer):
         chat_record = QuerySet(ChatRecord).filter(id=chat_record_id).first()
         return chat_record
 
-    def chat_work_flow(self, chat_info: ChatInfo, instance: dict, base_to_response):
-        message = instance.get('message')
-        re_chat = instance.get('re_chat')
-        stream = instance.get('stream')
-        chat_user_id = self.data.get("chat_user_id")
-        chat_user_type = self.data.get('chat_user_type')
-        ip_address = self.data.get('ip_address')
-        source = self.data.get('source')
-        form_data = instance.get('form_data')
-        image_list = instance.get('image_list')
-        video_list = instance.get('video_list')
-        document_list = instance.get('document_list')
-        audio_list = instance.get('audio_list')
-        other_list = instance.get('other_list')
-        workspace_id = chat_info.application.workspace_id
-        chat_record_id = instance.get('chat_record_id')
-        debug = self.data.get('debug', False)
-        chat_record = None
-        history_chat_record = chat_info.chat_record_list
-        if chat_record_id is not None:
-            chat_record = self.get_chat_record(chat_info, chat_record_id)
-            if chat_record:
-                history_chat_record = [r for r in chat_info.chat_record_list if str(r.id) != chat_record_id]
-        work_flow = chat_info.application.work_flow
-        work_flow_manage = WorkflowManage(Workflow.new_instance(work_flow),
-                                          {'history_chat_record': history_chat_record, 'question': message,
-                                           'chat_id': chat_info.chat_id, 'chat_record_id': str(
-                                              uuid.uuid7()) if chat_record_id is None else str(chat_record_id),
-                                           'stream': stream,
-                                           're_chat': re_chat,
-                                           'chat_user_id': chat_user_id,
-                                           'chat_user_type': chat_user_type,
-                                           'ip_address': ip_address,
-                                           'source': source,
-                                           'workspace_id': workspace_id,
-                                           'debug': debug,
-                                           'chat_user': chat_info.get_chat_user(),
-                                           'chat_user_group': chat_info.get_chat_user_group(),
-                                           'application_id': str(chat_info.application_id)},
-                                          WorkFlowPostHandler(chat_info),
-                                          base_to_response, form_data, image_list, document_list, audio_list,
-                                          video_list,
-                                          other_list,
-                                          instance.get('runtime_node_id'),
-                                          instance.get('node_data'), chat_record, instance.get('child_node'))
-        chat_info.set_chat(message)
-        r = work_flow_manage.run()
-        return r
 
     def is_valid_chat_user(self):
         chat_user_id = self.data.get('chat_user_id')
@@ -462,12 +437,8 @@ class ChatSerializers(serializers.Serializer):
         self.is_valid_chat_id(chat_info)
         if not self.data.get('debug'):
             self.is_valid_chat_user()
-        if chat_info.application.type == ApplicationTypeChoices.SIMPLE:
-            self.is_valid_application_simple(raise_exception=True, chat_info=chat_info)
-            return self.chat_simple(chat_info, instance, base_to_response)
-        else:
-            self.is_valid_application_workflow(raise_exception=True)
-            return self.chat_work_flow(chat_info, instance, base_to_response)
+        self.is_valid_application_simple(raise_exception=True, chat_info=chat_info)
+        return self.chat_simple(chat_info, instance, base_to_response)
 
     def get_chat_info(self):
         self.is_valid(raise_exception=True)
@@ -489,10 +460,7 @@ class ChatSerializers(serializers.Serializer):
             '-create_time')[0:1].first()
         if application_version is None:
             raise ChatException(500, _("The application has not been published. Please use it after publishing."))
-        if application.type == ApplicationTypeChoices.SIMPLE:
-            return self.re_open_chat_simple(chat_id, application)
-        else:
-            return self.re_open_chat_work_flow(chat_id, application)
+        return self.re_open_chat_simple(chat_id, application)
 
     def re_open_chat_simple(self, chat_id, application):
         if self.data.get('debug'):
@@ -520,18 +488,6 @@ class ChatSerializers(serializers.Serializer):
         for chat_record in chat_record_list:
             chat_info.chat_record_list.append(chat_record)
         return chat_info
-
-    def re_open_chat_work_flow(self, chat_id, application):
-        chat_info = ChatInfo(chat_id, self.data.get('chat_user_id'), self.data.get('chat_user_type'),
-                             self.data.get('ip_address'),
-                             self.data.get('source'), [], [],
-                             application.id)
-        chat_record_list = list(QuerySet(ChatRecord).filter(chat_id=chat_id).order_by('-create_time')[0:5])
-        chat_record_list.sort(key=lambda r: r.create_time)
-        for chat_record in chat_record_list:
-            chat_info.chat_record_list.append(chat_record)
-        return chat_info
-
 
 class OpenChatSerializers(serializers.Serializer):
     workspace_id = serializers.CharField(required=False, allow_null=True, allow_blank=True, label=_("Workspace ID"))
@@ -563,24 +519,7 @@ class OpenChatSerializers(serializers.Serializer):
             if application_version is None:
                 raise AppApiException(500,
                                       _("The application has not been published. Please use it after publishing."))
-        if application.type == ApplicationTypeChoices.SIMPLE:
-            return self.open_simple(application)
-        else:
-            return self.open_work_flow(application)
-
-    def open_work_flow(self, application):
-        self.is_valid(raise_exception=True)
-        application_id = self.data.get('application_id')
-        chat_user_id = self.data.get("chat_user_id")
-        chat_user_type = self.data.get("chat_user_type")
-        ip_address = self.data.get("ip_address")
-        source = self.data.get("source")
-        debug = self.data.get("debug")
-        chat_id = str(uuid.uuid7())
-        ChatInfo(chat_id, chat_user_id, chat_user_type, ip_address, source, [],
-                 [],
-                 application_id, debug).set_cache()
-        return chat_id
+        return self.open_simple(application)
 
     def open_simple(self, application):
         application_id = self.data.get('application_id')
@@ -608,27 +547,3 @@ class OpenChatSerializers(serializers.Serializer):
                  application_id,
                  debug=debug).set_cache()
         return chat_id
-
-
-class TextToSpeechSerializers(serializers.Serializer):
-    application_id = serializers.UUIDField(required=True, label=_("Application ID"))
-
-    def text_to_speech(self, instance):
-        self.is_valid(raise_exception=True)
-        application_id = self.data.get('application_id')
-        application = QuerySet(Application).filter(id=application_id).first()
-        return ApplicationOperateSerializer(
-            data={'application_id': application_id,
-                  'user_id': application.user_id}).text_to_speech(instance, False)
-
-
-class SpeechToTextSerializers(serializers.Serializer):
-    application_id = serializers.UUIDField(required=True, label=_("Application ID"))
-
-    def speech_to_text(self, instance):
-        self.is_valid(raise_exception=True)
-        application_id = self.data.get('application_id')
-        application = QuerySet(Application).filter(id=application_id).first()
-        return ApplicationOperateSerializer(
-            data={'application_id': application_id,
-                  'user_id': application.user_id}).speech_to_text(instance, False)
