@@ -44,6 +44,12 @@ class AiService:
         if config is None:
             raise AppApiException(400, "请先在 AI 设置中选择模型")
         try:
+            model = get_model_by_id(config.llm_model_id, self.workspace_id)
+        except Exception as exc:
+            raise AppApiException(400, "请先在 AI 设置中选择模型") from exc
+        if model.model_type != _MODEL_TYPE_LLM:
+            raise AppApiException(400, "请选择 LLM 类型模型")
+        try:
             return get_model_instance_by_model_workspace_id(config.llm_model_id, self.workspace_id)
         except Exception as exc:
             raise AppApiException(400, "请先在 AI 设置中选择模型") from exc

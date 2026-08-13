@@ -511,6 +511,13 @@ class AiServiceTests(TestCase):
         with self.assertRaisesRegex(AppApiException, "AI 设置"):
             self.service.parse_search("找 Python 后端")
 
+    @patch("hr.serializers.ai.get_model_by_id")
+    def test_parse_search_rejects_non_llm_configured_model(self, mock_get_model):
+        HrConfig.objects.create(workspace_id="workspace-a", llm_model_id="model-1")
+        mock_get_model.return_value = SimpleNamespace(model_type="EMBEDDING")
+        with self.assertRaisesRegex(AppApiException, "LLM"):
+            self.service.parse_search("找 Python 后端")
+
     def test_extract_skills_requires_config(self):
         with self.assertRaisesRegex(AppApiException, "AI 设置"):
             self.service.extract_skills("招聘 Python 工程师")
@@ -535,9 +542,11 @@ class AiServiceTests(TestCase):
         with self.assertRaisesRegex(AppApiException, "description is too long"):
             self.service.extract_skills("x" * 4097)
 
+    @patch("hr.serializers.ai.get_model_by_id")
     @patch("hr.serializers.ai.get_model_instance_by_model_workspace_id")
-    def test_parse_search_with_mock_model(self, mock_instance):
+    def test_parse_search_with_mock_model(self, mock_instance, mock_get_model):
         HrConfig.objects.create(workspace_id="workspace-a", llm_model_id="model-1")
+        mock_get_model.return_value = SimpleNamespace(model_type="LLM")
         mock_instance.return_value = _StubModel(
             '{"skills": ["Python"], "city": "上海", "years_min": 3, "years_max": null, '
             '"highest_degree": null, "status": null}'
@@ -547,16 +556,20 @@ class AiServiceTests(TestCase):
         self.assertEqual(result["conditions"]["city"], "上海")
         self.assertEqual(result["conditions"]["years_min"], 3)
 
+    @patch("hr.serializers.ai.get_model_by_id")
     @patch("hr.serializers.ai.get_model_instance_by_model_workspace_id")
-    def test_extract_skills_with_mock_model(self, mock_instance):
+    def test_extract_skills_with_mock_model(self, mock_instance, mock_get_model):
         HrConfig.objects.create(workspace_id="workspace-a", llm_model_id="model-1")
+        mock_get_model.return_value = SimpleNamespace(model_type="LLM")
         mock_instance.return_value = _StubModel('{"skills": ["Python", "Django"]}')
         result = self.service.extract_skills("负责 Python/Django 开发")
         self.assertEqual(result["skills"], ["Python", "Django"])
 
+    @patch("hr.serializers.ai.get_model_by_id")
     @patch("hr.serializers.ai.get_model_instance_by_model_workspace_id")
-    def test_parse_search_model_instance_error_returns_config_hint(self, mock_instance):
+    def test_parse_search_model_instance_error_returns_config_hint(self, mock_instance, mock_get_model):
         HrConfig.objects.create(workspace_id="workspace-a", llm_model_id="model-1")
+        mock_get_model.return_value = SimpleNamespace(model_type="LLM")
         mock_instance.side_effect = Exception("broken")
         with self.assertRaisesRegex(AppApiException, "AI 设置"):
             self.service.parse_search("找 Python 后端")
