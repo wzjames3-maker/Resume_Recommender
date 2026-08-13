@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     'chat',
     'oss',
     'django_apscheduler',
+    'hr.apps.HrConfig',
 ]
 
 MIDDLEWARE = [
