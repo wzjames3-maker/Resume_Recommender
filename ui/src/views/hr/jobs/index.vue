@@ -21,21 +21,43 @@
         <el-table-column type="expand">
           <template #default="{ row }">
             <div class="assignment-panel" v-loading="detailLoading === row.id">
-              <el-empty v-if="jobDetails[row.id]?.assignments?.length === 0" description="暂无候选人" />
-              <el-table v-else :data="jobDetails[row.id]?.assignments" size="small">
-                <el-table-column prop="candidate_name" label="候选人" />
-                <el-table-column label="筛选状态" width="190">
-                  <template #default="{ row: assignment }">
-                    <el-select v-model="assignment.status" size="small" @change="updateAssignmentStatus(assignment)">
-                      <el-option label="待筛选" value="PENDING_SCREEN" />
-                      <el-option label="筛选通过" value="SCREEN_PASSED" />
-                      <el-option label="已淘汰" value="REJECTED" />
-                      <el-option label="已关闭" value="CLOSED" />
-                    </el-select>
-                  </template>
-                </el-table-column>
-                <el-table-column prop="note" label="备注" show-overflow-tooltip />
-              </el-table>
+              <el-tabs v-model="expandTab[row.id]" @tab-change="(name: string) => handleExpandTab(row, name)">
+                <el-tab-pane label="候选人" name="assignments">
+                  <el-empty v-if="jobDetails[row.id]?.assignments?.length === 0" description="暂无候选人" />
+                  <el-table v-else :data="jobDetails[row.id]?.assignments" size="small">
+                    <el-table-column prop="candidate_name" label="候选人" />
+                    <el-table-column label="筛选状态" width="190">
+                      <template #default="{ row: assignment }">
+                        <el-select v-model="assignment.status" size="small" @change="updateAssignmentStatus(assignment)">
+                          <el-option label="待筛选" value="PENDING_SCREEN" />
+                          <el-option label="筛选通过" value="SCREEN_PASSED" />
+                          <el-option label="已淘汰" value="REJECTED" />
+                          <el-option label="已关闭" value="CLOSED" />
+                        </el-select>
+                      </template>
+                    </el-table-column>
+                    <el-table-column prop="note" label="备注" show-overflow-tooltip />
+                  </el-table>
+                </el-tab-pane>
+                <el-tab-pane label="匹配候选人" name="matches">
+                  <el-empty v-if="matches[row.id]?.records?.length === 0" description="暂无匹配候选人" />
+                  <el-table v-else :data="matches[row.id]?.records || []" size="small">
+                    <el-table-column prop="name" label="候选人" min-width="120" />
+                    <el-table-column label="匹配分" width="90">
+                      <template #default="{ row: match }"><el-tag size="small">{{ match.match_score }}</el-tag></template>
+                    </el-table-column>
+                    <el-table-column label="命中技能" min-width="160">
+                      <template #default="{ row: match }">{{ match.matched_skills.join('、') || '-' }}</template>
+                    </el-table-column>
+                    <el-table-column prop="current_city" label="现居" width="100"><template #default="{ row: match }">{{ match.current_city || '-' }}</template></el-table-column>
+                    <el-table-column label="操作" width="110">
+                      <template #default="{ row: match }">
+                        <el-button link type="primary" size="small" :disabled="row.status === 'CLOSED'" @click="addMatchToJob(row, match)">加入职位</el-button>
+                      </template>
+                    </el-table-column>
+                  </el-table>
+                </el-tab-pane>
+              </el-tabs>
             </div>
           </template>
         </el-table-column>
@@ -65,6 +87,7 @@
           <el-col :span="12"><el-form-item label="招聘人数"><el-input-number v-model="jobForm.headcount" :min="1" :max="999" /></el-form-item></el-col>
         </el-row>
         <el-form-item label="职位描述"><el-input v-model="jobForm.description" type="textarea" :rows="5" maxlength="4096" show-word-limit /></el-form-item>
+        <el-form-item label="技能要求"><el-input v-model="jobSkillsText" placeholder="用逗号分隔，例如 Python, Django" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="jobDialogVisible = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveJob">保存</el-button></template>
     </el-dialog>
@@ -75,8 +98,8 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import AppTable from '@/components/app-table/index.vue'
 import HrApi from '@/api/hr/recruitment'
-import type { Assignment, Job, JobDetail } from '@/api/type/hr'
-import { MsgConfirm, MsgSuccess } from '@/utils/message'
+import type { Assignment, Job, JobDetail, JobMatchCandidate, JobMatchPage } from '@/api/type/hr'
+import { MsgConfirm, MsgError, MsgSuccess } from '@/utils/message'
 import { hasPermission } from '@/utils/permission'
 import { RoleConst } from '@/utils/permission/data'
 
@@ -86,9 +109,12 @@ const jobs = ref<Job[]>([])
 const filters = reactive({ name: '', status: '' })
 const pagination = reactive({ current_page: 1, page_size: 20, total: 0 })
 const jobDetails = reactive<Record<string, JobDetail>>({})
+const matches = reactive<Record<string, JobMatchPage>>({})
 const detailLoading = ref('')
 const jobDialogVisible = ref(false)
 const editingJob = ref<Job | null>(null)
+const jobSkillsText = ref('')
+const expandTab = reactive<Record<string, string>>({})
 const jobForm = reactive({ name: '', department: '', city: '', level: '', headcount: 1, description: '' })
 const isWorkspaceManage = computed(() => hasPermission([RoleConst.WORKSPACE_MANAGE.getWorkspaceRole], 'OR'))
 
@@ -99,6 +125,7 @@ function resetJobForm(job?: Job) {
   jobForm.level = job?.level || ''
   jobForm.headcount = job?.headcount || 1
   jobForm.description = job?.description || ''
+  jobSkillsText.value = job?.skill_requirements?.join(', ') || ''
 }
 
 function loadJobs() {
@@ -109,7 +136,20 @@ function loadJobs() {
 }
 
 function handleExpand(job: Job, expandedRows: Job[]) {
-  if (expandedRows.some((row) => row.id === job.id) && !jobDetails[job.id]) loadJobDetail(job)
+  if (expandedRows.some((row) => row.id === job.id) && !jobDetails[job.id]) {
+    loadJobDetail(job)
+    loadMatches(job)
+  }
+}
+
+function handleExpandTab(job: Job, name: string) {
+  if (name === 'matches' && !matches[job.id]) loadMatches(job)
+}
+
+function loadMatches(job: Job) {
+  HrApi.getJobMatches(job.id, { current_page: 1, page_size: 50 }).then((response) => {
+    matches[job.id] = response.data
+  })
 }
 
 function refresh() {
@@ -135,7 +175,11 @@ function openJobDialog(job?: Job) {
 function saveJob() {
   if (!jobForm.name.trim()) return
   saving.value = true
-  const request = editingJob.value ? HrApi.updateJob(editingJob.value.id, jobForm) : HrApi.createJob(jobForm)
+  const data = {
+    ...jobForm,
+    skill_requirements: jobSkillsText.value.split(',').map((skill) => skill.trim()).filter(Boolean),
+  }
+  const request = editingJob.value ? HrApi.updateJob(editingJob.value.id, data) : HrApi.createJob(data)
   request.then(() => {
     jobDialogVisible.value = false
     MsgSuccess('职位已保存')
@@ -160,6 +204,17 @@ function updateAssignmentStatus(assignment: Assignment) {
     if (job) loadJobDetail(job)
     refresh()
   })
+}
+
+function addMatchToJob(job: Job, match: JobMatchCandidate) {
+  HrApi.createAssignment(job.id, match.candidate_id)
+    .then(() => {
+      MsgSuccess(`已将 ${match.name} 加入职位`)
+      loadMatches(job)
+      loadJobDetail(job)
+      refresh()
+    })
+    .catch(() => {})
 }
 
 onMounted(loadJobs)

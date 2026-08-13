@@ -6,6 +6,7 @@ import type {
   CandidateDetail,
   Job,
   JobDetail,
+  JobMatchPage,
   PageResult,
   ResumeFile,
   ResumeUploadResult,
@@ -64,6 +65,9 @@ const getCandidateResumes = (candidateId: string) =>
 
 const deleteResume = (resumeId: string) => del(`${prefix.value}/resumes/${resumeId}`) as Promise<Result<boolean>>
 
+const getJobMatches = (jobId: string, page: pageRequest) =>
+  get(`${prefix.value}/jobs/${jobId}/matches/${page.current_page}/${page.page_size}`) as Promise<Result<JobMatchPage>>
+
 export default {
   archiveCandidate,
   createAssignment,
@@ -74,6 +78,7 @@ export default {
   getCandidateResumes,
   getCandidates,
   getJob,
+  getJobMatches,
   getJobs,
   updateAssignment,
   updateCandidate,

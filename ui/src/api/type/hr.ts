@@ -43,10 +43,27 @@ export interface Job {
   level: string
   headcount: number
   description: string
+  skill_requirements: string[]
   status: JobStatus
   active_assignment_count: number
   create_time: string
   update_time: string
+}
+
+export interface JobMatchCandidate {
+  candidate_id: string
+  name: string
+  current_city: string
+  target_city: string
+  years_experience: number | null
+  skills: string[]
+  match_score: number
+  matched_skills: string[]
+}
+
+export interface JobMatchPage {
+  total: number
+  records: JobMatchCandidate[]
 }
 
 export interface JobDetail extends Job {

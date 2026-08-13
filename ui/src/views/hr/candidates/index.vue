@@ -16,6 +16,15 @@
         <el-input v-model="filters.city" placeholder="按城市搜索" clearable @change="refresh" />
         <el-input v-model="filters.skills" placeholder="按技能搜索" clearable @change="refresh" />
         <el-input-number v-model="filters.years_min" :min="0" :max="99" placeholder="最低年限" @change="refresh" style="width: 140px" />
+        <el-input-number v-model="filters.years_max" :min="0" :max="99" placeholder="最高年限" @change="refresh" style="width: 140px" />
+        <el-select v-model="filters.highest_degree" placeholder="学历" clearable @change="refresh" style="width: 120px">
+          <el-option label="博士" value="博士" />
+          <el-option label="硕士" value="硕士" />
+          <el-option label="本科" value="本科" />
+          <el-option label="大专" value="大专" />
+          <el-option label="中专" value="中专" />
+          <el-option label="高中" value="高中" />
+        </el-select>
         <el-select v-model="filters.source" placeholder="来源" clearable @change="refresh" style="width: 140px">
           <el-option v-for="(label, value) in channelLabels" :key="value" :label="label" :value="value" />
         </el-select>
@@ -129,7 +138,10 @@ const loading = ref(false)
 const saving = ref(false)
 const candidates = ref<Candidate[]>([])
 const openJobs = ref<Job[]>([])
-const filters = reactive({ name: '', city: '', skills: '', years_min: null as number | null, source: '', status: '' })
+const filters = reactive({
+  name: '', city: '', skills: '', years_min: null as number | null, years_max: null as number | null,
+  highest_degree: '', source: '', status: '',
+})
 const pagination = reactive({ current_page: 1, page_size: 20, total: 0 })
 const candidateDialogVisible = ref(false)
 const assignmentDialogVisible = ref(false)
