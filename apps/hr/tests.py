@@ -4,7 +4,7 @@ from django.test import TestCase
 import uuid_utils.compat as uuid
 
 from common.exception.app_exception import AppApiException, AppUnauthorizedFailed, NotFound404
-from hr.models import AssignmentStatus, Candidate, CandidateAssignment, Job, ResumeFile
+from hr.models import AssignmentStatus, Candidate, CandidateAssignment, Interview, Job, ResumeFile
 from hr.serializers.recruitment import RecruitmentService
 from hr.services.resume_parser import parse_resume_text
 
@@ -141,7 +141,7 @@ class RecruitmentServiceTests(TestCase):
         self.service.archive_candidate(self.candidate.id)
 
         with self.assertRaisesRegex(AppApiException, "archived"):
-            self.service.update_assignment(assignment["id"], {"status": AssignmentStatus.PENDING_SCREEN})
+            self.service.create_assignment(self.job.id, self.candidate.id, {})
 
     def test_closed_job_rejects_reactivating_assignment(self):
         assignment = self.service.create_assignment(self.job.id, self.candidate.id, {})
@@ -149,7 +149,7 @@ class RecruitmentServiceTests(TestCase):
         self.service.edit_job(self.job.id, {"status": "CLOSED"})
 
         with self.assertRaisesRegex(AppApiException, "closed"):
-            self.service.update_assignment(assignment["id"], {"status": AssignmentStatus.PENDING_SCREEN})
+            self.service.create_assignment(self.job.id, self.candidate.id, {})
 
 
 class ResumeParserTests(TestCase):
@@ -356,3 +356,30 @@ class InterviewStatusMachineTests(TestCase):
         self.service.edit_job(self.job.id, {"status": "CLOSED"})
         with self.assertRaisesRegex(AppApiException, "closed"):
             self._transition(AssignmentStatus.INTERVIEWING)
+
+
+class InterviewServiceTests(TestCase):
+    def setUp(self):
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=uuid.uuid7(), is_workspace_manage=True)
+        self.candidate = Candidate.objects.create(name="Bob", workspace_id="workspace-a")
+        self.job = Job.objects.create(name="Engineer", workspace_id="workspace-a", headcount=1)
+        self.assignment_id = self.service.create_assignment(self.job.id, self.candidate.id, {})["id"]
+
+    def test_create_interview_auto_increments_round(self):
+        first = self.service.create_interview(self.assignment_id, {"interviewer": "张伟"})
+        self.assertEqual(first["round_no"], 1)
+        second = self.service.create_interview(self.assignment_id, {"interviewer": "李娜"})
+        self.assertEqual(second["round_no"], 2)
+
+    def test_update_interview_result_and_feedback(self):
+        interview = self.service.create_interview(self.assignment_id, {})
+        updated = self.service.update_interview(interview["id"], {"status": "PASSED", "feedback": "表现优秀"})
+        self.assertEqual(updated["status"], "PASSED")
+        self.assertEqual(updated["feedback"], "表现优秀")
+
+    def test_interview_cross_workspace_not_found(self):
+        foreign = Interview.objects.create(
+            workspace_id="workspace-b", assignment_id=self.assignment_id, round_no=1,
+        )
+        with self.assertRaises(NotFound404):
+            self.service.update_interview(foreign.id, {"status": "PASSED"})

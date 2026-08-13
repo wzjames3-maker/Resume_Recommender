@@ -150,3 +150,23 @@ class JobMatchAPI(APIView):
         return result.success(
             _service(request, workspace_id).match_job_candidates(job_id, current_page, page_size)
         )
+
+
+class InterviewAPI(APIView):
+    authentication_classes = [TokenAuth]
+
+    @member_required
+    def post(self, request, workspace_id, assignment_id):
+        return result.success(_service(request, workspace_id).create_interview(assignment_id, request.data))
+
+    @member_required
+    def get(self, request, workspace_id, assignment_id):
+        return result.success(_service(request, workspace_id).list_interviews(assignment_id))
+
+
+class InterviewDetailAPI(APIView):
+    authentication_classes = [TokenAuth]
+
+    @member_required
+    def put(self, request, workspace_id, interview_id):
+        return result.success(_service(request, workspace_id).update_interview(interview_id, request.data))
