@@ -33,6 +33,8 @@
           <el-option label="在库" value="ACTIVE" />
           <el-option label="已归档" value="ARCHIVED" />
         </el-select>
+        <el-input v-model="aiQuery" placeholder="AI 搜索：如 找 3 年以上 Python 经验在上海的人" clearable @keyup.enter="aiSearch" style="width: 300px" />
+        <el-button type="primary" plain :loading="aiSearching" @click="aiSearch">AI 搜索</el-button>
       </div>
 
       <AppTable :data="candidates" :pagination-config="pagination" @change-page="loadCandidates" @size-change="refresh">
@@ -151,6 +153,8 @@ const candidateDialogVisible = ref(false)
 const assignmentDialogVisible = ref(false)
 const uploadDialogVisible = ref(false)
 const aiSettingVisible = ref(false)
+const aiQuery = ref('')
+const aiSearching = ref(false)
 const uploadChannel = ref('OTHER')
 const uploadResults = ref<ResumeUploadResult[]>([])
 const resumeInputRef = ref<HTMLInputElement>()
@@ -194,6 +198,30 @@ function loadCandidates() {
 function refresh() {
   pagination.current_page = 1
   loadCandidates()
+}
+
+function aiSearch() {
+  const query = aiQuery.value.trim()
+  if (!query) return
+  aiSearching.value = true
+  HrApi.parseSearch(query)
+    .then((response) => {
+      const conditions = response.data.conditions
+      filters.name = ''
+      filters.city = conditions.city || ''
+      filters.skills = conditions.skills.join(', ')
+      filters.years_min = conditions.years_min
+      filters.years_max = conditions.years_max
+      filters.highest_degree = conditions.highest_degree || ''
+      filters.source = ''
+      filters.status = conditions.status || ''
+      refresh()
+      MsgSuccess('已按 AI 解析条件搜索，可继续修改筛选条件')
+    })
+    .catch(() => {})
+    .finally(() => {
+      aiSearching.value = false
+    })
 }
 
 function saveCandidate() {
