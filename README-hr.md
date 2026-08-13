@@ -92,6 +92,14 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
 - 检查：`manage.py check` 无问题；`makemigrations --check --dry-run` 无变更。
 - 前端：上传入口、结果展示与检索筛选可构建；`vue-tsc`、管理端和聊天端 Vite 构建均 PASS。
 
+## 人事三期验收（2026-08-13）
+
+- 组合搜索：候选人列表支持多技能（AND）、最高学历、工作年限区间、来源渠道组合过滤。
+- 职位匹配：职位可维护技能要求，开放职位按技能交集与城市计算匹配分并推荐候选人，支持一键加入职位。
+- 测试：`hr.tests application.tests knowledge.tests models_provider.tests`，39/39 PASS。
+- 检查：`manage.py check` 无问题；`makemigrations --check --dry-run` 无变更。
+- 前端：职位表单技能要求、展开区匹配推荐与高级搜索可构建；`vue-tsc`、管理端和聊天端 Vite 构建均 PASS。
+
 ## 旧版参考
 
 - `references/agentkb/` 是旧版 AgentKB 的固定源码快照，仅用于业务规则、状态机、接口和测试迁移参考。

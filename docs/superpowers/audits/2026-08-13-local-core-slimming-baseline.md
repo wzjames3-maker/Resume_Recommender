@@ -158,3 +158,20 @@ pnpm exec eslint .
 | `ui: vue-tsc --build` | PASS |
 | `ui: vite build` / `vite build --mode chat` | PASS；产物无已裁剪端点 |
 | 简历功能测试 | 解析回填、同工作区去重、跨工作区独立、格式/大小拒绝、解析失败保留错误原因均覆盖 |
+
+---
+
+## 人事三期验收记录（2026-08-13）
+
+实现范围：`Job.skill_requirements` 技能要求、候选人高级组合搜索（多技能 AND、学历、年限区间、来源）、职位匹配建议 API 与前端展示、一键加入职位。
+本期未引入 LLM 意图解析、画像或检索索引。
+
+| 验证项 | 结果 |
+|--------|------|
+| `manage.py test hr.tests application.tests knowledge.tests models_provider.tests --keepdb` | 39/39 PASS |
+| `manage.py check` | System check identified no issues (0 silenced) |
+| `manage.py makemigrations --check --dry-run` | No changes detected |
+| `ui: node scripts/check-local-core-surface.mjs` | PASS |
+| `ui: vue-tsc --build` | PASS |
+| `ui: vite build` / `vite build --mode chat` | PASS；产物无已裁剪端点 |
+| 搜索与匹配测试 | 多技能 AND、学历/年限区间/来源过滤、技能与城市加分、分数降序、无要求返回空、关闭职位拒绝、跨工作区 404 均覆盖 |
