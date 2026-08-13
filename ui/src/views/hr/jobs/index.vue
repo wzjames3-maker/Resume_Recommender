@@ -6,6 +6,7 @@
         <span class="color-secondary">维护开放职位与候选人筛选进度</span>
       </div>
       <el-button v-if="isWorkspaceManage" type="primary" @click="openJobDialog()">新建职位</el-button>
+      <el-button plain @click="aiSettingVisible = true">AI 设置</el-button>
     </div>
 
     <el-card style="--el-card-padding: 0" v-loading="loading">
@@ -140,12 +141,15 @@
       </el-table>
       <template #footer><el-button @click="interviewDrawerVisible = false">关闭</el-button></template>
     </el-dialog>
+
+    <AiSettingDialog v-model="aiSettingVisible" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import AppTable from '@/components/app-table/index.vue'
+import AiSettingDialog from '@/views/hr/components/AiSettingDialog.vue'
 import HrApi from '@/api/hr/recruitment'
 import type { Assignment, Interview, Job, JobDetail, JobMatchCandidate, JobMatchPage } from '@/api/type/hr'
 import { MsgConfirm, MsgError, MsgSuccess } from '@/utils/message'
@@ -161,6 +165,7 @@ const jobDetails = reactive<Record<string, JobDetail>>({})
 const matches = reactive<Record<string, JobMatchPage>>({})
 const detailLoading = ref('')
 const jobDialogVisible = ref(false)
+const aiSettingVisible = ref(false)
 const editingJob = ref<Job | null>(null)
 const jobSkillsText = ref('')
 const expandTab = reactive<Record<string, string>>({})

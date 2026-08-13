@@ -7,6 +7,7 @@
       </div>
       <el-button type="primary" @click="openCandidateDialog()">新建候选人</el-button>
       <el-button type="primary" plain @click="openResumeUpload()">上传简历</el-button>
+      <el-button plain @click="aiSettingVisible = true">AI 设置</el-button>
       <input ref="resumeInputRef" type="file" multiple accept=".docx,.txt" class="hidden-input" @change="handleResumeFiles" />
     </div>
 
@@ -114,12 +115,15 @@
       </el-form>
       <template #footer><el-button @click="assignmentDialogVisible = false">取消</el-button><el-button type="primary" :disabled="!selectedJobId" :loading="saving" @click="createAssignment">确认加入</el-button></template>
     </el-dialog>
+
+    <AiSettingDialog v-model="aiSettingVisible" />
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import AppTable from '@/components/app-table/index.vue'
+import AiSettingDialog from '@/views/hr/components/AiSettingDialog.vue'
 import HrApi from '@/api/hr/recruitment'
 import type { Candidate, Job, ResumeUploadResult } from '@/api/type/hr'
 import { MsgConfirm, MsgError, MsgSuccess } from '@/utils/message'
@@ -146,6 +150,7 @@ const pagination = reactive({ current_page: 1, page_size: 20, total: 0 })
 const candidateDialogVisible = ref(false)
 const assignmentDialogVisible = ref(false)
 const uploadDialogVisible = ref(false)
+const aiSettingVisible = ref(false)
 const uploadChannel = ref('OTHER')
 const uploadResults = ref<ResumeUploadResult[]>([])
 const resumeInputRef = ref<HTMLInputElement>()
