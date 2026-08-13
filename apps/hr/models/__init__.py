@@ -1,8 +1,11 @@
 from .recruitment import (
+    ACTIVE_ASSIGNMENT_STATUSES,
     AssignmentStatus,
     Candidate,
     CandidateAssignment,
     CandidateStatus,
+    Interview,
+    InterviewStatus,
     Job,
     JobStatus,
     ResumeChannel,
@@ -11,10 +14,13 @@ from .recruitment import (
 )
 
 __all__ = [
+    "ACTIVE_ASSIGNMENT_STATUSES",
     "AssignmentStatus",
     "Candidate",
     "CandidateAssignment",
     "CandidateStatus",
+    "Interview",
+    "InterviewStatus",
     "Job",
     "JobStatus",
     "ResumeChannel",

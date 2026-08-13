@@ -3,14 +3,17 @@ import os
 import shutil
 
 from django.db import IntegrityError, transaction
-from django.db.models import Count, Q
+from django.db.models import Count, Max, Q
 
 from common.exception.app_exception import AppApiException, AppUnauthorizedFailed, NotFound404
 from hr.models import (
+    ACTIVE_ASSIGNMENT_STATUSES,
     AssignmentStatus,
     Candidate,
     CandidateAssignment,
     CandidateStatus,
+    Interview,
+    InterviewStatus,
     Job,
     JobStatus,
     ResumeChannel,
@@ -19,6 +22,29 @@ from hr.models import (
 )
 from hr.services.resume_parser import extract_text_from_docx, extract_text_from_txt, parse_resume_text
 from maxkb.const import PROJECT_DIR
+
+_ALLOWED_TRANSITIONS = {
+    AssignmentStatus.PENDING_SCREEN: {
+        AssignmentStatus.SCREEN_PASSED,
+        AssignmentStatus.REJECTED,
+        AssignmentStatus.CLOSED,
+    },
+    AssignmentStatus.SCREEN_PASSED: {
+        AssignmentStatus.INTERVIEWING,
+        AssignmentStatus.REJECTED,
+        AssignmentStatus.CLOSED,
+    },
+    AssignmentStatus.INTERVIEWING: {
+        AssignmentStatus.OFFER,
+        AssignmentStatus.REJECTED,
+        AssignmentStatus.CLOSED,
+    },
+    AssignmentStatus.OFFER: {
+        AssignmentStatus.HIRED,
+        AssignmentStatus.REJECTED,
+        AssignmentStatus.CLOSED,
+    },
+}
 
 
 class RecruitmentService:
@@ -38,6 +64,12 @@ class RecruitmentService:
         if job is None:
             raise NotFound404(404, "Resource not found")
         return job
+
+    def _assignment(self, assignment_id):
+        assignment = CandidateAssignment.objects.filter(id=assignment_id, workspace_id=self.workspace_id).first()
+        if assignment is None:
+            raise NotFound404(404, "Resource not found")
+        return assignment
 
     def _require_manage(self):
         if not self.is_workspace_manage:
@@ -344,6 +376,12 @@ class RecruitmentService:
             raise AppApiException(400, "Job is closed")
         if candidate.status != CandidateStatus.ACTIVE:
             raise AppApiException(400, "Candidate is archived")
+        if CandidateAssignment.objects.filter(
+            workspace_id=self.workspace_id,
+            candidate=candidate,
+            status=AssignmentStatus.HIRED,
+        ).exists():
+            raise AppApiException(400, "Candidate is already hired")
         try:
             with transaction.atomic():
                 assignment = CandidateAssignment.objects.create(
@@ -370,14 +408,19 @@ class RecruitmentService:
                 if "status" in data:
                     if data["status"] not in AssignmentStatus.values:
                         raise AppApiException(400, "status is invalid")
-                    if data["status"] in [AssignmentStatus.PENDING_SCREEN, AssignmentStatus.SCREEN_PASSED]:
+                    target_status = data["status"]
+                    current_status = assignment.status
+                    allowed = _ALLOWED_TRANSITIONS.get(current_status)
+                    if allowed is None or target_status not in allowed:
+                        raise AppApiException(400, f"Illegal status transition from {current_status} to {target_status}")
+                    if target_status in ACTIVE_ASSIGNMENT_STATUSES:
                         candidate = Candidate.objects.select_for_update().get(id=assignment.candidate_id)
                         job = Job.objects.select_for_update().get(id=assignment.job_id)
                         if candidate.status != CandidateStatus.ACTIVE:
                             raise AppApiException(400, "Candidate is archived")
                         if job.status != JobStatus.OPEN:
                             raise AppApiException(400, "Job is closed")
-                    assignment.status = data["status"]
+                    assignment.status = target_status
                     update_fields.append("status")
                 if "note" in data:
                     assignment.note = self._optional_string(data, "note", 4096)
@@ -530,3 +573,58 @@ class RecruitmentService:
         total = len(records)
         start = (current_page - 1) * page_size
         return {"total": total, "records": records[start:start + page_size]}
+
+    @staticmethod
+    def _interview_output(interview):
+        return {
+            "id": str(interview.id),
+            "assignment_id": str(interview.assignment_id),
+            "round_no": interview.round_no,
+            "interviewer": interview.interviewer,
+            "scheduled_at": interview.scheduled_at,
+            "status": interview.status,
+            "feedback": interview.feedback,
+            "create_time": interview.create_time,
+            "update_time": interview.update_time,
+        }
+
+    def create_interview(self, assignment_id, data):
+        assignment = self._assignment(assignment_id)
+        max_round = Interview.objects.filter(
+            workspace_id=self.workspace_id,
+            assignment=assignment,
+        ).aggregate(max_round=Max("round_no"))["max_round"] or 0
+        interview = Interview.objects.create(
+            workspace_id=self.workspace_id,
+            assignment=assignment,
+            round_no=int(data.get("round_no", max_round + 1)),
+            interviewer=self._optional_string(data, "interviewer", 64),
+            scheduled_at=data.get("scheduled_at") or None,
+            user_id=self.user_id,
+        )
+        return self._interview_output(interview)
+
+    def list_interviews(self, assignment_id):
+        assignment = self._assignment(assignment_id)
+        interviews = Interview.objects.filter(
+            workspace_id=self.workspace_id,
+            assignment=assignment,
+        ).order_by("round_no")
+        return [self._interview_output(interview) for interview in interviews]
+
+    def update_interview(self, interview_id, data):
+        interview = Interview.objects.filter(id=interview_id, workspace_id=self.workspace_id).first()
+        if interview is None:
+            raise NotFound404(404, "Resource not found")
+        if "status" in data:
+            if data["status"] not in InterviewStatus.values:
+                raise AppApiException(400, "status is invalid")
+            interview.status = data["status"]
+        if "feedback" in data:
+            interview.feedback = self._optional_string(data, "feedback", 4096)
+        if "interviewer" in data:
+            interview.interviewer = self._optional_string(data, "interviewer", 64)
+        if "scheduled_at" in data:
+            interview.scheduled_at = data["scheduled_at"] or None
+        interview.save()
+        return self._interview_output(interview)

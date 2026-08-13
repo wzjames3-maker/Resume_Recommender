@@ -314,3 +314,45 @@ class JobMatchTests(TestCase):
                                      skill_requirements=["Python"])
         with self.assertRaises(NotFound404):
             self.service.match_job_candidates(foreign.id, 1, 20)
+
+
+class InterviewStatusMachineTests(TestCase):
+    def setUp(self):
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=uuid.uuid7(), is_workspace_manage=True)
+        self.candidate = Candidate.objects.create(name="Alice", workspace_id="workspace-a")
+        self.job = Job.objects.create(name="Engineer", workspace_id="workspace-a", headcount=1)
+        self.assignment_id = self.service.create_assignment(self.job.id, self.candidate.id, {})["id"]
+
+    def _transition(self, to_status):
+        return self.service.update_assignment(self.assignment_id, {"status": to_status})
+
+    def test_full_offer_chain_is_legal(self):
+        self._transition(AssignmentStatus.SCREEN_PASSED)
+        self._transition(AssignmentStatus.INTERVIEWING)
+        self._transition(AssignmentStatus.OFFER)
+        self._transition(AssignmentStatus.HIRED)
+        assignment = CandidateAssignment.objects.get(id=self.assignment_id)
+        self.assertEqual(assignment.status, "HIRED")
+
+    def test_illegal_transition_rejected(self):
+        with self.assertRaisesRegex(AppApiException, "transition"):
+            self._transition(AssignmentStatus.OFFER)
+
+    def test_terminal_state_cannot_transition(self):
+        self._transition(AssignmentStatus.REJECTED)
+        with self.assertRaisesRegex(AppApiException, "transition"):
+            self._transition(AssignmentStatus.SCREEN_PASSED)
+
+    def test_hired_candidate_cannot_get_new_assignment(self):
+        self._transition(AssignmentStatus.SCREEN_PASSED)
+        self._transition(AssignmentStatus.INTERVIEWING)
+        self._transition(AssignmentStatus.OFFER)
+        self._transition(AssignmentStatus.HIRED)
+        with self.assertRaisesRegex(AppApiException, "hired"):
+            self.service.create_assignment(self.job.id, self.candidate.id, {})
+
+    def test_closed_job_cannot_enter_interviewing(self):
+        self._transition(AssignmentStatus.SCREEN_PASSED)
+        self.service.edit_job(self.job.id, {"status": "CLOSED"})
+        with self.assertRaisesRegex(AppApiException, "closed"):
+            self._transition(AssignmentStatus.INTERVIEWING)

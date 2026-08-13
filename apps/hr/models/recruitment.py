@@ -16,8 +16,19 @@ class JobStatus(models.TextChoices):
 class AssignmentStatus(models.TextChoices):
     PENDING_SCREEN = "PENDING_SCREEN", "Pending screen"
     SCREEN_PASSED = "SCREEN_PASSED", "Screen passed"
+    INTERVIEWING = "INTERVIEWING", "Interviewing"
+    OFFER = "OFFER", "Offer"
+    HIRED = "HIRED", "Hired"
     REJECTED = "REJECTED", "Rejected"
     CLOSED = "CLOSED", "Closed"
+
+
+ACTIVE_ASSIGNMENT_STATUSES = [
+    AssignmentStatus.PENDING_SCREEN,
+    AssignmentStatus.SCREEN_PASSED,
+    AssignmentStatus.INTERVIEWING,
+    AssignmentStatus.OFFER,
+]
 
 
 class Candidate(models.Model):
@@ -84,10 +95,35 @@ class CandidateAssignment(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["workspace_id", "candidate", "job"],
-                condition=Q(status__in=[AssignmentStatus.PENDING_SCREEN, AssignmentStatus.SCREEN_PASSED]),
+                condition=Q(status__in=ACTIVE_ASSIGNMENT_STATUSES),
                 name="hr_one_active_assignment_per_candidate_job",
             )
         ]
+
+
+class InterviewStatus(models.TextChoices):
+    PENDING = "PENDING", "Pending"
+    PASSED = "PASSED", "Passed"
+    FAILED = "FAILED", "Failed"
+    NO_SHOW = "NO_SHOW", "No show"
+    CANCELLED = "CANCELLED", "Cancelled"
+
+
+class Interview(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
+    workspace_id = models.CharField(max_length=64, db_index=True)
+    assignment = models.ForeignKey(CandidateAssignment, on_delete=models.CASCADE)
+    round_no = models.PositiveSmallIntegerField()
+    interviewer = models.CharField(max_length=64, blank=True, default="")
+    scheduled_at = models.DateTimeField(null=True, blank=True)
+    status = models.CharField(max_length=16, choices=InterviewStatus.choices, default=InterviewStatus.PENDING)
+    feedback = models.TextField(blank=True, default="")
+    user_id = models.UUIDField(null=True, blank=True)
+    create_time = models.DateTimeField(auto_now_add=True)
+    update_time = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "hr_interview"
 
 
 class ResumeStatus(models.TextChoices):
