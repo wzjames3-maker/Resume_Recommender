@@ -71,8 +71,17 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
 - 依赖安装必须使用 `uv sync --locked`（`uv.lock` 已入库）。
 
 ## 新增模块
-- apps/hr：人事业务 Django app（骨架，后续阶段实现）
-- ui/src/views/hr：人事占位页（后续阶段实现）
+- apps/hr：人事招聘基础闭环，包含候选人、职位和候选人指派。
+- ui/src/views/hr：候选人和职位管理页面。
+- API：`/admin/api/workspace/{workspace_id}/hr/...`，复用当前工作区认证与管理员权限。
+
+## 人事一期验收（2026-08-13）
+
+- 数据模型：`Candidate`、`Job`、`CandidateAssignment` 迁移成功；有效指派去重且职位 HC 必须大于 0。
+- 后端：候选人、职位、指派 API 均按 `workspace_id` 隔离；关闭职位和归档候选人不可建立新有效指派。
+- 测试：`hr.tests application.tests knowledge.tests models_provider.tests`，20/20 PASS。
+- 检查：`manage.py check` 无问题；`makemigrations --check --dry-run` 无变更。
+- 前端：HR 菜单、候选人管理、职位管理、加入职位和筛选状态更新可构建；`vue-tsc`、管理端和聊天端 Vite 构建均 PASS。
 
 ## 旧版参考
 

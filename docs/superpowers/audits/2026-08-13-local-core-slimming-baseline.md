@@ -124,3 +124,20 @@ pnpm exec eslint .
 | `knowledge` 表 `type=4` | `meta.disabled_reason=workflow_knowledge_removed_by_local_core`；Operate/HitTest 抛 400 |
 | `django_apscheduler_djangojob` | `trigger:*` 在 scheduler import 时被清理；`clean_chat_log` 保留 |
 | `get_provider('model_local_provider')` | `AppApiException`，消息含 provider 名，无裸 `KeyError` |
+
+---
+
+## 人事一期验收记录（2026-08-13）
+
+实现范围：新增 `apps/hr` 的候选人、职位和候选人指派模型、工作区隔离 API，以及 Vue 管理端的“人事部”候选人与职位页面。
+本期未引入工作流、MCP、工具、简历解析、RAG、LLM 调用或任何已裁剪 Provider。
+
+| 验证项 | 结果 |
+|--------|------|
+| `manage.py test hr.tests application.tests knowledge.tests models_provider.tests --keepdb` | 20/20 PASS |
+| `manage.py check` | System check identified no issues (0 silenced) |
+| `manage.py makemigrations --check --dry-run` | No changes detected |
+| `ui: node scripts/check-local-core-surface.mjs` | PASS |
+| `ui: vue-tsc --build` | PASS |
+| `ui: vite build` / `vite build --mode chat` | PASS；产物无已裁剪端点 |
+| HR 约束测试 | 有效指派唯一、终态可重新指派、HC 大于 0、关闭职位/归档候选人约束、跨工作区 404、管理员写权限均覆盖 |
