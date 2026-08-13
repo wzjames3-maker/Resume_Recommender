@@ -1,0 +1,80 @@
+# coding=utf-8
+"""
+    @project: MaxKB
+    @file： resume_parser.py
+    @desc：简历文本提取与规则型字段抽取（不调用模型，无法确定一律留空）
+"""
+import re
+
+_DEGREES = ["博士", "硕士", "本科", "大专", "中专", "高中"]
+
+
+def _extract_after(text, patterns):
+    for pattern in patterns:
+        match = re.search(pattern, text)
+        if match:
+            value = match.group(1).strip().strip(":：，,。;；")
+            if value:
+                return value
+    return ""
+
+
+def _split_skills(section):
+    if not section:
+        return []
+    parts = re.split(r"[，,、;；/|]\s*", section.strip())
+    return [part.strip() for part in parts if part.strip()]
+
+
+def parse_resume_text(text):
+    name = _extract_after(text, [r"姓名[:：]\s*([^\n]{2,8})", r"(?m)^([\u4e00-\u9fa5]{2,4})$"])
+    email_match = re.search(r"[\w.+-]+@[\w-]+\.[\w.-]+", text)
+    phone_match = re.search(r"(?:\+?86[- ]?)?1[3-9]\d{9}", text)
+    current_city = _extract_after(text, [r"(?:现居城市|现居|现居住|所在城市)[:：]?\s*([\u4e00-\u9fa5]{2,10})"])
+    target_city = _extract_after(text, [r"(?:期望城市|意向城市|目标城市)[:：]\s*([\u4e00-\u9fa5]{2,10})"])
+    degree = ""
+    for value in _DEGREES:
+        if re.search(re.escape(value), text):
+            degree = value
+            break
+    years_match = re.search(r"(\d+)\s*年(?:工作经验|经验|工作经历)|工作\s*(\d+)\s*年", text)
+    years = int(years_match.group(1) or years_match.group(2)) if years_match else None
+    skills = _split_skills(_extract_after(text, [r"(?:技能|专业技能|掌握技能)[:：]\s*([^\n]{1,500})"]))
+
+    note_parts = []
+    for section_name, patterns in (
+        ("教育经历", [r"教育经历[:：]?\s*\n(.*?)(?:\n\s*(?:工作经历|项目经历|自我评价)|$)"]),
+        ("工作经历", [r"工作经历[:：]?\s*\n(.*?)(?:\n\s*(?:教育经历|项目经历|自我评价)|$)"]),
+    ):
+        section = _extract_after(text, patterns)
+        if section:
+            note_parts.append(f"{section_name}：{section.strip()}")
+
+    return {
+        "name": name,
+        "email": email_match.group(0) if email_match else "",
+        "phone": phone_match.group(0) if phone_match else "",
+        "current_city": current_city,
+        "target_city": target_city,
+        "highest_degree": degree,
+        "years_experience": years,
+        "skills": skills,
+        "note": "\n".join(note_parts),
+    }
+
+
+def extract_text_from_docx(file_path):
+    from docx import Document
+
+    document = Document(file_path)
+    return "\n".join(paragraph.text for paragraph in document.paragraphs)
+
+
+def extract_text_from_txt(file_path):
+    for encoding in ("utf-8", "gbk"):
+        try:
+            with open(file_path, "r", encoding=encoding) as handle:
+                return handle.read()
+        except UnicodeDecodeError:
+            continue
+    raise ValueError("无法解码文本文件")

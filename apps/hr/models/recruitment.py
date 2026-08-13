@@ -87,3 +87,40 @@ class CandidateAssignment(models.Model):
                 name="hr_one_active_assignment_per_candidate_job",
             )
         ]
+
+
+class ResumeStatus(models.TextChoices):
+    PENDING = "PENDING", "Pending"
+    SUCCESS = "SUCCESS", "Success"
+    FAILED = "FAILED", "Failed"
+
+
+class ResumeChannel(models.TextChoices):
+    REFERRAL = "REFERRAL", "Referral"
+    JOB_SITE = "JOB_SITE", "Job site"
+    HEADHUNTER = "HEADHUNTER", "Headhunter"
+    CAMPUS = "CAMPUS", "Campus"
+    OTHER = "OTHER", "Other"
+
+
+class ResumeFile(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
+    workspace_id = models.CharField(max_length=64, db_index=True)
+    file_name = models.CharField(max_length=255)
+    extension = models.CharField(max_length=16)
+    file_path = models.CharField(max_length=1024)
+    file_size = models.IntegerField()
+    sha256 = models.CharField(max_length=64, db_index=True)
+    source_channel = models.CharField(max_length=20, choices=ResumeChannel.choices, default=ResumeChannel.OTHER)
+    status = models.CharField(max_length=16, choices=ResumeStatus.choices, default=ResumeStatus.PENDING)
+    error_message = models.TextField(blank=True, default="")
+    candidate = models.ForeignKey(Candidate, on_delete=models.SET_NULL, null=True, blank=True)
+    user_id = models.UUIDField(null=True, blank=True)
+    create_time = models.DateTimeField(auto_now_add=True)
+    update_time = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "hr_resume_file"
+        constraints = [
+            models.UniqueConstraint(fields=["workspace_id", "sha256"], name="hr_unique_resume_sha256_per_workspace")
+        ]

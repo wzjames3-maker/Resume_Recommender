@@ -1,4 +1,14 @@
-from .recruitment import AssignmentStatus, Candidate, CandidateAssignment, CandidateStatus, Job, JobStatus
+from .recruitment import (
+    AssignmentStatus,
+    Candidate,
+    CandidateAssignment,
+    CandidateStatus,
+    Job,
+    JobStatus,
+    ResumeChannel,
+    ResumeFile,
+    ResumeStatus,
+)
 
 __all__ = [
     "AssignmentStatus",
@@ -7,4 +17,7 @@ __all__ = [
     "CandidateStatus",
     "Job",
     "JobStatus",
+    "ResumeChannel",
+    "ResumeFile",
+    "ResumeStatus",
 ]
