@@ -472,6 +472,12 @@ class AiService:
         if config is None:
             raise AppApiException(400, "请先在 AI 设置中选择模型")
         try:
+            model = get_model_by_id(config.llm_model_id, self.workspace_id)
+        except Exception as exc:
+            raise AppApiException(400, "请先在 AI 设置中选择模型") from exc
+        if model.model_type != _MODEL_TYPE_LLM:
+            raise AppApiException(400, "请选择 LLM 类型模型")
+        try:
             return get_model_instance_by_model_workspace_id(config.llm_model_id, self.workspace_id)
         except Exception as exc:
             raise AppApiException(400, "请先在 AI 设置中选择模型") from exc
@@ -497,7 +503,7 @@ class AiService:
 uv run python apps/manage.py test hr.tests.AiServiceTests --keepdb
 ```
 
-预期：`Ran 15 tests ... OK`
+预期：`Ran 15 tests ... OK`（另：审查裁决规格 1.2 要求实例化路径也校验 LLM 类型，`_model()` 已在 `get_model_instance_by_model_workspace_id` 前经 `get_model_by_id` 校验 `model.model_type == 'LLM'`，相关 3 个 mock 用例需同步 patch `get_model_by_id`，并新增非 LLM 配置模型 → 400 用例，最终 16 tests OK）
 
 - [ ] **步骤 5：Commit**
 
@@ -605,7 +611,7 @@ from .ai import HrAIConfigAPI, HrSearchParseAPI, HrSkillExtractAPI
 uv run python apps/manage.py test hr.tests --keepdb && uv run python apps/manage.py check && uv run python apps/manage.py makemigrations --check --dry-run
 ```
 
-预期：hr 全部测试 OK（hr.tests 单独 35 旧 + 22 新 = 57；四 app 全量基线 47，任务 9 汇总为 73），check 无问题，无待生成迁移。
+预期：hr 全部测试 OK（hr.tests 单独 35 旧 + 23 新 = 58；四 app 全量基线 47，任务 9 汇总为 74），check 无问题，无待生成迁移。
 
 - [ ] **步骤 5：Commit**
 
@@ -957,7 +963,7 @@ git diff --check
 - AI 配置：工作区级 LLM 模型选择（复用内核模型管理，校验 LLM 类型，兼容共享授权模型）。
 - 自然语言搜人：LLM 解析为结构化条件（技能/城市/年限/学历/状态），回填筛选表单后执行组合搜索。
 - 职位技能抽取：职位描述一键抽取技能列表（上限 20），回填技能要求。
-- 测试：`hr.tests application.tests knowledge.tests models_provider.tests`，73/73 PASS。
+- 测试：`hr.tests application.tests knowledge.tests models_provider.tests`，74/74 PASS。
 - 检查：`manage.py check` 无问题；`makemigrations --check --dry-run` 无变更。
 - 前端：AI 设置对话框、AI 搜索、技能抽取可构建；`vue-tsc`、管理端和聊天端 Vite 构建均 PASS。
 ```
@@ -974,7 +980,7 @@ git diff --check
 
 | 验证项 | 结果 |
 |--------|------|
-| `manage.py test hr.tests application.tests knowledge.tests models_provider.tests --keepdb` | 73/73 PASS |
+| `manage.py test hr.tests application.tests knowledge.tests models_provider.tests --keepdb` | 74/74 PASS |
 | `manage.py check` | System check identified no issues (0 silenced) |
 | `manage.py makemigrations --check --dry-run` | No changes detected |
 | `ui: vue-tsc --build` | PASS |
