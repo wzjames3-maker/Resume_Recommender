@@ -6,8 +6,6 @@
     @date：2025/6/4 14:13
     @desc:
 """
-from qianfan.utils.utils import get_ip_address
-
 from system_manage.models.log_management import Log
 
 

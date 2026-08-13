@@ -12,25 +12,13 @@ from common.utils.common import get_file_content
 from models_provider.base_model_provider import IModelProvider, ModelProvideInfo, ModelInfo, \
     ModelTypeConst, ModelInfoManage
 from models_provider.impl.openai_model_provider.credential.embedding import OpenAIEmbeddingCredential
-from models_provider.impl.openai_model_provider.credential.image import OpenAIImageModelCredential
 from models_provider.impl.openai_model_provider.credential.llm import OpenAILLMModelCredential
-from models_provider.impl.openai_model_provider.credential.stt import OpenAISTTModelCredential
-from models_provider.impl.openai_model_provider.credential.tti import OpenAITextToImageModelCredential
-from models_provider.impl.openai_model_provider.credential.tts import OpenAITTSModelCredential
 from models_provider.impl.openai_model_provider.model.embedding import OpenAIEmbeddingModel
-from models_provider.impl.openai_model_provider.model.image import OpenAIImage
 from models_provider.impl.openai_model_provider.model.llm import OpenAIChatModel
-from models_provider.impl.openai_model_provider.model.stt import OpenAISpeechToText
-from models_provider.impl.openai_model_provider.model.tti import OpenAITextToImage
-from models_provider.impl.openai_model_provider.model.tts import OpenAITextToSpeech
 from maxkb.conf import PROJECT_DIR
 from django.utils.translation import gettext_lazy as _
 
 openai_llm_model_credential = OpenAILLMModelCredential()
-openai_stt_model_credential = OpenAISTTModelCredential()
-openai_tts_model_credential = OpenAITTSModelCredential()
-openai_image_model_credential = OpenAIImageModelCredential()
-openai_tti_model_credential = OpenAITextToImageModelCredential()
 model_info_list = [
     ModelInfo('gpt-3.5-turbo', _('The latest gpt-3.5-turbo, updated with OpenAI adjustments'), ModelTypeConst.LLM,
               openai_llm_model_credential, OpenAIChatModel
@@ -75,12 +63,6 @@ model_info_list = [
     ModelInfo('gpt-4-1106-preview', _('gpt-4-turbo snapshot on November 6, 2023, supporting context length 128,000 tokens'),
               ModelTypeConst.LLM, openai_llm_model_credential,
               OpenAIChatModel),
-    ModelInfo('whisper-1', '',
-              ModelTypeConst.STT, openai_stt_model_credential,
-              OpenAISpeechToText),
-    ModelInfo('tts-1', '',
-              ModelTypeConst.TTS, openai_tts_model_credential,
-              OpenAITextToSpeech)
 ]
 open_ai_embedding_credential = OpenAIEmbeddingCredential()
 model_info_embedding_list = [
@@ -95,21 +77,6 @@ model_info_embedding_list = [
               OpenAIEmbeddingModel)
 ]
 
-model_info_image_list = [
-    ModelInfo('gpt-4o', _('The latest GPT-4o, cheaper and faster than gpt-4-turbo, updated with OpenAI adjustments'),
-              ModelTypeConst.IMAGE, openai_image_model_credential,
-              OpenAIImage),
-    ModelInfo('gpt-4o-mini', _('The latest gpt-4o-mini, cheaper and faster than gpt-4o, updated with OpenAI adjustments'),
-              ModelTypeConst.IMAGE, openai_image_model_credential,
-              OpenAIImage),
-]
-
-model_info_tti_list = [
-    ModelInfo('dall-e-3', '',
-              ModelTypeConst.TTI, openai_tti_model_credential,
-              OpenAITextToImage),
-]
-
 model_info_manage = (
     ModelInfoManage.builder()
     .append_model_info_list(model_info_list)
@@ -118,17 +85,6 @@ model_info_manage = (
                                          ))
     .append_model_info_list(model_info_embedding_list)
     .append_default_model_info(model_info_embedding_list[0])
-    .append_model_info_list(model_info_image_list)
-    .append_default_model_info(model_info_image_list[0])
-    .append_model_info_list(model_info_tti_list)
-    .append_default_model_info(model_info_tti_list[0])
-    .append_default_model_info(ModelInfo('whisper-1', '',
-              ModelTypeConst.STT, openai_stt_model_credential,
-              OpenAISpeechToText)
-    )
-    .append_default_model_info(ModelInfo('tts-1', '',
-              ModelTypeConst.TTS, openai_tts_model_credential,
-              OpenAITextToSpeech))
     .build()
 )
 
