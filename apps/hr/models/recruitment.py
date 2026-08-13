@@ -161,3 +161,14 @@ class ResumeFile(models.Model):
         constraints = [
             models.UniqueConstraint(fields=["workspace_id", "sha256"], name="hr_unique_resume_sha256_per_workspace")
         ]
+
+
+class HrConfig(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
+    workspace_id = models.CharField(max_length=64, unique=True)
+    llm_model_id = models.CharField(max_length=128)
+    create_time = models.DateTimeField(auto_now_add=True)
+    update_time = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "hr_config"
