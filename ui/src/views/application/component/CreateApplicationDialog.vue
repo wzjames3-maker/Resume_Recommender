@@ -1,10 +1,6 @@
 <template>
   <el-dialog
-    :title="
-      isWorkFlow(applicationForm.type)
-        ? $t('views.application.createWorkFlowApplication')
-        : $t('views.application.createApplication')
-    "
+    :title="$t('views.application.createApplication')"
     v-model="dialogVisible"
     width="650"
     append-to-body
@@ -38,43 +34,6 @@
           show-word-limit
         />
       </el-form-item>
-
-      <el-form-item
-        :label="$t('views.document.upload.template')"
-        v-if="applicationForm.type === 'WORK_FLOW' && !work_flow_template"
-      >
-        <div class="w-full">
-          <el-row :gutter="16">
-            <el-col :span="12">
-              <el-card
-                class="template-radio-card cursor text-center flex-center"
-                shadow="never"
-                @click="selectedType('blank')"
-                :class="appTemplate === 'blank' ? 'border-active' : ''"
-              >
-                <div class="flex-center p-24">
-                  <AppIcon iconName="app-add-outlined" class="mr-12"></AppIcon>
-                  {{ $t('views.application.form.appTemplate.blankApp.title') }}
-                </div>
-              </el-card>
-            </el-col>
-            <el-col :span="12">
-              <CardBox
-                :title="$t('views.application.form.appTemplate.assistantApp.title')"
-                :description="$t('views.application.form.appTemplate.assistantApp.description')"
-                shadow="never"
-                class="template-radio-card cursor"
-                :class="appTemplate === 'assistant' ? 'border-active' : ''"
-                @click="selectedType('assistant')"
-              >
-                <template #icon>
-                  <LogoIcon height="32px" />
-                </template>
-              </CardBox>
-            </el-col>
-          </el-row>
-        </div>
-      </el-form-item>
     </el-form>
     <template #footer>
       <span class="dialog-footer">
@@ -95,9 +54,6 @@ import type { ApplicationFormType } from '@/api/type/application'
 import type { FormInstance, FormRules } from 'element-plus'
 import applicationApi from '@/api/application/application'
 import { MsgSuccess, MsgAlert } from '@/utils/message'
-import { isWorkFlow } from '@/utils/application'
-import { baseNodes } from '@/workflow/common/data'
-import { applicationTemplate } from '@/workflow/common/template'
 import { t } from '@/locales'
 import useStore from '@/stores'
 const { user } = useStore()
@@ -116,17 +72,10 @@ const optimizationPrompt =
   '<data></data>' +
   t('views.application.dialog.defaultPrompt2')
 
-const workflowDefault = ref<any>({
-  edges: [],
-  nodes: baseNodes,
-})
-const appTemplate = ref('blank')
-
 const applicationFormRef = ref()
 
 const loading = ref(false)
 const dialogVisible = ref<boolean>(false)
-const work_flow_template = ref()
 
 const applicationForm = ref<ApplicationFormType>({
   name: '',
@@ -219,25 +168,16 @@ watch(dialogVisible, (bool) => {
   }
 })
 
-const open = (folder: string, type?: string, work_flow?: any) => {
+const open = (folder: string) => {
   currentFolder.value = folder
-  applicationForm.value.type = type || 'SIMPLE'
+  applicationForm.value.type = 'SIMPLE'
   dialogVisible.value = true
-  work_flow_template.value = work_flow
 }
 
 const submitHandle = async (formEl: FormInstance | undefined) => {
   if (!formEl) return
   await formEl.validate((valid) => {
     if (valid) {
-      if (isWorkFlow(applicationForm.value.type)) {
-        workflowDefault.value.nodes[0].properties.node_data.desc = applicationForm.value.desc
-        workflowDefault.value.nodes[0].properties.node_data.name = applicationForm.value.name
-        applicationForm.value['work_flow'] = workflowDefault.value
-        if (work_flow_template.value) {
-          applicationForm.value['work_flow_template'] = work_flow_template.value
-        }
-      }
       loading.value = true
       applicationApi
         .postApplication({ ...applicationForm.value, folder_id: currentFolder.value })
@@ -245,13 +185,9 @@ const submitHandle = async (formEl: FormInstance | undefined) => {
           return user.profile().then(() => {
             MsgSuccess(t('common.createSuccess'))
             emit('refresh')
-            if (isWorkFlow(applicationForm.value.type)) {
-              router.push({ path: `/application/workspace/${res.data.id}/workflow` })
-            } else {
-              router.push({
-                path: `/application/workspace/${res.data.id}/${res.data.type}/setting`,
-              })
-            }
+            router.push({
+              path: `/application/workspace/${res.data.id}/${res.data.type}/setting`,
+            })
             dialogVisible.value = false
           })
         })
@@ -261,11 +197,6 @@ const submitHandle = async (formEl: FormInstance | undefined) => {
         })
     }
   })
-}
-
-function selectedType(type: string) {
-  appTemplate.value = type
-  workflowDefault.value = applicationTemplate[type]
 }
 
 defineExpose({ open })

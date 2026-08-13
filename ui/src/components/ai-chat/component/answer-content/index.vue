@@ -12,24 +12,6 @@
           'padding-right': showUserAvatar ? 'var(--padding-left)' : '0',
         }"
       >
-        <template v-if="type === 'debug-ai-chat' ? true : application.show_exec">
-          <el-card
-            v-if="!chatRecord.write_ed && progress && index >= answer_text_list.length - 1 && !chatRecord.is_stop"
-            shadow="always"
-            class="border-r-8 mb-8"
-            style="--el-card-padding: 1px 16px; width: fit-content"
-          >
-            <div class="flex align-center">
-              <component
-                :is="iconComponent(`${progress.node_type}-icon`)"
-                class="mr-8"
-                :size="16"
-                style="--el-avatar-border-radius: 3px"
-              ></component>
-              <MdRenderer :source="progress.content"></MdRenderer>
-            </div>
-          </el-card>
-        </template>
         <el-card shadow="always" class="border-r-8" style="--el-card-padding: 6px 16px">
           <MdRenderer
             v-if="
@@ -105,7 +87,6 @@ import MdRenderer from '@/components/markdown/MdRenderer.vue'
 import OperationButton from '@/components/ai-chat/component/operation-button/index.vue'
 import { type chatType } from '@/api/type/application'
 import bus from '@/bus'
-import { iconComponent } from '@/workflow/icons/utils'
 import { t } from '@/locales'
 const props = defineProps<{
   chatRecord: chatType
@@ -127,15 +108,6 @@ const emit = defineEmits([
 
 const showAvatar = computed(() => {
   return props.application.show_avatar == undefined ? true : props.application.show_avatar
-})
-const progress = computed(() => {
-  if (props.chatRecord.currentChunk) {
-    return {
-      content: `${t('aiChat.executing')} ${props.chatRecord.currentChunk.node_name}`,
-      node_type: props.chatRecord.currentChunk.node_type,
-    }
-  }
-  return null
 })
 const showUserAvatar = computed(() => {
   return props.application.show_user_avatar == undefined ? true : props.application.show_user_avatar

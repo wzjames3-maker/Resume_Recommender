@@ -34,7 +34,7 @@
         </el-card>
         <template #dropdown>
           <el-dropdown-menu class="create-dropdown">
-            <el-dropdown-item @click="openCreateApplicationDialog('SIMPLE')">
+            <el-dropdown-item @click="openCreateApplicationDialog()">
               <div class="flex">
                 <el-avatar shape="square" class="avatar-blue mt-4" :size="32">
                   <img
@@ -49,23 +49,6 @@
                   </div>
                   <el-text type="info" size="small" class="color-secondary"
                     >{{ $t('views.application.simplePlaceholder') }}
-                  </el-text>
-                </div>
-              </div>
-            </el-dropdown-item>
-            <el-dropdown-item @click="openCreateApplicationDialog('WORK_FLOW')">
-              <div class="flex">
-                <el-avatar shape="square" class="avatar-orange mt-4" :size="32">
-                  <img
-                    src="@/assets/application/icon_workflow_application.svg"
-                    style="width: 65%"
-                    alt=""
-                  />
-                </el-avatar>
-                <div class="pre-wrap ml-8">
-                  <div class="lighter">{{ $t('views.application.AdvancedAgent') }}</div>
-                  <el-text type="info" size="small" class="color-secondary"
-                    >{{ $t('views.application.advancedPlaceholder') }}
                   </el-text>
                 </div>
               </div>
@@ -183,21 +166,6 @@
                 </div>
               </div>
             </el-dropdown-item>
-            <el-dropdown-item @click="openCreateKnowledgeDialog(CreateWorkflowKnowledgeDialog)">
-              <div class="flex">
-                <el-avatar class="avatar-purple mt-4" shape="square" :size="32">
-                  <img src="@/assets/workflow/logo_workflow.svg" style="width: 60%" alt="" />
-                </el-avatar>
-                <div class="pre-wrap ml-8">
-                  <div class="lighter">
-                    {{ $t('views.knowledge.knowledgeType.workflowKnowledge') }}
-                  </div>
-                  <el-text type="info" size="small" class="color-secondary"
-                    >{{ $t('views.knowledge.knowledgeType.workflowInfo') }}
-                  </el-text>
-                </div>
-              </div>
-            </el-dropdown-item>
             <el-upload
               ref="importKnowledgeUploadRef"
               :file-list="[]"
@@ -225,169 +193,12 @@
         </template>
       </el-dropdown>
     </el-col>
-    <el-col
-      :xs="12"
-      :sm="12"
-      :md="12"
-      :lg="6"
-      :xl="6"
-      class="mb-16"
-      v-if="permissionPrecise.tool.workspace.create()"
-    >
-      <el-dropdown
-        trigger="hover"
-        class="w-full"
-        @visible-change="(visible: boolean) => handleVisibleChange('tool', visible)"
-      >
-        <el-card shadow="never" class="cursor w-full quick-create-card">
-          <div class="flex-between">
-            <div class="flex align-center">
-              <img src="@/assets/home/icon_create-tool.svg" alt="" />
-              <div class="ml-8">
-                <p>{{ $t('home.createTool') }}</p>
-                <p class="color-secondary font-small mt-8 lighter">
-                  {{ $t('home.createToolDescribe') }}
-                </p>
-              </div>
-            </div>
-            <el-icon class="arrow-icon" :class="{ 'rotate-180': isDropdownVisible === 'tool' }"
-              ><ArrowDown
-            /></el-icon>
-          </div>
-        </el-card>
-        <template #dropdown>
-          <el-dropdown-menu class="create-dropdown">
-            <el-dropdown-item @click="openCreateToolDialog()">
-              <div class="flex align-center">
-                <el-avatar class="avatar-green" shape="square" :size="32">
-                  <img src="@/assets/tool/icon_tool.svg" style="width: 58%" alt="" />
-                </el-avatar>
-                <div class="pre-wrap ml-8">
-                  <div class="lighter">{{ $t('views.tool.title') }}</div>
-                </div>
-              </div>
-            </el-dropdown-item>
-            <el-dropdown-item @click="openCreateWorkflowDialog()">
-              <div class="flex align-center">
-                <el-avatar class="avatar-green mt-4" shape="square" :size="32">
-                  <img src="@/assets/workflow/logo_workflow.svg" style="width: 60%" alt="" />
-                </el-avatar>
-                <div class="pre-wrap ml-8">
-                  <div class="lighter">{{ $t('workflow.workflow') }}</div>
-                </div>
-              </div>
-            </el-dropdown-item>
-            <el-dropdown-item @click="openCreateSkillDialog()">
-              <div class="flex align-center">
-                <el-avatar shape="square" :size="32">
-                  <img src="@/assets/tool/icon_skill.svg" style="width: 58%" alt="" />
-                </el-avatar>
-                <div class="pre-wrap ml-8">
-                  <div class="lighter">Skills</div>
-                </div>
-              </div>
-            </el-dropdown-item>
-            <el-dropdown-item @click="openCreateMcpDialog()">
-              <div class="flex align-center">
-                <el-avatar shape="square" :size="32">
-                  <img src="@/assets/tool/icon_mcp.svg" style="width: 75%" alt="" />
-                </el-avatar>
-                <div class="pre-wrap ml-8">
-                  <div class="lighter">MCP</div>
-                </div>
-              </div>
-            </el-dropdown-item>
-
-            <el-dropdown-item @click="openCreateDataSourceDialog()">
-              <div class="flex align-center">
-                <el-avatar class="avatar-purple" shape="square" :size="32">
-                  <img src="@/assets/tool/icon_datasource.svg" style="width: 58%" alt="" />
-                </el-avatar>
-                <div class="pre-wrap ml-8">
-                  <div class="lighter">{{ $t('views.tool.dataSource.title') }}</div>
-                </div>
-              </div>
-            </el-dropdown-item>
-            <el-upload
-              ref="ToolUploadRef"
-              :file-list="[]"
-              action="#"
-              multiple
-              :auto-upload="false"
-              :show-file-list="false"
-              :limit="1"
-              :on-change="(file: any, fileList: any) => importTool(file)"
-              class="import-button"
-            >
-              <el-dropdown-item>
-                <div class="flex align-center w-full">
-                  <el-avatar shape="square" :size="32" style="background: none">
-                    <img src="@/assets/icon_import.svg" alt="" />
-                  </el-avatar>
-                  <div class="pre-wrap ml-8">
-                    <div class="lighter">{{ $t('common.importCreate') }}</div>
-                  </div>
-                </div>
-              </el-dropdown-item>
-            </el-upload>
-          </el-dropdown-menu>
-        </template>
-      </el-dropdown>
-    </el-col>
-    <el-col
-      :xs="12"
-      :sm="12"
-      :md="12"
-      :lg="6"
-      :xl="6"
-      class="mb-16"
-      v-if="permissionPrecise.model.workspace.create()"
-    >
-      <el-card
-        shadow="never"
-        class="cursor w-full quick-create-card"
-        @click="openCreateModel(allObj)"
-      >
-        <div class="flex-between">
-          <div class="flex align-center">
-            <img src="@/assets/home/icon_create-model.svg" alt="" />
-            <div class="ml-8">
-              <p style="line-height: 15px">{{ $t('home.createModel') }}</p>
-              <p class="color-secondary font-small lighter mt-4" style="line-height: 15px">
-                {{ $t('home.createModelDescribe') }}
-              </p>
-            </div>
-          </div>
-        </div>
-      </el-card>
-    </el-col>
   </el-row>
   <!-- 智能体dialog -->
   <CreateApplicationDialog ref="CreateApplicationDialogRef" />
 
   <!-- 知识库dialog -->
   <component :is="currentCreateDialog" ref="CreateKnowledgeDialogRef" />
-  <!-- 工具Drawer-->
-  <ToolFormDrawer ref="ToolFormDrawerRef" @refresh="toolRefresh" :title="ToolDrawertitle" />
-  <WorkflowFormDialog
-    ref="workflowFormDialogRef"
-    :title="workflowFormDialogTitle"
-  ></WorkflowFormDialog>
-  <SkillToolFormDrawer
-    ref="SkillToolFormDrawerRef"
-    @refresh="toolRefresh"
-    :title="SkillToolDrawertitle"
-  />
-  <McpToolFormDrawer
-    ref="McpToolFormDrawerRef"
-    @refresh="toolRefresh"
-    :title="McpToolDrawertitle"
-  />
-  <DataSourceToolFormDrawer
-    ref="DataSourceToolFormDrawerRef"
-    @refresh="toolRefresh"
-    :title="DataSourceToolDrawertitle"
-  />
   <!-- 模型dialog-->
   <CreateModelDialog
     ref="createModelRef"
@@ -407,14 +218,7 @@ import ApplicationApi from '@/api/application/application'
 import CreateKnowledgeDialog from '@/views/knowledge/create-component/CreateKnowledgeDialog.vue'
 import CreateWebKnowledgeDialog from '@/views/knowledge/create-component/CreateWebKnowledgeDialog.vue'
 import CreateLarkKnowledgeDialog from '@/views/knowledge/create-component/CreateLarkKnowledgeDialog.vue'
-import CreateWorkflowKnowledgeDialog from '@/views/knowledge/create-component/CreateWorkflowKnowledgeDialog.vue'
 import knowledgeApi from '@/api/knowledge/knowledge'
-import ToolFormDrawer from '@/views/tool/ToolFormDrawer.vue'
-import WorkflowFormDialog from '@/views/tool/WorkflowFormDialog.vue'
-import McpToolFormDrawer from '@/views/tool/McpToolFormDrawer.vue'
-import SkillToolFormDrawer from '@/views/tool/SkillToolFormDrawer.vue'
-import DataSourceToolFormDrawer from '@/views/tool/DataSourceToolFormDrawer.vue'
-import toolApi from '@/api/tool/tool'
 import CreateModelDialog from '@/views/model/component/CreateModelDialog.vue'
 import SelectProviderDialog from '@/views/model/component/SelectProviderDialog.vue'
 import type { Provider, Model } from '@/api/type/model'
@@ -456,8 +260,8 @@ const handleVisibleChange = (val: string, visible: boolean) => {
 }
 const CreateApplicationDialogRef = ref()
 
-function openCreateApplicationDialog(type?: string) {
-  CreateApplicationDialogRef.value.open(user.getWorkspaceId() ?? 'default', type)
+function openCreateApplicationDialog() {
+  CreateApplicationDialogRef.value.open(user.getWorkspaceId() ?? 'default')
 }
 const ApplicationUploadRef = ref()
 const importApplication = (file: any) => {
@@ -527,70 +331,6 @@ function importKnowledgeBundle(file: any) {
         })
       }
     })
-}
-
-// 工具快捷方式
-const ToolUploadRef = ref()
-
-function importTool(file: any) {
-  const formData = new FormData()
-  formData.append('file', file.raw, file.name)
-  formData.append('folder_id', user.getWorkspaceId() ?? 'default')
-  ToolUploadRef.value.clearFiles()
-  toolApi
-    .postImportTool(formData, importLoading)
-    .then(async (res: any) => {
-      if (res?.data) {
-        tool.setToolList([])
-        return user.profile().then(() => {
-          router.push({ path: `/tool` })
-        })
-      }
-    })
-    .catch((e: any) => {
-      if (e.code === 400) {
-        MsgConfirm(t('common.tip'), t('views.application.tip.professionalMessage'), {
-          cancelButtonText: t('common.confirm'),
-          confirmButtonText: t('common.professional'),
-        }).then(() => {
-          window.open('https://maxkb.cn/pricing.html', '_blank')
-        })
-      }
-    })
-}
-const ToolFormDrawerRef = ref()
-const ToolDrawertitle = ref('')
-function openCreateToolDialog() {
-  ToolDrawertitle.value = t('views.tool.createTool')
-  ToolFormDrawerRef.value.open()
-}
-
-function toolRefresh() {
-  router.push({ path: `/tool` })
-}
-
-const workflowFormDialogRef = ref<InstanceType<typeof WorkflowFormDialog>>()
-const workflowFormDialogTitle = ref('')
-const openCreateWorkflowDialog = () => {
-  workflowFormDialogTitle.value = t('views.tool.toolWorkflow.creatToolWorkflow')
-  workflowFormDialogRef.value?.open()
-}
-const SkillToolFormDrawerRef = ref()
-const SkillToolDrawertitle = ref('')
-function openCreateSkillDialog() {
-  SkillToolDrawertitle.value = t('views.tool.skill.createSkillTool')
-  SkillToolFormDrawerRef.value.open()
-}
-const McpToolDrawertitle = ref('')
-const McpToolFormDrawerRef = ref()
-function openCreateMcpDialog() {
-  McpToolDrawertitle.value = t('views.tool.mcp.createMcpTool')
-  McpToolFormDrawerRef.value.open()
-}
-const DataSourceToolDrawertitle = ref('')
-const DataSourceToolFormDrawerRef = ref()
-function openCreateDataSourceDialog() {
-  DataSourceToolFormDrawerRef.value.open()
 }
 
 // 模型快捷方式

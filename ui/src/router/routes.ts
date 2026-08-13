@@ -62,26 +62,6 @@ export const routes: Array<RouteRecordRaw> = [
     ],
   },
 
-  // 高级编排
-  {
-    path: '/application/:from/:id/workflow',
-    name: 'ApplicationWorkflow',
-    meta: { activeMenu: '/application' },
-    component: () => import('@/views/application-workflow/index.vue'),
-  },
-  // 知识库工作流
-  {
-    path: '/knowledge/:id/:folderId/workflow',
-    name: 'KnowledgeWorkflow',
-    meta: { activeMenu: '/knowledge' },
-    component: () => import('@/views/knowledge-workflow/index.vue'),
-  },
-  {
-    path: '/tool/:id/:folderId/workflow',
-    name: 'ToolWorkflow',
-    meta: { activeMenu: '/tool' },
-    component: () => import('@/views/tool-workflow/index.vue'),
-  },
   // 对话
   {
     path: '/chat/:accessToken',

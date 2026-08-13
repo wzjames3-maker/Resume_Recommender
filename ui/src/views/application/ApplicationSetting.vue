@@ -986,7 +986,7 @@ const permissionPrecise = computed(() => {
   return permissionMap['application'][apiType.value]
 })
 const toolPermissionPrecise = computed(() => {
-  return permissionMap['tool'][apiType.value]
+  return { read: () => false }
 })
 
 const defaultPrompt = t('views.application.form.prompt.defaultPrompt', {

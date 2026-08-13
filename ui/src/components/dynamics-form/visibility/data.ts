@@ -1,0 +1,25 @@
+import { t } from '@/locales'
+
+export const compareList = [
+  { value: 'is_null', label: t('workflow.compare.is_null') },
+  { value: 'is_not_null', label: t('workflow.compare.is_not_null') },
+  { value: 'contain', label: t('workflow.compare.contain') },
+  { value: 'not_contain', label: t('workflow.compare.not_contain') },
+  { value: 'eq', label: t('workflow.compare.eq') },
+  { value: 'not_eq', label: t('workflow.compare.not_eq') },
+  { value: 'ge', label: t('workflow.compare.ge') },
+  { value: 'gt', label: t('workflow.compare.gt') },
+  { value: 'le', label: t('workflow.compare.le') },
+  { value: 'lt', label: t('workflow.compare.lt') },
+  { value: 'len_eq', label: t('workflow.compare.len_eq') },
+  { value: 'len_ge', label: t('workflow.compare.len_ge') },
+  { value: 'len_gt', label: t('workflow.compare.len_gt') },
+  { value: 'len_le', label: t('workflow.compare.len_le') },
+  { value: 'len_lt', label: t('workflow.compare.len_lt') },
+  { value: 'is_true', label: t('workflow.compare.is_true') },
+  { value: 'is_not_true', label: t('workflow.compare.is_not_true') },
+  { value: 'start_with', label: 'startWith' },
+  { value: 'end_with', label: 'endWith' },
+  { value: 'regex', label: t('workflow.compare.regex') },
+  { value: 'wildcard', label: t('workflow.compare.wildcard') },
+]

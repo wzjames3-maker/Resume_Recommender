@@ -90,7 +90,7 @@
   </el-row>
 </template>
 <script setup lang="ts">
-import { compareList } from '@/workflow/common/data'
+import { compareList } from './data'
 import FieldSelector from './FieldSelector.vue'
 import { inferFieldType, getAllowedOps, getFieldConfig } from './field-type'
 

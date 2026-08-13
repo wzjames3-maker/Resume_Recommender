@@ -93,12 +93,6 @@ const systemRouter = {
           ),
           new ComplexPermission(
             [RoleConst.ADMIN],
-            [PermissionConst.RESOURCE_TOOL_READ],
-            [EditionConst.IS_EE],
-            'OR',
-          ),
-          new ComplexPermission(
-            [RoleConst.ADMIN],
             [PermissionConst.RESOURCE_MODEL_READ],
             [EditionConst.IS_EE],
             'OR',
@@ -146,26 +140,6 @@ const systemRouter = {
             ],
           },
           component: () => import('@/views/system-resource-management/KnowledgeResourceIndex.vue'),
-        },
-        {
-          path: '/system/resource-management/tool',
-          name: 'ToolResourceIndex',
-          meta: {
-            title: 'views.tool.title',
-            activeMenu: '/system',
-            parentPath: '/system',
-            parentName: 'system',
-            sameRoute: 'workspace',
-            permission: [
-              new ComplexPermission(
-                [RoleConst.ADMIN],
-                [PermissionConst.RESOURCE_TOOL_READ],
-                [EditionConst.IS_EE],
-                'OR',
-              ),
-            ],
-          },
-          component: () => import('@/views/system-resource-management/ToolResourceIndex.vue'),
         },
         {
           path: '/system/resource-management/model',
@@ -365,12 +339,6 @@ const systemRouter = {
           ),
           new ComplexPermission(
                 [RoleConst.ADMIN],
-                [PermissionConst.SHARED_TOOL_READ],
-                [EditionConst.IS_EE],
-                'OR',
-              ),
-          new ComplexPermission(
-                [RoleConst.ADMIN],
                 [PermissionConst.SHARED_MODEL_READ],
                 [EditionConst.IS_EE],
                 'OR',
@@ -396,25 +364,6 @@ const systemRouter = {
             ],
           },
           component: () => import('@/views/system-shared/KnowLedgeSharedIndex.vue'),
-        },
-        {
-          path: '/system/shared/tool',
-          name: 'tools',
-          meta: {
-            title: 'views.tool.title',
-            activeMenu: '/system',
-            parentPath: '/system',
-            parentName: 'system',
-            permission: [
-              new ComplexPermission(
-                [RoleConst.ADMIN],
-                [PermissionConst.SHARED_TOOL_READ],
-                [EditionConst.IS_EE],
-                'OR',
-              ),
-            ],
-          },
-          component: () => import('@/views/system-shared/ToolSharedIndex.vue'),
         },
         {
           path: '/system/shared/model',

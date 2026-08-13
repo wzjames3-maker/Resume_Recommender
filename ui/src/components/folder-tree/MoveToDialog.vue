@@ -42,7 +42,6 @@ import useStore from '@/stores'
 import { SourceTypeEnum } from '@/enums/common'
 import KnowledgeApi from '@/api/knowledge/knowledge'
 import ApplicationApi from '@/api/application/application'
-import ToolApi from '@/api/tool/tool'
 const { folder } = useStore()
 const emit = defineEmits(['refresh'])
 
@@ -137,20 +136,6 @@ const submitHandle = async () => {
             dialogVisible.value = false
           })
         }
-      }
-    } else if (props.source === SourceTypeEnum.TOOL) {
-      if (isBatch.value) {
-        ToolApi.putMulMoveTool(obj, loading).then(() => {
-          MsgSuccess(t('common.saveSuccess'))
-          emit('refresh')
-          dialogVisible.value = false
-        })
-      } else {
-        ToolApi.putTool(detail.value.id, obj, loading).then(() => {
-          MsgSuccess(t('common.saveSuccess'))
-          emit('refresh', detail.value)
-          dialogVisible.value = false
-        })
       }
     } else if (props.source === SourceTypeEnum.APPLICATION) {
       if (isBatch.value) {

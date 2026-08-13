@@ -223,8 +223,6 @@ const resourceType = computed(() => {
     return 'knowledge'
   } else if (props.source === 'MODEL') {
     return 'model'
-  } else if (props.source === 'TOOL') {
-    return 'tool'
   } else {
     return 'application'
   }

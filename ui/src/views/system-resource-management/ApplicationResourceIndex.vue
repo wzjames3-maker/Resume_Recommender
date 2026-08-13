@@ -293,11 +293,6 @@
                   </el-dropdown-item>
                   <el-dropdown-item
                     :disabled="!row.is_publish"
-                    @click.stop="openTriggerDrawer(row)"
-                    v-if="permissionPrecise.trigger_read()"
-                  >
-                    <AppIcon iconName="app-trigger" class="color-secondary"></AppIcon>
-                    {{ $t('views.trigger.title') }}
                   </el-dropdown-item>
                   <el-dropdown-item
                     @click.stop="deleteApplication(row)"
@@ -317,10 +312,7 @@
       :type="SourceTypeEnum.APPLICATION"
       ref="ResourceAuthorizationDrawerRef"
     />
-    <ResourceTriggerDrawer
-      ref="resourceTriggerDrawerRef"
       :source="SourceTypeEnum.APPLICATION"
-    ></ResourceTriggerDrawer>
   </div>
 </template>
 
@@ -331,7 +323,6 @@ import ApplicationResourceApi from '@/api/system-resource-management/application
 import ResourceAuthorizationDrawer from '@/components/resource-authorization-drawer/index.vue'
 import {t} from '@/locales'
 import {isAppIcon, resetUrl} from '@/utils/common'
-import ResourceTriggerDrawer from '@/views/trigger/ResourceTriggerDrawer.vue'
 import useStore from '@/stores'
 import {datetimeFormat} from '@/utils/time'
 import {loadPermissionApi} from '@/utils/dynamics-api/permission-api.ts'
@@ -363,14 +354,8 @@ const MoreFilledPermission = () => {
   return (
     permissionPrecise.value.export() ||
     permissionPrecise.value.delete() ||
-    permissionPrecise.value.auth() ||
-    permissionPrecise.value.trigger_read()
+    permissionPrecise.value.auth()
   )
-}
-
-const resourceTriggerDrawerRef = ref<InstanceType<typeof ResourceTriggerDrawer>>()
-const openTriggerDrawer = (data: any) => {
-  resourceTriggerDrawerRef.value?.open(data)
 }
 
 const ResourceAuthorizationDrawerRef = ref()

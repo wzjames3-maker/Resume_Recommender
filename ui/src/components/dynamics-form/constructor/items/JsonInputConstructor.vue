@@ -29,20 +29,6 @@
       </el-radio-group>
     </el-row>
   </el-form-item>
-  <el-form-item
-    v-if="formValue.default_value_assignment_method == 'ref_variables'"
-    :required="true"
-    prop="default_value"
-    :rules="[default_ref_variables_value_rule]"
-  >
-    <NodeCascader
-      ref="nodeCascaderRef"
-      :nodeModel="model"
-      class="w-full"
-      :placeholder="$t('workflow.variable.placeholder')"
-      v-model="formValue.default_value"
-    />
-  </el-form-item>
 
   <el-form-item
     class="defaultValueItem"
@@ -64,7 +50,6 @@
 <script setup lang="ts">
 import { computed, onMounted, ref, inject, watch } from 'vue'
 import { t } from '@/locales'
-import NodeCascader from '@/workflow/common/NodeCascader.vue'
 import JsonInput from '@/components/dynamics-form/items/JsonInput.vue'
 const props = defineProps<{
   modelValue: any

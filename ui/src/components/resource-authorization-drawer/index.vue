@@ -228,8 +228,6 @@ const folderType = computed(() => {
     return 'application'
   } else if (route.path.includes('knowledge')) {
     return 'knowledge'
-  } else if (route.path.includes('tool')) {
-    return 'tool'
   } else {
     return 'application'
   }

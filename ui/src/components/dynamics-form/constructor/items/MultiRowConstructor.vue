@@ -40,20 +40,6 @@
       </el-radio-group>
     </el-row>
   </el-form-item>
-  <el-form-item
-    v-if="formValue.assignment_method == 'ref_variables'"
-    :required="true"
-    prop="option_list"
-    :rules="[default_ref_variables_value_rule]"
-  >
-    <NodeCascader
-      ref="nodeCascaderRef"
-      :nodeModel="model"
-      class="w-full"
-      :placeholder="$t('workflow.variable.placeholder')"
-      v-model="formValue.option_list"
-    />
-  </el-form-item>
   <el-form-item v-if="formValue.assignment_method == 'custom'">
     <template #label>
       <div class="flex-between">
@@ -134,7 +120,6 @@
 <script setup lang="ts">
 import { computed, onMounted, inject } from 'vue'
 import MultiRow from '@/components/dynamics-form/items/MultiRow.vue'
-import NodeCascader from '@/workflow/common/NodeCascader.vue'
 import type { FormField } from '@/components/dynamics-form/type'
 import { t } from '@/locales'
 const getModel = inject('getModel') as any

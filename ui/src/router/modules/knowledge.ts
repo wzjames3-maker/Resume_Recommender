@@ -44,14 +44,6 @@ const ModelRouter = {
       component: () => import('@/views/document/ImportLarkDocument.vue'),
       hidden: true,
     },
-    // 上传文档 - 工作流
-    {
-      path: '/knowledge/import/workflow/:folderId',
-      name: 'ImportWorkflowDocument',
-      meta: { activeMenu: '/knowledge' },
-      component: () => import('@/views/document/ImportWorkflowDocument.vue'),
-      hidden: true,
-    },
   ],
 }
 
