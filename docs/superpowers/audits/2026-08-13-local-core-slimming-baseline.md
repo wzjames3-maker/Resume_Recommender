@@ -175,3 +175,20 @@ pnpm exec eslint .
 | `ui: vue-tsc --build` | PASS |
 | `ui: vite build` / `vite build --mode chat` | PASS；产物无已裁剪端点 |
 | 搜索与匹配测试 | 多技能 AND、学历/年限区间/来源过滤、技能与城市加分、分数降序、无要求返回空、关闭职位拒绝、跨工作区 404 均覆盖 |
+
+---
+
+## 人事四期验收记录（2026-08-13）
+
+实现范围：指派状态机扩展（INTERVIEWING/OFFER/HIRED）、合法流转校验、Interview 面试记录模型与 API、候选人已入职禁止再指派、前端面试抽屉。
+本期未引入面试官权限差异、Offer 附件、审计事件表或自动提醒。
+
+| 验证项 | 结果 |
+|--------|------|
+| `manage.py test hr.tests application.tests knowledge.tests models_provider.tests --keepdb` | 47/47 PASS |
+| `manage.py check` | System check identified no issues (0 silenced) |
+| `manage.py makemigrations --check --dry-run` | No changes detected |
+| `ui: node scripts/check-local-core-surface.mjs` | PASS |
+| `ui: vue-tsc --build` | PASS |
+| `ui: vite build` / `vite build --mode chat` | PASS；产物无已裁剪端点 |
+| 状态机与面试测试 | 完整流转链、非法流转拒绝、终态不可再流转、HIRED 禁止再指派、关闭职位限制、面试轮次自增、跨工作区 404 均覆盖 |

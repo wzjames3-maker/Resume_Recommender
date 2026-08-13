@@ -100,6 +100,14 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
 - 检查：`manage.py check` 无问题；`makemigrations --check --dry-run` 无变更。
 - 前端：职位表单技能要求、展开区匹配推荐与高级搜索可构建；`vue-tsc`、管理端和聊天端 Vite 构建均 PASS。
 
+## 人事四期验收（2026-08-13）
+
+- 状态机：指派状态扩展为 待筛选 → 筛选通过 → 面试中 → Offer 中 → 已入职，任意进行中可淘汰/关闭；非法流转拒绝。
+- 面试：支持按指派安排多轮面试、面试官/时间/结果/反馈维护；候选人已入职后禁止再指派。
+- 测试：`hr.tests application.tests knowledge.tests models_provider.tests`，47/47 PASS。
+- 检查：`manage.py check` 无问题；`makemigrations --check --dry-run` 无变更。
+- 前端：状态下拉扩展与面试抽屉可构建；`vue-tsc`、管理端和聊天端 Vite 构建均 PASS。
+
 ## 旧版参考
 
 - `references/agentkb/` 是旧版 AgentKB 的固定源码快照，仅用于业务规则、状态机、接口和测试迁移参考。
