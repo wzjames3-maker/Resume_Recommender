@@ -42,6 +42,7 @@ urlpatterns = [
     path(admin_api_prefix, include("application.urls")),
     path(admin_api_prefix, include("oss.urls", namespace="admin_oss")),
     path(admin_api_prefix, include("homepage.urls")),
+    path(admin_api_prefix, include("hr.urls")),
     path(chat_api_prefix, include("oss.urls", namespace="chat_oss")),
     path(chat_api_prefix, include("chat.urls")),
     path(f'{admin_ui_prefix[1:]}/', include('oss.retrieval_urls', namespace='admin_oss_retrieval')),

@@ -1,7 +1,10 @@
 from django.db import IntegrityError, transaction
 from django.test import TestCase
+import uuid_utils.compat as uuid
 
+from common.exception.app_exception import AppApiException, AppUnauthorizedFailed, NotFound404
 from hr.models import AssignmentStatus, Candidate, CandidateAssignment, Job
+from hr.serializers.recruitment import RecruitmentService
 
 
 class AssignmentConstraintTests(TestCase):
@@ -50,3 +53,59 @@ class AssignmentConstraintTests(TestCase):
                     headcount=0,
                     workspace_id="workspace-a",
                 )
+
+
+class RecruitmentServiceTests(TestCase):
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.service = RecruitmentService(
+            workspace_id="workspace-a",
+            user_id=self.user_id,
+            is_workspace_manage=True,
+        )
+        self.candidate = Candidate.objects.create(name="Alice", workspace_id="workspace-a")
+        self.job = Job.objects.create(
+            name="Python Engineer",
+            department="Engineering",
+            headcount=1,
+            workspace_id="workspace-a",
+        )
+
+    def test_closed_job_rejects_assignment(self):
+        self.job.status = "CLOSED"
+        self.job.save(update_fields=["status"])
+
+        with self.assertRaisesRegex(AppApiException, "closed"):
+            self.service.create_assignment(self.job.id, self.candidate.id, {})
+
+    def test_archive_rejects_candidate_with_active_assignment(self):
+        self.service.create_assignment(self.job.id, self.candidate.id, {})
+
+        with self.assertRaisesRegex(AppApiException, "active assignment"):
+            self.service.archive_candidate(self.candidate.id)
+
+    def test_cross_workspace_resource_is_not_found(self):
+        foreign = Candidate.objects.create(name="Bob", workspace_id="workspace-b")
+
+        with self.assertRaises(NotFound404):
+            self.service.get_candidate(foreign.id)
+
+    def test_member_cannot_edit_candidate_or_create_job(self):
+        member_service = RecruitmentService(
+            workspace_id="workspace-a",
+            user_id=self.user_id,
+            is_workspace_manage=False,
+        )
+
+        with self.assertRaises(AppUnauthorizedFailed):
+            member_service.edit_candidate(self.candidate.id, {"name": "Alice Updated"})
+        with self.assertRaises(AppUnauthorizedFailed):
+            member_service.create_job({"name": "Platform Engineer", "headcount": 1})
+
+    def test_terminal_assignment_allows_reassignment_through_service(self):
+        assignment = self.service.create_assignment(self.job.id, self.candidate.id, {})
+        self.service.update_assignment(assignment["id"], {"status": AssignmentStatus.REJECTED})
+
+        replacement = self.service.create_assignment(self.job.id, self.candidate.id, {})
+
+        self.assertEqual(replacement["status"], AssignmentStatus.PENDING_SCREEN)
