@@ -90,6 +90,29 @@ class RecruitmentServiceTests(TestCase):
         with self.assertRaises(NotFound404):
             self.service.get_candidate(foreign.id)
 
+    def test_cross_workspace_job_and_assignment_are_not_found(self):
+        foreign_candidate = Candidate.objects.create(name="Bob", workspace_id="workspace-b")
+        foreign_job = Job.objects.create(
+            name="Foreign job",
+            department="Engineering",
+            headcount=1,
+            workspace_id="workspace-b",
+        )
+        foreign_assignment = CandidateAssignment.objects.create(
+            candidate=foreign_candidate,
+            job=foreign_job,
+            workspace_id="workspace-b",
+        )
+
+        with self.assertRaises(NotFound404):
+            self.service.get_job(foreign_job.id)
+        with self.assertRaises(NotFound404):
+            self.service.edit_job(foreign_job.id, {"name": "Changed"})
+        with self.assertRaises(NotFound404):
+            self.service.create_assignment(foreign_job.id, self.candidate.id, {})
+        with self.assertRaises(NotFound404):
+            self.service.update_assignment(foreign_assignment.id, {"status": AssignmentStatus.REJECTED})
+
     def test_member_cannot_edit_candidate_or_create_job(self):
         member_service = RecruitmentService(
             workspace_id="workspace-a",
@@ -109,3 +132,19 @@ class RecruitmentServiceTests(TestCase):
         replacement = self.service.create_assignment(self.job.id, self.candidate.id, {})
 
         self.assertEqual(replacement["status"], AssignmentStatus.PENDING_SCREEN)
+
+    def test_archived_candidate_rejects_reactivating_assignment(self):
+        assignment = self.service.create_assignment(self.job.id, self.candidate.id, {})
+        self.service.update_assignment(assignment["id"], {"status": AssignmentStatus.REJECTED})
+        self.service.archive_candidate(self.candidate.id)
+
+        with self.assertRaisesRegex(AppApiException, "archived"):
+            self.service.update_assignment(assignment["id"], {"status": AssignmentStatus.PENDING_SCREEN})
+
+    def test_closed_job_rejects_reactivating_assignment(self):
+        assignment = self.service.create_assignment(self.job.id, self.candidate.id, {})
+        self.service.update_assignment(assignment["id"], {"status": AssignmentStatus.REJECTED})
+        self.service.edit_job(self.job.id, {"status": "CLOSED"})
+
+        with self.assertRaisesRegex(AppApiException, "closed"):
+            self.service.update_assignment(assignment["id"], {"status": AssignmentStatus.PENDING_SCREEN})

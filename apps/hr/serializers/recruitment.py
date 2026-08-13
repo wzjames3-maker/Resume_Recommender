@@ -23,12 +23,6 @@ class RecruitmentService:
             raise NotFound404(404, "Resource not found")
         return job
 
-    def _assignment(self, assignment_id):
-        assignment = CandidateAssignment.objects.filter(id=assignment_id, workspace_id=self.workspace_id).first()
-        if assignment is None:
-            raise NotFound404(404, "Resource not found")
-        return assignment
-
     def _require_manage(self):
         if not self.is_workspace_manage:
             raise AppUnauthorizedFailed(403, "Workspace administrator permission is required")
@@ -310,20 +304,32 @@ class RecruitmentService:
         return self._assignment_output(assignment)
 
     def update_assignment(self, assignment_id, data):
-        assignment = self._assignment(assignment_id)
-        update_fields = []
-        if "status" in data:
-            if data["status"] not in AssignmentStatus.values:
-                raise AppApiException(400, "status is invalid")
-            assignment.status = data["status"]
-            update_fields.append("status")
-        if "note" in data:
-            assignment.note = self._optional_string(data, "note", 4096)
-            update_fields.append("note")
-        if not update_fields:
-            raise AppApiException(400, "No editable fields supplied")
         try:
             with transaction.atomic():
+                assignment = CandidateAssignment.objects.select_for_update().filter(
+                    id=assignment_id,
+                    workspace_id=self.workspace_id,
+                ).first()
+                if assignment is None:
+                    raise NotFound404(404, "Resource not found")
+                update_fields = []
+                if "status" in data:
+                    if data["status"] not in AssignmentStatus.values:
+                        raise AppApiException(400, "status is invalid")
+                    if data["status"] in [AssignmentStatus.PENDING_SCREEN, AssignmentStatus.SCREEN_PASSED]:
+                        candidate = Candidate.objects.select_for_update().get(id=assignment.candidate_id)
+                        job = Job.objects.select_for_update().get(id=assignment.job_id)
+                        if candidate.status != CandidateStatus.ACTIVE:
+                            raise AppApiException(400, "Candidate is archived")
+                        if job.status != JobStatus.OPEN:
+                            raise AppApiException(400, "Job is closed")
+                    assignment.status = data["status"]
+                    update_fields.append("status")
+                if "note" in data:
+                    assignment.note = self._optional_string(data, "note", 4096)
+                    update_fields.append("note")
+                if not update_fields:
+                    raise AppApiException(400, "No editable fields supplied")
                 assignment.save(update_fields=[*update_fields, "update_time"])
         except IntegrityError as exc:
             raise AppApiException(400, "An active assignment already exists") from exc

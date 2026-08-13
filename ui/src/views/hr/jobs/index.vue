@@ -5,7 +5,7 @@
         <h2>职位</h2>
         <span class="color-secondary">维护开放职位与候选人筛选进度</span>
       </div>
-      <el-button type="primary" @click="openJobDialog()">新建职位</el-button>
+      <el-button v-if="isWorkspaceManage" type="primary" @click="openJobDialog()">新建职位</el-button>
     </div>
 
     <el-card style="--el-card-padding: 0" v-loading="loading">
@@ -17,7 +17,7 @@
         </el-select>
       </div>
 
-      <AppTable :data="jobs" :pagination-config="pagination" @change-page="loadJobs" @size-change="refresh">
+      <AppTable :data="jobs" :pagination-config="pagination" @change-page="loadJobs" @size-change="refresh" @expand-change="handleExpand">
         <el-table-column type="expand">
           <template #default="{ row }">
             <div class="assignment-panel" v-loading="detailLoading === row.id">
@@ -46,8 +46,8 @@
         <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag :type="row.status === 'OPEN' ? 'success' : 'info'">{{ row.status === 'OPEN' ? '开放' : '已关闭' }}</el-tag></template></el-table-column>
         <el-table-column label="操作" width="170" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="openJobDialog(row)">编辑</el-button>
-            <el-button link type="danger" :disabled="row.status === 'CLOSED'" @click="closeJob(row)">关闭</el-button>
+            <el-button v-if="isWorkspaceManage" link type="primary" @click="openJobDialog(row)">编辑</el-button>
+            <el-button v-if="isWorkspaceManage" link type="danger" :disabled="row.status === 'CLOSED'" @click="closeJob(row)">关闭</el-button>
           </template>
         </el-table-column>
       </AppTable>
@@ -72,11 +72,13 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import AppTable from '@/components/app-table/index.vue'
 import HrApi from '@/api/hr/recruitment'
 import type { Assignment, Job, JobDetail } from '@/api/type/hr'
 import { MsgConfirm, MsgSuccess } from '@/utils/message'
+import { hasPermission } from '@/utils/permission'
+import { RoleConst } from '@/utils/permission/data'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -88,6 +90,7 @@ const detailLoading = ref('')
 const jobDialogVisible = ref(false)
 const editingJob = ref<Job | null>(null)
 const jobForm = reactive({ name: '', department: '', city: '', level: '', headcount: 1, description: '' })
+const isWorkspaceManage = computed(() => hasPermission([RoleConst.WORKSPACE_MANAGE.getWorkspaceRole], 'OR'))
 
 function resetJobForm(job?: Job) {
   jobForm.name = job?.name || ''
@@ -102,8 +105,11 @@ function loadJobs() {
   HrApi.getJobs(pagination, filters).then((response) => {
     jobs.value = response.data.records
     pagination.total = response.data.total
-    jobs.value.forEach(loadJobDetail)
   })
+}
+
+function handleExpand(job: Job, expandedRows: Job[]) {
+  if (expandedRows.some((row) => row.id === job.id) && !jobDetails[job.id]) loadJobDetail(job)
 }
 
 function refresh() {
@@ -150,6 +156,9 @@ function closeJob(job: Job) {
 function updateAssignmentStatus(assignment: Assignment) {
   HrApi.updateAssignment(assignment.id, { status: assignment.status }).then(() => {
     MsgSuccess('筛选状态已更新')
+    const job = jobs.value.find((item) => item.id === assignment.job_id)
+    if (job) loadJobDetail(job)
+    refresh()
   })
 }
 

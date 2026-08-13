@@ -134,10 +134,10 @@ pnpm exec eslint .
 
 | 验证项 | 结果 |
 |--------|------|
-| `manage.py test hr.tests application.tests knowledge.tests models_provider.tests --keepdb` | 20/20 PASS |
+| `manage.py test hr.tests application.tests knowledge.tests models_provider.tests --keepdb` | 23/23 PASS |
 | `manage.py check` | System check identified no issues (0 silenced) |
 | `manage.py makemigrations --check --dry-run` | No changes detected |
 | `ui: node scripts/check-local-core-surface.mjs` | PASS |
 | `ui: vue-tsc --build` | PASS |
 | `ui: vite build` / `vite build --mode chat` | PASS；产物无已裁剪端点 |
-| HR 约束测试 | 有效指派唯一、终态可重新指派、HC 大于 0、关闭职位/归档候选人约束、跨工作区 404、管理员写权限均覆盖 |
+| HR 约束测试 | 有效指派唯一、终态可重新指派、HC 大于 0、关闭职位/归档候选人约束、跨工作区资源读写 404、管理员写权限均覆盖 |

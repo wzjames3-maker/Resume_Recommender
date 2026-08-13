@@ -79,7 +79,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
 
 - 数据模型：`Candidate`、`Job`、`CandidateAssignment` 迁移成功；有效指派去重且职位 HC 必须大于 0。
 - 后端：候选人、职位、指派 API 均按 `workspace_id` 隔离；关闭职位和归档候选人不可建立新有效指派。
-- 测试：`hr.tests application.tests knowledge.tests models_provider.tests`，20/20 PASS。
+- 测试：`hr.tests application.tests knowledge.tests models_provider.tests`，23/23 PASS。
 - 检查：`manage.py check` 无问题；`makemigrations --check --dry-run` 无变更。
 - 前端：HR 菜单、候选人管理、职位管理、加入职位和筛选状态更新可构建；`vue-tsc`、管理端和聊天端 Vite 构建均 PASS。
 

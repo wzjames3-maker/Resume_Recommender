@@ -34,9 +34,9 @@
         </el-table-column>
         <el-table-column label="操作" width="240" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="openCandidateDialog(row)">编辑</el-button>
+            <el-button v-if="isWorkspaceManage" link type="primary" @click="openCandidateDialog(row)">编辑</el-button>
             <el-button link type="primary" :disabled="row.status !== 'ACTIVE'" @click="openAssignmentDialog(row)">加入职位</el-button>
-            <el-button link type="danger" :disabled="row.status !== 'ACTIVE'" @click="archive(row)">归档</el-button>
+            <el-button v-if="isWorkspaceManage" link type="danger" :disabled="row.status !== 'ACTIVE'" @click="archive(row)">归档</el-button>
           </template>
         </el-table-column>
       </AppTable>
@@ -76,11 +76,13 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
 import AppTable from '@/components/app-table/index.vue'
 import HrApi from '@/api/hr/recruitment'
 import type { Candidate, Job } from '@/api/type/hr'
 import { MsgConfirm, MsgSuccess } from '@/utils/message'
+import { hasPermission } from '@/utils/permission'
+import { RoleConst } from '@/utils/permission/data'
 
 const loading = ref(false)
 const saving = ref(false)
@@ -95,6 +97,7 @@ const assigningCandidate = ref<Candidate | null>(null)
 const selectedJobId = ref('')
 const assignmentNote = ref('')
 const skillsText = ref('')
+const isWorkspaceManage = computed(() => hasPermission([RoleConst.WORKSPACE_MANAGE.getWorkspaceRole], 'OR'))
 const candidateForm = reactive({
   name: '', email: '', phone: '', current_city: '', target_city: '', highest_degree: '',
   years_experience: null as number | null, source: '', note: '',
