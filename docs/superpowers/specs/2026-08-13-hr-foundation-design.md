@@ -71,7 +71,7 @@ PostgreSQL（workspace_id 行级过滤）
 | GET | `/jobs/{job_id}` | 职位详情与指派列表 | 成员 |
 | PUT | `/jobs/{job_id}` | 编辑职位或关闭职位 | 工作区管理员 |
 | POST | `/jobs/{job_id}/assignments` | 创建候选人指派 | 成员 |
-| PUT | `/assignments/{assignment_id}` | 更新指派状态或备注 | 成员；管理员可操作任意记录 |
+| PUT | `/assignments/{assignment_id}` | 更新指派状态或备注 | 成员 |
 
 列表、详情和变更操作均将资源查询限制为 URL 的 `workspace_id`。找不到资源或资源不属于当前工作区时统一返回 404。序列化器负责字段范围、状态值和业务规则；视图不直接写 ORM。
 
@@ -83,7 +83,7 @@ PostgreSQL（workspace_id 行级过滤）
 
 - `/hr/candidates`：候选人列表，包含筛选、分页、新建、编辑、归档和加入职位。
 - `/hr/jobs`：职位列表，包含新建、编辑、关闭和查看关联候选人。
-- `/hr/jobs/:id`：职位详情与指派表格，支持更新筛选状态。
+- `/hr/jobs`：职位表格支持展开查看关联候选人，并更新筛选状态。
 
 复用现有 `LayoutContainer`、Element Plus `el-table`、`el-dialog`、分页器、请求封装和当前工作区 store。HR API client 从用户工作区 ID 动态构造前缀，遵循知识库 API 的模式。
 
