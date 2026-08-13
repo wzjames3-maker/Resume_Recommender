@@ -202,7 +202,7 @@ pnpm exec eslint .
 
 | 验证项 | 结果 |
 |--------|------|
-| `manage.py test hr.tests application.tests knowledge.tests models_provider.tests --keepdb` | 74/74 PASS |
+| `manage.py test hr.tests application.tests knowledge.tests models_provider.tests --keepdb` | 76/76 PASS |
 | `manage.py check` | System check identified no issues (0 silenced) |
 | `manage.py makemigrations --check --dry-run` | No changes detected |
 | `ui: vue-tsc --build` | PASS |

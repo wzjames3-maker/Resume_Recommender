@@ -113,7 +113,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
 - AI 配置：工作区级 LLM 模型选择（复用内核模型管理，校验 LLM 类型，兼容共享授权模型）。
 - 自然语言搜人：LLM 解析为结构化条件（技能/城市/年限/学历/状态），回填筛选表单后执行组合搜索。
 - 职位技能抽取：职位描述一键抽取技能列表（上限 20），回填技能要求。
-- 测试：`hr.tests application.tests knowledge.tests models_provider.tests`，74/74 PASS。
+- 测试：`hr.tests application.tests knowledge.tests models_provider.tests`，76/76 PASS。
 - 检查：`manage.py check` 无问题；`makemigrations --check --dry-run` 无变更。
 - 前端：AI 设置对话框、AI 搜索、技能抽取可构建；`vue-tsc`、管理端和聊天端 Vite 构建均 PASS。
 
