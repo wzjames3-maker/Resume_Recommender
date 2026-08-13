@@ -25,7 +25,7 @@ from maxkb.const import CONFIG
 from rest_framework import serializers
 from system_manage.models import WorkspaceUserResourcePermission
 from system_manage.models.resource_mapping import ResourceMapping, ResourceType
-from tools.serializers.tool import UploadedFileField
+from common.field.common import UploadedFileField
 from users.models import User
 
 mime_types = {
@@ -366,11 +366,8 @@ def get_url_content(url, application_id: str):
     if application.file_upload_setting and application.file_upload_setting.get('fileLimit'):
         file_limit = application.file_upload_setting.get('fileLimit') * 1024 * 1024
     try:
-        from common.utils.tool_code import ToolExecutor
-        response = ToolExecutor().exec_code(
-            """
-    def get_url_content(url):
         import requests
+
         requests.packages.urllib3.disable_warnings()
         response = requests.get(url, verify=False, allow_redirects=False)
         content_type = response.headers.get('Content-Type', '')
@@ -379,15 +376,12 @@ def get_url_content(url, application_id: str):
         else:
             import base64
             content = base64.b64encode(response.content).decode('utf-8')
-        return {
+        response = {
             "status_code": response.status_code,
             "Content-Type": content_type,
             "Content-Length": response.headers.get('Content-Length', 0),
             "content": content,
         }
-    """,
-            {"url": url}
-        )
     except Exception as e:
         raise AppApiException(500, str(e))
     if int(response.get('Content-Length')) > file_limit:

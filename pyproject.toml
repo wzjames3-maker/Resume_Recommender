@@ -41,7 +41,8 @@ dependencies = [
     "jsonpath-ng==1.8.0",
     "markdownify==1.2.2",
     "polib==1.2.0",
-    "cryptography==50.0.0"
+    "cryptography==50.0.0",
+    "pycryptodome>=3.23.0",
 ]
 
 [tool.uv]

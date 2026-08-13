@@ -16,7 +16,7 @@ from common.auth import TokenAuth
 from common.auth.authentication import has_permissions
 from common.constants.permission_constants import PermissionConstants, RoleConstants
 from homepage.api.home_page_api import ApplicationTokensRankingAPI, ApplicationQuestionRankingAPI, UserTokensRankingAPI, \
-    ApplicationAggregationAPI, KnowledgeAggregationAPI, ToolAggregationAPI, ModelAggregationAPI, \
+    ApplicationAggregationAPI, KnowledgeAggregationAPI, ModelAggregationAPI, \
     ApplicationMonitoringAPI, RankingBaseAPI, TokensAggregationAPI, RankingBaseExportAPI
 from homepage.serializers.homepage import HomePageSerializer
 from django.utils.translation import gettext_lazy as _
@@ -290,27 +290,6 @@ class HomePageAPI(APIView):
         def get(self, request: Request, workspace_id: str):
             return result.success(
                 HomePageSerializer.Knowledge(
-                    data={'workspace_id': workspace_id, 'user_id': request.user.id}).aggregation(
-                    request.auth))
-
-    class ToolAggregation(APIView):
-        authentication_classes = [TokenAuth]
-
-        @extend_schema(
-            methods=["GET"],
-            description=_("Tool data aggregation"),
-            summary=_("Tool data aggregation"),
-            operation_id="homepage_tool_aggregation",
-            parameters=ToolAggregationAPI.get_parameters(),
-            responses=ToolAggregationAPI.get_response(),
-            tags=[_("Home page")],
-        )
-        @has_permissions(PermissionConstants.HOMEPAGE_READ.get_workspace_permission(),
-                         RoleConstants.USER.get_workspace_role(),
-                         RoleConstants.WORKSPACE_MANAGE.get_workspace_role())
-        def get(self, request: Request, workspace_id: str):
-            return result.success(
-                HomePageSerializer.Tool(
                     data={'workspace_id': workspace_id, 'user_id': request.user.id}).aggregation(
                     request.auth))
 

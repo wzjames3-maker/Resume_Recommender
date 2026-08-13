@@ -39,12 +39,6 @@
                   >{{ $t('views.document.importDocument') }}
                 </el-button>
                 <el-button
-                  v-if="knowledgeDetail?.type === 4 && permissionPrecise.doc_create(id)"
-                  type="primary"
-                  @click="toImportWorkflow"
-                  >{{ $t('views.document.importDocument') }}
-                </el-button>
-                <el-button
                   @click="batchRefresh"
                   :disabled="multipleSelection.length === 0"
                   v-if="permissionPrecise.doc_vector(id)"
@@ -168,16 +162,6 @@
                 </el-select>
               </div>
 
-              <el-tooltip
-                effect="dark"
-                :content="$t('common.ExecutionRecord.title')"
-                placement="top"
-                v-if="knowledgeDetail?.type === 4 && permissionPrecise.doc_create(id)"
-              >
-                <el-button @click="openListAction" class="ml-12">
-                  <AppIcon iconName="app-execution-record" class="color-secondary"></AppIcon>
-                </el-button>
-              </el-tooltip>
               <el-button @click="openTagDrawer" class="ml-12" v-if="permissionPrecise.tag_read(id)">
                 {{ $t('views.document.tag.label') }}
               </el-button>
@@ -910,7 +894,6 @@
     />
     <AddTagDialog ref="addTagDialogRef" @addTags="addTags" :apiType="apiType" />
     <!-- 执行详情 -->
-    <ExecutionRecord ref="ListActionRef"></ExecutionRecord>
   </div>
 </template>
 <script setup lang="ts">
@@ -934,7 +917,6 @@ import { loadSharedApi } from '@/utils/dynamics-api/shared-api'
 import TagDrawer from './tag/TagDrawer.vue'
 import TagSettingDrawer from './tag/TagSettingDrawer.vue'
 import AddTagDialog from '@/views/document/tag/MulAddTagDialog.vue'
-import ExecutionRecord from '@/views/knowledge-workflow/component/execution-record/ExecutionRecordDrawer.vue'
 import UserApi from '@/api/user/user.ts'
 
 const route = useRoute()
@@ -1028,7 +1010,6 @@ const search_form = ref<any>({
 const beforePagination = computed(() => common.paginationConfig[storeKey])
 const beforeSearch = computed(() => common.search[storeKey])
 const embeddingContentDialogRef = ref<InstanceType<typeof EmbeddingContentDialog>>()
-const ListActionRef = ref<InstanceType<typeof ExecutionRecord>>()
 const loading = ref(false)
 let interval: any
 
@@ -1050,29 +1031,6 @@ const multipleSelection = ref<any[]>([])
 const title = ref('')
 
 const selectKnowledgeDialogRef = ref()
-
-const openListAction = () => {
-  ListActionRef.value?.open(id)
-}
-
-const toImportWorkflow = () => {
-  if (knowledgeDetail.value.is_publish) {
-    router.push({
-      path: `/knowledge/import/workflow/${folderId}`,
-      query: {
-        id: id,
-      },
-    })
-  } else {
-    MsgConfirm(t('common.tip'), t('views.document.tip.toImportDocConfirm'), {
-      cancelButtonText: t('common.close'),
-      showConfirmButton: false,
-      type: 'warning',
-    })
-      .then(() => {})
-      .catch(() => {})
-  }
-}
 
 const exportDocument = (document: any) => {
   loadSharedApi({ type: 'document', systemType: apiType.value })

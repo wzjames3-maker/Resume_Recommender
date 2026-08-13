@@ -1,12 +1,6 @@
 <template>
   <div class="execution-details">
-    <div v-if="isWorkFlow(props.appType)">
-      <template v-for="(item, index) in arraySort(props.detail ?? [], 'index')" :key="index">
-        <ExecutionDetailCard :data="item"> </ExecutionDetailCard>
-      </template>
-    </div>
-
-    <template v-else>
+    <div v-if="!isWorkFlow(props.appType)">
       <div class="card-never border-r-6 mb-12">
         <h5 class="p-8-12">
           {{ $t('aiChat.paragraphSource.question') }}
@@ -77,13 +71,11 @@
           </div>
         </div>
       </div>
-    </template>
+    </div>
   </div>
 </template>
 <script setup lang="ts">
 import { ref, computed } from 'vue'
-import ExecutionDetailCard from '@/components/execution-detail-card/index.vue'
-import { arraySort } from '@/utils/array'
 import { isWorkFlow } from '@/utils/application'
 import MdRenderer from '@/components/markdown/MdRenderer.vue'
 

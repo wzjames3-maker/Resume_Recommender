@@ -738,17 +738,10 @@ function toSetting(row: any) {
       MsgError(t('common.noTargetPermission'))
       return
     }
-    if (row.type === 'WORK_FLOW') {
-      const newUrl = router.resolve({
-        path: `/application/${from === 'shared' ? 'resource-management' : from}/${row.source_id}/workflow`,
-      }).href
-      window.open(newUrl)
-    } else {
-      const newUrl = router.resolve({
-        path: `/application/${from === 'shared' ? 'resource-management' : from}/${row.source_id}/SIMPLE/setting`,
-      }).href
-      window.open(newUrl)
-    }
+    const newUrl = router.resolve({
+      path: `/application/${from === 'shared' ? 'resource-management' : from}/${row.source_id}/SIMPLE/setting`,
+    }).href
+    window.open(newUrl)
   }
 }
 

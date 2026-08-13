@@ -33,3 +33,12 @@ app.conf.update(
         key
         in configs.keys()})
 app.autodiscover_tasks(lambda: [app_config.split('.')[0] for app_config in settings.INSTALLED_APPS])
+
+# knowledge 任务位于 knowledge/task/ 而非 <app>/tasks.py，autodiscover 无法发现，需显式注册
+app.conf.update(
+    imports=[
+        'knowledge.task.embedding',
+        'knowledge.task.generate',
+        'knowledge.task.sync',
+    ]
+)

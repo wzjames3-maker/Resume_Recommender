@@ -10,7 +10,6 @@ from .utils import ServicesUtil
 class Services(TextChoices):
     gunicorn = 'gunicorn', 'gunicorn'
     celery_default = 'celery_default', 'celery_default'
-    local_model = 'local_model', 'local_model'
     web = 'web', 'web'
     celery = 'celery', 'celery'
     celery_model = 'celery_model', 'celery_model'
@@ -23,13 +22,12 @@ class Services(TextChoices):
         services_map = {
             cls.gunicorn.value: services.GunicornService,
             cls.celery_default: services.CeleryDefaultService,
-            cls.local_model: services.GunicornLocalModelService,
         }
         return services_map.get(name)
 
     @classmethod
     def web_services(cls):
-        return [cls.gunicorn, cls.local_model]
+        return [cls.gunicorn]
 
     @classmethod
     def celery_services(cls):

@@ -54,41 +54,6 @@
         </el-card>
       </el-col>
       <el-col :xs="12" :sm="12" :md="12" :lg="6" :xl="6" class="mb-16">
-        <el-card class="resource-card cursor" shadow="never" @click="router.push('/tool')">
-          <div class="flex-between">
-            <div>
-              <p class="color-secondary lighter mb-4">{{ $t('views.tool.title') }}</p>
-              <h2 class="large-number">{{ toThousands(toolAggregation?.total || 0) }}</h2>
-            </div>
-            <el-avatar :size="48" shape="square" style="background: #ebf9e9">
-              <appIcon iconName="app-tool-active" :style="{ fontSize: '28px', color: '#2CA91F' }" />
-            </el-avatar>
-          </div>
-          <el-row class="mt-12">
-            <el-col :span="8">
-              <p class="color-secondary lighter mb-4">{{ $t('views.tool.title') }}</p>
-              <h2>{{ toThousands(toolAggregation?.custom_count || 0) }}</h2>
-            </el-col>
-            <el-col :span="8">
-              <p class="color-secondary lighter mb-4">{{ $t('workflow.workflow') }}</p>
-              <h2>{{ toThousands(toolAggregation?.workflow_count || 0) }}</h2>
-            </el-col>
-            <el-col :span="8">
-              <p class="color-secondary lighter mb-4">{{ $t('common.other') }}</p>
-              <h2>
-                {{
-                  toThousands(
-                    toolAggregation?.total -
-                      toolAggregation?.custom_count -
-                      toolAggregation?.workflow_count || 0,
-                  )
-                }}
-              </h2>
-            </el-col>
-          </el-row>
-        </el-card>
-      </el-col>
-      <el-col :xs="12" :sm="12" :md="12" :lg="6" :xl="6" class="mb-16">
         <el-card class="resource-card cursor" shadow="never" @click="router.push('/model')">
           <div class="flex-between">
             <div>
@@ -138,7 +103,6 @@ const router = useRouter()
 const loading = ref(true)
 const applicationAggregation = ref()
 const knowledgeAggregation = ref()
-const toolAggregation = ref()
 const modelAggregation = ref()
 
 function getDetail() {
@@ -147,9 +111,6 @@ function getDetail() {
   })
   homeApi.getKnowledgeAggregation(loading).then((res: any) => {
     knowledgeAggregation.value = res.data
-  })
-  homeApi.getToolAggregation(loading).then((res: any) => {
-    toolAggregation.value = res.data
   })
   homeApi.getModelAggregation(loading).then((res: any) => {
     modelAggregation.value = res.data

@@ -9,8 +9,8 @@ from .conf import ConfigManager
 __all__ = ['BASE_DIR', 'PROJECT_DIR', 'VERSION', 'CONFIG']
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-LOG_DIR = os.path.join('/', 'opt', 'maxkb', 'logs')
 PROJECT_DIR = os.path.dirname(BASE_DIR)
+LOG_DIR = os.getenv('MAXKB_LOG_DIR') or os.path.join(PROJECT_DIR, 'logs')
 VERSION = '2.0.0'
 
 # load environment variables from .env file

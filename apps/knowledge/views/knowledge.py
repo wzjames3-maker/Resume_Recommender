@@ -16,7 +16,6 @@ from knowledge.models import KnowledgeScope
 from knowledge.serializers.common import get_knowledge_operation_object
 from knowledge.serializers.knowledge import KnowledgeSerializer, KnowledgeBatchOperateSerializer
 from models_provider.serializers.model_serializer import ModelSerializer
-from tools.api.tool import GetInternalToolAPI
 from django.db.models import QuerySet
 from knowledge.models import Knowledge
 
@@ -309,23 +308,6 @@ class KnowledgeView(APIView):
                 }
             ).hit_test())
 
-    class StoreKnowledge(APIView):
-        authentication_classes = [TokenAuth]
-
-        @extend_schema(
-            methods=['GET'],
-            description=_("Get Appstore tools"),
-            summary=_("Get Appstore tools"),
-            operation_id=_("Get Appstore tools"),  # type: ignore
-            responses=GetInternalToolAPI.get_response(),
-            tags=[_("Tool")]  # type: ignore
-        )
-        def get(self, request: Request):
-            return result.success(KnowledgeSerializer.StoreKnowledge(data={
-                'user_id': request.user.id,
-                'name': request.query_params.get('name', ''),
-            }).get_appstore_templates())
-
     class Embedding(APIView):
         authentication_classes = [TokenAuth]
 
@@ -542,25 +524,6 @@ class KnowledgeView(APIView):
                     'model_type': 'EMBEDDING'
                 }
             ).list(workspace_id, True))
-
-    class TransformWorkflow(APIView):
-        authentication_classes = [TokenAuth]
-
-        @has_permissions(
-            PermissionConstants.KNOWLEDGE_EDIT.get_workspace_knowledge_permission(),
-            PermissionConstants.KNOWLEDGE_EDIT.get_workspace_permission_workspace_manage_role(),
-            RoleConstants.WORKSPACE_MANAGE.get_workspace_role(),
-            ViewPermission([RoleConstants.USER.get_workspace_role()],
-                           [PermissionConstants.KNOWLEDGE.get_workspace_knowledge_permission()], CompareConstants.AND),
-        )
-        @log(
-            menu='Knowledge Base', operate="Modify knowledge base information",
-            get_operation_object=lambda r, keywords: get_knowledge_operation_object(keywords.get('knowledge_id')),
-        )
-        def post(self, request: Request, workspace_id: str, knowledge_id: str):
-            return result.success(KnowledgeSerializer.TransformWorkflow(
-                data={'user_id': request.user.id, 'workspace_id': workspace_id, 'knowledge_id': knowledge_id}
-            ).transform(request.data))
 
     class Tags(APIView):
         authentication_classes = [TokenAuth]

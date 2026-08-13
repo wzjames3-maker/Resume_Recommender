@@ -54,7 +54,6 @@ import type { ApplicationFormType } from '@/api/type/application'
 import type { FormInstance, FormRules } from 'element-plus'
 import applicationApi from '@/api/application/application'
 import { MsgSuccess, MsgAlert } from '@/utils/message'
-import { isWorkFlow } from '@/utils/application'
 import { t } from '@/locales'
 import useStore from '@/stores'
 const router = useRouter()
@@ -152,13 +151,9 @@ const submitHandle = async (formEl: FormInstance | undefined) => {
         .then((res) => {
           return user.profile().then(() => {
             MsgSuccess(t('common.createSuccess'))
-            if (isWorkFlow(applicationForm.value.type)) {
-              router.push({ path: `/application/workspace/${res.data.id}/workflow` })
-            } else {
-              router.push({
-                path: `/application/workspace/${res.data.id}/${res.data.type}/setting`,
-              })
-            }
+            router.push({
+              path: `/application/workspace/${res.data.id}/${res.data.type}/setting`,
+            })
             dialogVisible.value = false
           })
         })

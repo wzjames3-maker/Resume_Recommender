@@ -39,7 +39,6 @@ def auth_folder(apps, schema_editor):
     user_model = apps.get_model('users', 'User')
     application_folder_model = apps.get_model('application', 'ApplicationFolder')
     knowledge_folder_model = apps.get_model('knowledge', 'KnowledgeFolder')
-    tool_folder_model = apps.get_model('tools', 'ToolFolder')
     workspace_user_resource_permission_model = apps.get_model('system_manage', 'WorkspaceUserResourcePermission')
 
     workspace_user_role_mapping_model = DatabaseModelManage.get_model("workspace_user_role_mapping")
@@ -63,23 +62,17 @@ def auth_folder(apps, schema_editor):
                                                                                           workspace_user_role_mapping_model_workspace_dict,
                                                                                           application_folder_model)
 
-    workspace_user_resource_permission_list += get_workspace_user_resource_permission_list(apps,"TOOL",
-                                                                                           workspace_user_role_mapping_model_workspace_dict,
-                                                                                           tool_folder_model)
-
     workspace_user_resource_permission_list += get_workspace_user_resource_permission_list(apps,"KNOWLEDGE",
                                                                                            workspace_user_role_mapping_model_workspace_dict,
                                                                                            knowledge_folder_model)
     delete_auth(apps,application_folder_model)
     delete_auth(apps,knowledge_folder_model)
-    delete_auth(apps,tool_folder_model)
     QuerySet(workspace_user_resource_permission_model).bulk_create(workspace_user_resource_permission_list)
 
 
 class Migration(migrations.Migration):
     dependencies = [
         ('system_manage', '0002_refresh_collation_reindex'),
-        ('tools', '0001_initial'),
         ('application', '0001_initial'),
         ('knowledge', '0001_initial'),
     ]

@@ -10,32 +10,6 @@
       {{ $t('common.upgrade') }}
     </el-button>
     <el-tooltip
-      v-if="
-        hasPermission(
-          [
-            RoleConst.WORKSPACE_MANAGE.getWorkspaceRole,
-            PermissionConst.TRIGGER_READ.getWorkspacePermissionWorkspaceManageRole,
-          ],
-          'OR',
-        ) && type === 'workspace'
-      "
-      effect="dark"
-      :content="$t('views.trigger.title')"
-      placement="top"
-    >
-      <el-button
-        text
-        @click="router.push({ name: 'trigger' })"
-        :class="route.path.includes('trigger') ? 'active' : ''"
-      >
-        <AppIcon
-          iconName="app-trigger"
-          :class="route.path.includes('trigger') ? 'color-primary' : 'color-secondary'"
-          style="font-size: 20px"
-        ></AppIcon>
-      </el-button>
-    </el-tooltip>
-    <el-tooltip
       effect="dark"
       :content="$t('layout.github')"
       placement="top"
@@ -81,16 +55,8 @@
 </template>
 <script setup lang="ts">
 import useStore from '@/stores'
-import { hasPermission } from '@/utils/permission'
-import { EditionConst, PermissionConst, RoleConst } from '@/utils/permission/data'
-import { useRoute, useRouter } from 'vue-router'
-const route = useRoute()
-const router = useRouter()
-const { theme, user } = useStore()
-
-withDefaults(defineProps<{ type?: 'workspace' | 'system' }>(), {
-  type: 'workspace',
-})
+import { EditionConst } from '@/utils/permission/data'
+const { theme } = useStore()
 function toUrl(url: string) {
   window.open(url, '_blank')
 }

@@ -202,12 +202,7 @@ const postKnowledge: (data: knowledgeData, loading?: Ref<boolean>) => Promise<Re
  * @param loading
  * @returns
  */
-const createWorkflowKnowledge: (data: any, loading?: Ref<boolean>) => Promise<Result<any>> = (
-  data,
-  loading,
-) => {
-  return post(`${prefix.value}/workflow`, data, undefined, loading)
-}
+
 /**
  * 获取当前用户可使用的向量化模型列表 (没用到)
  * @param application_id
@@ -315,70 +310,10 @@ const delMulTag: (
 ) => Promise<Result<any>> = (knowledge_id, tags, loading) => {
   return put(`${prefix.value}/${knowledge_id}/tags/batch_delete`, tags, null, loading)
 }
-const getKnowledgeWorkflowFormList: (
-  knowledge_id: string,
-  type: 'local' | 'tool',
-  id: string,
-  node: any,
-  loading?: Ref<boolean>,
-) => Promise<Result<any>> = (
-  knowledge_id: string,
-  type: 'local' | 'tool',
-  id: string,
-  node,
-  loading,
-) => {
-  return post(
-    `${prefix.value}/${knowledge_id}/datasource/${type}/${id}/form_list`,
-    { node },
-    {},
-    loading,
-  )
-}
-const getKnowledgeWorkflowDatasourceDetails: (
-  knowledge_id: string,
-  type: 'local' | 'tool',
-  id: string,
-  params: any,
-  function_name: string,
-  loading?: Ref<boolean>,
-) => Promise<Result<any>> = (
-  knowledge_id: string,
-  type: 'local' | 'tool',
-  id: string,
-  params,
-  function_name,
-  loading,
-) => {
-  return post(
-    `${prefix.value}/${knowledge_id}/datasource/${type}/${id}/${function_name}`,
-    params,
-    {},
-    loading,
-  )
-}
-const workflowAction: (
-  knowledge_id: string,
-  instance: Dict<any>,
-  loading?: Ref<boolean>,
-) => Promise<Result<any>> = (knowledge_id: string, instance, loading) => {
-  return post(`${prefix.value}/${knowledge_id}/debug`, instance, {}, loading)
-}
 
-const workflowUpload: (
-  knowledge_id: string,
-  instance: Dict<any>,
-  loading?: Ref<boolean>,
-) => Promise<Result<any>> = (knowledge_id: string, instance, loading) => {
-  return post(`${prefix.value}/${knowledge_id}/upload_document`, instance, {}, loading)
-}
 
-const publish: (knowledge_id: string, loading?: Ref<boolean>) => Promise<Result<any>> = (
-  knowledge_id: string,
-  loading,
-) => {
-  return put(`${prefix.value}/${knowledge_id}/publish`, {}, {}, loading)
-}
+
+
 
 /**
  * 保存知识库工作流
@@ -387,13 +322,6 @@ const publish: (knowledge_id: string, loading?: Ref<boolean>) => Promise<Result<
  * @param loading
  * @returns
  */
-const putKnowledgeWorkflow: (
-  knowledge_id: string,
-  data: any,
-  loading?: Ref<boolean>,
-) => Promise<Result<any>> = (knowledge_id, data, loading) => {
-  return put(`${prefix.value}/${knowledge_id}/workflow`, data, undefined, loading)
-}
 
 /**
  * 导出知识库工作流
@@ -402,97 +330,20 @@ const putKnowledgeWorkflow: (
  * @param loading
  * @returns
  */
-const exportKnowledgeWorkflow = (
-  knowledge_id: string,
-  knowledge_name: string,
-  loading?: Ref<boolean>,
-) => {
-  return exportFile(
-    knowledge_name + '.kbwf',
-    `${prefix.value}/${knowledge_id}/workflow/export`,
-    undefined,
-    loading,
-  )
-}
+
 /**
  * 导入知识库工作流
  */
-const importKnowledgeWorkflow: (
-  knowledge_id: string,
-  data: any,
-  loading?: Ref<boolean>,
-) => Promise<Result<any>> = (knowledge_id, data, loading) => {
-  return post(`${prefix.value}/${knowledge_id}/workflow/import`, data, undefined, loading)
-}
 
-const listKnowledgeVersion: (
-  knowledge_id: string,
-  loading?: Ref<boolean>,
-) => Promise<Result<any>> = (knowledge_id: string, loading) => {
-  return get(`${prefix.value}/${knowledge_id}/knowledge_version`, {}, loading)
-}
-const updateKnowledgeVersion: (
-  knowledge_id: string,
-  knowledge_version_id: string,
-  data: any,
-  loading?: Ref<boolean>,
-) => Promise<Result<any>> = (knowledge_id: string, knowledge_version_id, data, loading) => {
-  return put(
-    `${prefix.value}/${knowledge_id}/knowledge_version/${knowledge_version_id}`,
-    data,
-    {},
-    loading,
-  )
-}
-const getWorkflowActionPage: (
-  knowledge_id: string,
-  page: pageRequest,
-  query: any,
-  loading?: Ref<boolean>,
-) => Promise<Result<any>> = (knowledge_id: string, page, query, loading) => {
-  return get(
-    `${prefix.value}/${knowledge_id}/action/${page.current_page}/${page.page_size}`,
-    query,
-    loading,
-  )
-}
-const getWorkflowAction: (
-  knowledge_id: string,
-  knowledge_action_id: string,
-  loading?: Ref<boolean>,
-) => Promise<Result<any>> = (knowledge_id: string, knowledge_action_id, loading) => {
-  return get(`${prefix.value}/${knowledge_id}/action/${knowledge_action_id}`, {}, loading)
-}
-const cancelWorkflowAction: (
-  knowledge_id: string,
-  knowledge_action_id: string,
-  loading?: Ref<boolean>,
-) => Promise<Result<any>> = (knowledge_id: string, knowledge_action_id, loading) => {
-  return post(
-    `${prefix.value}/${knowledge_id}/action/${knowledge_action_id}/cancel`,
-    {},
-    undefined,
-    loading,
-  )
-}
+
+
+
+
+
 /**
  * mcp 节点
  */
-const getMcpTools: (
-  knowledge_id: string,
-  mcp_servers: any,
-  loading?: Ref<boolean>,
-) => Promise<Result<any>> = (knowledge_id, mcp_servers, loading) => {
-  return post(`${prefix.value}/${knowledge_id}/mcp_tools`, { mcp_servers }, {}, loading)
-}
 
-const postTransformWorkflow: (
-  knowledge_id: string,
-  data: any,
-  loading?: Ref<boolean>,
-) => Promise<Result<any>> = (knowledge_id, data, loading) => {
-  return post(`${prefix.value}/${knowledge_id}/transform_workflow`, data, undefined, loading)
-}
 
 /**
  * 导出知识库
@@ -578,22 +429,6 @@ export default {
   putTag,
   delTag,
   delMulTag,
-  createWorkflowKnowledge,
-  getKnowledgeWorkflowFormList,
-  workflowAction,
-  getWorkflowAction,
-  getKnowledgeWorkflowDatasourceDetails,
-  getMcpTools,
-  listKnowledgeVersion,
-  updateKnowledgeVersion,
-  publish,
-  putKnowledgeWorkflow,
-  workflowUpload,
-  getWorkflowActionPage,
-  cancelWorkflowAction,
-  exportKnowledgeWorkflow,
-  importKnowledgeWorkflow,
-  postTransformWorkflow,
   exportKnowledgeBundle,
   importKnowledgeBundle,
   delMulKnowledge,

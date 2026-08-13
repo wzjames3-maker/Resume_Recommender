@@ -795,8 +795,7 @@ def _set_root_permissions(user_id, workspace_ids):
             )
             for auth_target_type in [
                 AuthTargetType.APPLICATION.value,
-                AuthTargetType.KNOWLEDGE.value,
-                AuthTargetType.TOOL.value
+                AuthTargetType.KNOWLEDGE.value
             ]
         ])
 
@@ -829,15 +828,12 @@ def _get_resource_maps(workspace_ids):
     from application.models import Application, ApplicationFolder
     from knowledge.models import Knowledge, KnowledgeFolder
     from models_provider.models import Model
-    from tools.models import Tool, ToolFolder
 
     resource_maps = {
         'apps': defaultdict(list),
         'app_folders': defaultdict(list),
         'knowledge': defaultdict(list),
         'knowledge_folders': defaultdict(list),
-        'tools': defaultdict(list),
-        'tool_folders': defaultdict(list),
         'models': defaultdict(list)
     }
 
@@ -856,14 +852,6 @@ def _get_resource_maps(workspace_ids):
     for ws, kfid in KnowledgeFolder.objects.filter(workspace_id__in=workspace_ids).exclude(
             id__in=workspace_ids).values_list('workspace_id', 'id'):
         resource_maps['knowledge_folders'][ws].append(kfid)
-
-    # 查询工具资源
-    for ws, tid in Tool.objects.filter(workspace_id__in=workspace_ids).values_list('workspace_id', 'id'):
-        resource_maps['tools'][ws].append(tid)
-
-    for ws, tfid in ToolFolder.objects.filter(workspace_id__in=workspace_ids).exclude(
-            id__in=workspace_ids).values_list('workspace_id', 'id'):
-        resource_maps['tool_folders'][ws].append(tfid)
 
     # 查询模型资源
     for ws, mid in Model.objects.filter(workspace_id__in=workspace_ids).values_list('workspace_id', 'id'):
@@ -920,28 +908,6 @@ def _create_resource_permission_instances(workspace_id, resource_maps, user_id, 
         instances.append(WorkspaceUserResourcePermission(
             target=kf,
             auth_target_type=AuthTargetType.KNOWLEDGE.value,
-            permission_list=permission,
-            workspace_id=workspace_id,
-            user_id=user_id,
-            auth_type=auth_type
-        ))
-
-    # 工具权限
-    for tid in resource_maps['tools'].get(workspace_id, []):
-        instances.append(WorkspaceUserResourcePermission(
-            target=tid,
-            auth_target_type=AuthTargetType.TOOL.value,
-            permission_list=permission,
-            workspace_id=workspace_id,
-            user_id=user_id,
-            auth_type=auth_type
-        ))
-
-    # 工具文件夹权限
-    for tf in resource_maps['tool_folders'].get(workspace_id, []):
-        instances.append(WorkspaceUserResourcePermission(
-            target=tf,
-            auth_target_type=AuthTargetType.TOOL.value,
             permission_list=permission,
             workspace_id=workspace_id,
             user_id=user_id,

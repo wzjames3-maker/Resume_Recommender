@@ -38,7 +38,6 @@ import EchartsRander from './EchartsRander.vue'
 import FormRander from './FormRander.vue'
 import ReasoningRander from './ReasoningRander.vue'
 import IframeRender from './IframeRender.vue'
-import ToolCallsRender from './tool-calls-render/index.vue'
 config({
   markdownItConfig(md) {
     md.renderer.rules.image = (tokens, idx, options) => {
@@ -95,7 +94,6 @@ const TAG_PLUGINS: TagPlugin[] = [
   { tag: 'quick_question', type: 'question' },
   { tag: 'html_rander', type: 'html_rander' },
   { tag: 'iframe_render', type: 'iframe_render' },
-  { tag: 'tool_calls_render', type: 'tool_calls_render' },
   {
     tag: 'echarts_rander',
     type: 'echarts_rander',
@@ -197,7 +195,6 @@ const componentMap: Record<string, any> = {
   echarts_rander: EchartsRander,
   form_rander: FormRander,
   iframe_render: IframeRender,
-  tool_calls_render: ToolCallsRender,
 }
 
 function getComponentProps(item: RenderNode) {
@@ -218,9 +215,6 @@ function getComponentProps(item: RenderNode) {
       return { source: item.content, sendMessage: props.sendMessage }
     case 'iframe_render':
       return { source: item.content, sendMessage: props.sendMessage }
-    case 'tool_calls_render':
-      return { content: item.content }
-
     default:
       return {}
   }

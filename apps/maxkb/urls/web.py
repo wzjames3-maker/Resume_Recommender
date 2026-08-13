@@ -35,13 +35,11 @@ chat_api_prefix = CONFIG.get_chat_path()[1:] + '/api/'
 chat_ui_prefix = CONFIG.get_chat_path()
 urlpatterns = [
     path(admin_api_prefix, include("users.urls")),
-    path(admin_api_prefix, include("tools.urls")),
     path(admin_api_prefix, include("models_provider.urls")),
     path(admin_api_prefix, include("folders.urls")),
     path(admin_api_prefix, include("knowledge.urls")),
     path(admin_api_prefix, include("system_manage.urls")),
     path(admin_api_prefix, include("application.urls")),
-    path(admin_api_prefix, include("trigger.urls")),
     path(admin_api_prefix, include("oss.urls", namespace="admin_oss")),
     path(admin_api_prefix, include("homepage.urls")),
     path(chat_api_prefix, include("oss.urls", namespace="chat_oss")),

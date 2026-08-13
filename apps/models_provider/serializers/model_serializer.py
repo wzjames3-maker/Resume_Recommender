@@ -22,7 +22,7 @@ from maxkb.conf import PROJECT_DIR
 from models_provider.base_model_provider import DownModelChunkStatus, ValidCode
 from models_provider.constants.model_provider_constants import ModelProvideConstants
 from models_provider.models import Model, Status
-from models_provider.tools import get_model_credential
+from models_provider.tools import get_model_credential, get_provider
 from rest_framework import serializers
 from system_manage.models import AuthTargetType, WorkspaceUserResourcePermission
 from system_manage.models.resource_mapping import ResourceMapping
@@ -116,8 +116,8 @@ class ModelSerializer(serializers.Serializer):
             "model_name": model.model_name,
             "status": model.status,
             "meta": model.meta,
-            "credential": ModelProvideConstants[model.provider]
-            .value.get_model_credential(model.model_type, model.model_name)
+            "credential": get_provider(model.provider)
+            .get_model_credential(model.model_type, model.model_name)
             .encryption_dict(credential),
             "workspace_id": model.workspace_id,
             "nick_name": model.user.nick_name if model.user else "",
@@ -274,8 +274,8 @@ class ModelSerializer(serializers.Serializer):
             model_type = self.data.get("model_type")
             model_name = self.data.get("model_name")
             credential = self.data.get("credential")
-            provider_handler = ModelProvideConstants[provider].value
-            model_credential = ModelProvideConstants[provider].value.get_model_credential(model_type, model_name)
+            provider_handler = get_provider(provider)
+            model_credential = provider_handler.get_model_credential(model_type, model_name)
             source_model_credential = json.loads(rsa_long_decrypt(model.credential))
             source_encryption_model_credential = model_credential.encryption_dict(source_model_credential)
             if credential is not None:

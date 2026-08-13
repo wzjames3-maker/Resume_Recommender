@@ -204,7 +204,6 @@ const props = defineProps({
 })
 
 onBeforeRouteLeave((to, from) => {
-  if (from?.name === 'ToolWorkflow') return
   if (from?.name === 'AppSetting') return
   folder.setCurrentFolder({})
 })
@@ -215,8 +214,6 @@ const resourceType = computed(() => {
     return 'knowledge'
   } else if (props.source === 'MODEL') {
     return 'model'
-  } else if (props.source === 'TOOL') {
-    return 'tool'
   } else {
     return 'application'
   }

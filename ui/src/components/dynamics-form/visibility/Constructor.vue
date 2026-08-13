@@ -44,7 +44,7 @@ import { ref, onMounted } from 'vue'
 import { randomId } from '@/utils/common'
 import type { CompareOptions, VisibilityRules } from './index'
 import { inferFieldType, getAllowedOps, getFieldConfig } from './field-type'
-import { compareList } from '@/workflow/common/data'
+import { compareList } from './data'
 import ConditionRow from './ConditionRow.vue'
 import { t } from '@/locales'
 const props = defineProps<{

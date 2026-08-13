@@ -16,21 +16,13 @@ import uuid_utils.compat as uuid
 from application.chat_pipeline.I_base_chat_pipeline import ParagraphPipelineModel
 from application.chat_pipeline.pipeline_manage import PipelineManage
 from application.chat_pipeline.step.chat_step.i_chat_step import IChatStep, PostResponseHandler
-from application.flow.tools import Reasoning, get_tools, mcp_response_generator
-from application.long_term_memory import extract_long_term_memory
 from application.models import (
-    Application,
-    ApplicationAccessToken,
-    ApplicationApiKey,
     ApplicationChatUserStats,
     ApplicationLongTermMemory,
     ChatUserType,
 )
 from common.exception.app_exception import AppApiException
 from common.utils.logger import maxkb_logger
-from common.utils.rsa_util import rsa_long_decrypt
-from common.utils.shared_resource_auth import filter_authorized_ids, get_runtime_user_id
-from common.utils.tool_code import ToolExecutor
 from django.db.models import QuerySet
 from django.http import StreamingHttpResponse
 from django.utils.translation import gettext as _
@@ -38,7 +30,110 @@ from langchain.chat_models.base import BaseChatModel
 from langchain_core.messages import AIMessage, AIMessageChunk, BaseMessage, HumanMessage, SystemMessage
 from models_provider.tools import get_model_instance_by_model_workspace_id
 from rest_framework import status
-from tools.models import Tool, ToolType
+
+
+class Reasoning:
+    def __init__(self, reasoning_content_start, reasoning_content_end):
+        self.content = ""
+        self.reasoning_content = ""
+        self.all_content = ""
+        self.reasoning_content_start_tag = reasoning_content_start
+        self.reasoning_content_end_tag = reasoning_content_end
+        self.reasoning_content_start_tag_len = (
+            len(reasoning_content_start) if reasoning_content_start is not None else 0
+        )
+        self.reasoning_content_end_tag_len = len(reasoning_content_end) if reasoning_content_end is not None else 0
+        self.reasoning_content_end_tag_prefix = (
+            reasoning_content_end[0] if self.reasoning_content_end_tag_len > 0 else ""
+        )
+        self.reasoning_content_is_start = False
+        self.reasoning_content_is_end = False
+        self.reasoning_content_chunk = ""
+
+    def get_end_reasoning_content(self):
+        if not self.reasoning_content_is_start and not self.reasoning_content_is_end:
+            r = {"content": self.all_content, "reasoning_content": ""}
+            self.reasoning_content_chunk = ""
+            return r
+        if self.reasoning_content_is_start and not self.reasoning_content_is_end:
+            r = {"content": "", "reasoning_content": self.reasoning_content_chunk}
+            self.reasoning_content_chunk = ""
+            return r
+        return {"content": "", "reasoning_content": ""}
+
+    def _normalize_content(self, content):
+        """将不同类型的内容统一转换为字符串"""
+        if isinstance(content, str):
+            return content
+        elif isinstance(content, list):
+            # 处理包含多种内容类型的列表
+            normalized_parts = []
+            for item in content:
+                if isinstance(item, dict):
+                    if item.get("type") == "text":
+                        normalized_parts.append(item.get("text", ""))
+            return "".join(normalized_parts)
+        else:
+            return str(content)
+
+    def get_reasoning_content(self, chunk):
+        # 如果没有开始思考过程标签那么就全是结果
+        if self.reasoning_content_start_tag is None or len(self.reasoning_content_start_tag) == 0:
+            self.content += chunk.content
+            return {"content": chunk.content, "reasoning_content": ""}
+        # 如果没有结束思考过程标签那么就全部是思考过程
+        if self.reasoning_content_end_tag is None or len(self.reasoning_content_end_tag) == 0:
+            return {"content": "", "reasoning_content": chunk.content}
+        chunk.content = self._normalize_content(chunk.content)
+        self.all_content += chunk.content
+        if not self.reasoning_content_is_start and len(self.all_content) >= self.reasoning_content_start_tag_len:
+            if self.all_content.startswith(self.reasoning_content_start_tag):
+                self.reasoning_content_is_start = True
+                self.reasoning_content_chunk = self.all_content[self.reasoning_content_start_tag_len :]
+            else:
+                if not self.reasoning_content_is_end:
+                    self.reasoning_content_is_end = True
+                    self.content += self.all_content
+                    return {
+                        "content": self.all_content,
+                        "reasoning_content": chunk.additional_kwargs.get("reasoning_content", "")
+                        if chunk.additional_kwargs
+                        else "",
+                    }
+        else:
+            if self.reasoning_content_is_start:
+                self.reasoning_content_chunk += chunk.content
+        reasoning_content_end_tag_prefix_index = self.reasoning_content_chunk.find(
+            self.reasoning_content_end_tag_prefix
+        )
+        if self.reasoning_content_is_end:
+            self.content += chunk.content
+            return {
+                "content": chunk.content,
+                "reasoning_content": chunk.additional_kwargs.get("reasoning_content", "")
+                if chunk.additional_kwargs
+                else "",
+            }
+        # 是否包含结束
+        if reasoning_content_end_tag_prefix_index > -1:
+            if (
+                len(self.reasoning_content_chunk) - reasoning_content_end_tag_prefix_index
+                >= self.reasoning_content_end_tag_len
+            ):
+                reasoning_content_end_tag_index = self.reasoning_content_chunk.find(self.reasoning_content_end_tag)
+                if reasoning_content_end_tag_index > -1:
+                    reasoning_content_chunk = self.reasoning_content_chunk[0:reasoning_content_end_tag_index]
+                    content_chunk = self.reasoning_content_chunk[
+                        reasoning_content_end_tag_index + self.reasoning_content_end_tag_len :
+                    ]
+                    self.reasoning_content += reasoning_content_chunk
+                    self.content += content_chunk
+                    self.reasoning_content_chunk = ""
+                    self.reasoning_content_is_end = True
+                    return {"content": content_chunk, "reasoning_content": reasoning_content_chunk}
+        self.reasoning_content += self.reasoning_content_chunk
+        self.reasoning_content_chunk = ""
+        return {"content": "", "reasoning_content": ""}
 
 
 def add_access_num(chat_user_id=None, chat_user_type=None, application_id=None):
@@ -303,15 +398,6 @@ class BaseChatStep(IChatStep):
             )
 
     def get_details(self, manage, **kwargs):
-        # 提取长期记忆
-        extract_long_term_memory.apply_async(
-            args=(
-                manage.context.get("workspace_id"),
-                manage.context.get("application_id"),
-                manage.context.get("chat_user_id"),
-            ),
-            countdown=1,
-        )
         return {
             "status": self.status,
             "err_message": self.err_message,
@@ -339,122 +425,6 @@ class BaseChatStep(IChatStep):
         ]
         result.append({"role": "ai", "content": answer_text})
         return result
-
-    def _handle_mcp_request(
-        self,
-        mcp_source,
-        mcp_servers,
-        mcp_tool_ids,
-        tool_ids,
-        application_ids,
-        skill_tool_ids,
-        mcp_output_enable,
-        chat_model,
-        system_prompt,
-        message_list,
-        agent_id,
-        chat_id,
-        workspace_id,
-        runtime_user_id=None,
-    ):
-
-        mcp_servers_config = {}
-
-        # 迁移过来mcp_source是None
-        if mcp_source is None:
-            mcp_source = "custom"
-        # 兼容老数据
-        if not mcp_tool_ids:
-            mcp_tool_ids = []
-        if mcp_source == "custom" and mcp_servers:
-            mcp_servers_config = json.loads(mcp_servers)
-        elif mcp_tool_ids:
-            mcp_tools = QuerySet(Tool).filter(id__in=mcp_tool_ids).values()
-            for mcp_tool in mcp_tools:
-                if mcp_tool and mcp_tool["is_active"]:
-                    mcp_servers_config = {**mcp_servers_config, **json.loads(mcp_tool["code"])}
-        # 校验代码是否包括禁止的关键字
-        ToolExecutor().validate_mcp_transport(json.dumps(mcp_servers_config))
-
-        tool_init_params = {}
-        tools = get_tools("APPLICATION", agent_id, tool_ids, workspace_id, runtime_user_id)
-        if tool_ids and len(tool_ids) > 0:  # 如果有工具ID，则将其转换为MCP
-            self.context["tool_ids"] = tool_ids
-            for tool_id in tool_ids:
-                tool = QuerySet(Tool).filter(id=tool_id, tool_type=ToolType.CUSTOM).first()
-                if tool is None or tool.is_active is False:
-                    continue
-                executor = ToolExecutor()
-                init_params_default_value = {i["field"]: i.get('default_value') for i in tool.init_field_list}
-                if tool.init_params is not None:
-                    tool_init_params = init_params_default_value | json.loads(rsa_long_decrypt(tool.init_params))
-                else:
-                    tool_init_params = init_params_default_value
-                tool_config = executor.get_tool_mcp_config(tool, tool_init_params)
-
-                mcp_servers_config[str(tool.id)] = tool_config
-
-        if application_ids and len(application_ids) > 0:
-            self.context["application_ids"] = application_ids
-            for application_id in application_ids:
-                app = QuerySet(Application).filter(id=application_id, is_publish=True).first()
-                if app is None:
-                    continue
-                app_key = QuerySet(ApplicationApiKey).filter(application_id=application_id, is_active=True).first()
-                if app_key is not None:
-                    api_key = app_key.secret_key
-                    application_access_token = (
-                        QuerySet(ApplicationAccessToken).filter(application_id=app_key.application_id).first()
-                    )
-                    if application_access_token is not None and application_access_token.authentication:
-                        raise AppApiException(
-                            500,
-                            _("Agent 【{name}】 access token authentication is not supported for agent tool").format(
-                                name=app.name
-                            ),
-                        )
-                else:
-                    raise AppApiException(
-                        500, _("Agent Key is required for agent tool 【{name}】").format(name=app.name)
-                    )
-                executor = ToolExecutor()
-                app_config = executor.get_app_mcp_config(api_key)
-                mcp_servers_config[app.name] = app_config
-
-        if skill_tool_ids and len(skill_tool_ids) > 0:
-            self.context["skill_tool_ids"] = skill_tool_ids
-            skill_file_items = []
-
-            for tool_id in skill_tool_ids:
-                tool = QuerySet(Tool).filter(id=tool_id, is_active=True).first()
-                if tool is None or tool.is_active is False:
-                    continue
-                init_params_default_value = {i["field"]: i.get("default_value") for i in tool.init_field_list}
-                if tool.init_params is not None:
-                    params = init_params_default_value | json.loads(rsa_long_decrypt(tool.init_params))
-                else:
-                    params = init_params_default_value
-
-                skill_file_items.append({"tool_id": str(tool.id), "file_id": tool.code, "params": params})
-            mcp_servers_config["skills"] = skill_file_items
-
-        if len(mcp_servers_config) > 0 or len(tools) > 0:
-            source_id = agent_id
-            source_type = "APPLICATION"
-            return mcp_response_generator(
-                chat_model,
-                system_prompt,
-                message_list,
-                json.dumps(mcp_servers_config),
-                mcp_output_enable,
-                tool_init_params,
-                source_id,
-                source_type,
-                chat_id,
-                tools,
-            )
-
-        return None
 
     def get_stream_result(
         self,
@@ -527,33 +497,6 @@ class BaseChatStep(IChatStep):
                         user_system_prompt = str(msg.content)
                 else:
                     filtered_message_list.append(msg)
-            runtime_user_id = get_runtime_user_id(chat_user_id=chat_user_id, chat_user_type=chat_user_type)
-            # 过滤tool_id
-            all_tool_ids = list(set((mcp_tool_ids or []) + (tool_ids or []) + (skill_tool_ids or [])))
-            authorized_set = set(filter_authorized_ids("tool", all_tool_ids, workspace_id, user_id=runtime_user_id))
-
-            mcp_tool_ids = [i for i in (mcp_tool_ids or []) if i in authorized_set]
-            tool_ids = [i for i in (tool_ids or []) if i in authorized_set]
-            skill_tool_ids = [i for i in (skill_tool_ids or []) if i in authorized_set]
-            # 处理 MCP 请求
-            mcp_result = self._handle_mcp_request(
-                mcp_source,
-                mcp_servers,
-                mcp_tool_ids,
-                tool_ids,
-                application_ids,
-                skill_tool_ids,
-                mcp_output_enable,
-                chat_model,
-                user_system_prompt,
-                filtered_message_list,
-                agent_id,
-                chat_id,
-                workspace_id,
-                runtime_user_id,
-            )
-            if mcp_result:
-                return mcp_result, True
             return chat_model.stream(message_list), True
 
     def execute_stream(
@@ -666,33 +609,6 @@ class BaseChatStep(IChatStep):
                 _("Sorry, the AI model is not configured. Please go to the application to set up the AI model first.")
             ), False
         else:
-            runtime_user_id = get_runtime_user_id(chat_user_id=chat_user_id, chat_user_type=chat_user_type)
-            # 过滤tool_id
-            all_tool_ids = list(set((mcp_tool_ids or []) + (tool_ids or []) + (skill_tool_ids or [])))
-            authorized_set = set(filter_authorized_ids("tool", all_tool_ids, workspace_id, user_id=runtime_user_id))
-
-            mcp_tool_ids = [i for i in (mcp_tool_ids or []) if i in authorized_set]
-            tool_ids = [i for i in (tool_ids or []) if i in authorized_set]
-            skill_tool_ids = [i for i in (skill_tool_ids or []) if i in authorized_set]
-            # 处理 MCP 请求
-            mcp_result = self._handle_mcp_request(
-                mcp_source,
-                mcp_servers,
-                mcp_tool_ids,
-                tool_ids,
-                application_ids,
-                skill_tool_ids,
-                mcp_output_enable,
-                chat_model,
-                "",
-                message_list,
-                application_id,
-                chat_id,
-                workspace_id,
-                runtime_user_id,
-            )
-            if mcp_result:
-                return mcp_result, True
             return chat_model.invoke(message_list), True
 
     def execute_block(

@@ -11,6 +11,7 @@ from django.db.models import QuerySet
 
 from common.config.embedding_config import ModelManage
 from common.database_model_manage.database_model_manage import DatabaseModelManage
+from common.exception.app_exception import AppApiException
 from models_provider.base_model_provider import ModelTypeConst
 from models_provider.models import Model
 from django.utils.translation import gettext_lazy as _
@@ -57,7 +58,10 @@ def get_provider(provider):
     @param provider: 供应商字符串
     @return: 供应商实例
     """
-    return ModelProvideConstants[provider].value
+    provider_enum = ModelProvideConstants.__members__.get(provider)
+    if provider_enum is None:
+        raise AppApiException(400, _("Model provider {provider} is no longer supported").format(provider=provider))
+    return provider_enum.value
 
 
 def get_model_list(provider, model_type):

@@ -90,15 +90,8 @@
               >
                 <img :src="resetUrl(row?.icon)" alt="" />
               </el-avatar>
-              <!--  应用 icon -->
+<!-- 应用 icon -->
               <LogoIcon v-else-if="isApplication" height="20px" />
-              <!-- 工具 icon -->
-              <ToolIcon
-                v-else-if="isTool"
-                :size="20"
-                :type="row?.tool_type"
-                style="--el-avatar-border-radius: 6px"
-              />
               <!-- 模型 icon -->
               <span
                 v-else-if="isModel"
@@ -259,16 +252,6 @@ const permissionObj = ref<any>({
     [],
     'OR',
   ),
-  TOOL: new ComplexPermission(
-    [RoleConst.ADMIN, RoleConst.WORKSPACE_MANAGE],
-    [
-      PermissionConst.TOOL_WORKSPACE_USER_RESOURCE_PERMISSION_EDIT,
-      PermissionConst.TOOL_WORKSPACE_USER_RESOURCE_PERMISSION_EDIT
-        .getWorkspacePermissionWorkspaceManageRole,
-    ],
-    [],
-    'OR',
-  ),
   MODEL: new ComplexPermission(
     [RoleConst.ADMIN, RoleConst.WORKSPACE_MANAGE],
     [
@@ -282,7 +265,6 @@ const permissionObj = ref<any>({
 })
 const isKnowledge = computed(() => props.type === SourceTypeEnum.KNOWLEDGE)
 const isApplication = computed(() => props.type === SourceTypeEnum.APPLICATION)
-const isTool = computed(() => props.type === SourceTypeEnum.TOOL)
 const isModel = computed(() => props.type === SourceTypeEnum.MODEL)
 
 const multipleTableRef = ref()

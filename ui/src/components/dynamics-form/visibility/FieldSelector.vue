@@ -9,23 +9,14 @@
     separator=" > "
     clearable
   >
-    <template #default="{ node, data }">
-      <span class="flex align-center" @wheel="wheel">
-        <component
-          v-if="data.type"
-          :is="iconComponent(`${data.type}-icon`)"
-          class="mr-8"
-          :size="18"
-          :item="data"
-        />{{ data.label }}</span
-      >
+    <template #default="{ data }">
+      <span class="flex align-center" @wheel="wheel">{{ data.label }}</span>
     </template>
   </el-cascader>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, computed, inject } from 'vue'
-import { iconComponent } from '@/workflow/icons/utils'
 import { t } from '@/locales'
 import { WorkflowMode } from '@/enums/application'
 const props = defineProps<{

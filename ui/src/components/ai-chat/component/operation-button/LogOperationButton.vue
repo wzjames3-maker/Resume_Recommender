@@ -96,10 +96,8 @@ import { copyClick } from '@/utils/clipboard'
 import EditContentDialog from '@/views/chat-log/component/EditContentDialog.vue'
 import EditMarkDialog from '@/views/chat-log/component/EditMarkDialog.vue'
 import { datetimeFormat } from '@/utils/time'
-import applicationApi from '@/api/application/application'
 import { useRoute } from 'vue-router'
 import permissionMap from '@/permission'
-import { MsgError } from '@/utils/message'
 import { t } from '@/locales'
 import VoteReasonContent from '@/components/ai-chat/component/operation-button/VoteReasonContent.vue'
 const route = useRoute()
@@ -250,64 +248,11 @@ const playAnswerTextPart = () => {
     }
     // 调用浏览器的朗读功能
     window.speechSynthesis.speak(utterance.value)
-  } else if (props.tts_type === 'TTS') {
-    // 恢复上次暂停的播放
-    if (audioPlayer.value && audioPlayer.value[currentAudioIndex.value]?.src) {
-      audioPlayer.value[currentAudioIndex.value].play()
-      return
-    }
-    applicationApi
-      .postTextToSpeech(
-        (props.applicationId as string) || (id as string),
-        { text: audioList.value[currentAudioIndex.value] },
-        loading,
-      )
-      .then(async (res: any) => {
-        if (res.type === 'application/json') {
-          const text = await res.text()
-          MsgError(text)
-          return
-        }
-        // 假设我们有一个 MP3 文件的字节数组
-        // 创建 Blob 对象
-        const blob = new Blob([res], { type: 'audio/mp3' })
-
-        // 创建对象 URL
-        const url = URL.createObjectURL(blob)
-
-        // 测试blob是否能正常播放
-        // const link = document.createElement('a')
-        // link.href = window.URL.createObjectURL(blob)
-        // link.download = "abc.mp3"
-        // link.click()
-
-        // 检查 audioPlayer 是否已经引用了 DOM 元素
-        if (audioPlayer.value) {
-          audioPlayer.value[currentAudioIndex.value].src = url
-          audioPlayer.value[currentAudioIndex.value].play() // 自动播放音频
-          audioPlayer.value[currentAudioIndex.value].onended = () => {
-            currentAudioIndex.value += 1
-            playAnswerTextPart()
-          }
-        } else {
-          console.error('audioPlayer.value is not an instance of HTMLAudioElement')
-        }
-      })
-      .catch((err) => {
-        console.log('err: ', err)
-      })
   }
 }
 
 const pausePlayAnswerText = () => {
   audioPlayerStatus.value = false
-  if (props.tts_type === 'TTS') {
-    if (audioPlayer.value) {
-      audioPlayer.value?.forEach((item) => {
-        item.pause()
-      })
-    }
-  }
   if (props.tts_type === 'BROWSER') {
     window.speechSynthesis.pause()
   }

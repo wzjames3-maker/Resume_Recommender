@@ -232,31 +232,15 @@ class Fork:
 
     @staticmethod
     def _sandbox_requests_get(base_fork_url: str, headers: dict):
-        from common.utils.tool_code import ToolExecutor
+        import requests
 
-        response = ToolExecutor().exec_code(
-            """
-def fetch_url(url, headers):
-    import base64
-    import requests
-
-    requests.packages.urllib3.disable_warnings()
-    response = requests.get(url, verify=False, headers=headers)
-    return {
-        "status_code": response.status_code,
-        "content": base64.b64encode(response.content).decode("ascii"),
-        "encoding": response.encoding,
-        "apparent_encoding": response.apparent_encoding,
-    }
-""",
-            {"url": base_fork_url, "headers": headers},
-            function_name="fetch_url",
-        )
+        requests.packages.urllib3.disable_warnings()
+        response = requests.get(base_fork_url, verify=False, headers=headers)
         return SandboxFetchResponse(
-            response.get("status_code"),
-            base64.b64decode(response.get("content")),
-            response.get("encoding"),
-            response.get("apparent_encoding"),
+            response.status_code,
+            response.content,
+            response.encoding,
+            response.apparent_encoding,
         )
 
     @staticmethod

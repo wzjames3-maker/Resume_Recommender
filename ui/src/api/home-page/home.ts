@@ -27,13 +27,6 @@ const getKnowledgeAggregation: (loading?: Ref<boolean>) => Promise<Result<any>> 
   return get(`${prefix.value}/knowledge/aggregation`, undefined, loading)
 }
 /**
- * 工具聚合
- * @params
- */
-const getToolAggregation: (loading?: Ref<boolean>) => Promise<Result<any>> = (loading) => {
-  return get(`${prefix.value}/tool/aggregation`, undefined, loading)
-}
-/**
  * 模型聚合
  * @params
  */
@@ -155,7 +148,6 @@ const exportUserTokensRankings: (params: any, loading?: Ref<boolean>) => Promise
 export default {
   getApplicationAggregation,
   getKnowledgeAggregation,
-  getToolAggregation,
   getModelAggregation,
   getTokensRanking,
   getQuestionsRanking,

@@ -22,87 +22,6 @@ from knowledge.models import Document
 from models_provider.models import Model
 from models_provider.tools import get_model_credential
 from system_manage.models.resource_mapping import ResourceMapping
-from tools.models import ToolRecord
-
-
-class ToolExecute:
-    def __init__(self, tool_id: str, tool_record_id: str, workspace_id: str, source_type, source_id, debug=False):
-        self.tool_id = tool_id
-        self.workspace_id = workspace_id
-        self.source_type = source_type
-        self.source_id = source_id
-        self.tool_record_id = tool_record_id
-        self.debug = debug
-
-    def get_record(self):
-        if self.tool_record_id:
-            if self.debug:
-                return self.to_record(
-                    cache.get(
-                        Cache_Version.TOOL_WORKFLOW_EXECUTE.get_key(key=self.tool_record_id),
-                        version=Cache_Version.TOOL_WORKFLOW_EXECUTE.get_version(),
-                    )
-                )
-            else:
-                return QuerySet(ToolRecord).filter(tool_id=self.tool_id, id=self.tool_record_id).first()
-        return None
-
-    def to_record(self, tool_record_dict):
-        if tool_record_dict is None:
-            return None
-        return ToolRecord(
-            id=tool_record_dict.get("id"),
-            tool_id=tool_record_dict.get("tool_id"),
-            workspace_id=tool_record_dict.get("workspace_id"),
-            source_type=tool_record_dict.get("source_type"),
-            source_id=tool_record_dict.get("source_id"),
-            meta=tool_record_dict.get("meta"),
-            state=tool_record_dict.get("state"),
-            run_time=tool_record_dict.get("run_time"),
-        )
-
-    def to_dict(self, tool_record):
-        return {
-            "id": tool_record.id,
-            "tool_id": tool_record.tool_id,
-            "workspace_id": tool_record.workspace_id,
-            "source_type": tool_record.source_type,
-            "source_id": tool_record.source_id,
-            "meta": tool_record.meta,
-            "state": tool_record.state,
-            "run_time": tool_record.run_time,
-        }
-
-    def set_record(self, tool_record):
-        cache.set(
-            Cache_Version.TOOL_WORKFLOW_EXECUTE.get_key(key=self.tool_record_id),
-            self.to_dict(tool_record),
-            version=Cache_Version.TOOL_WORKFLOW_EXECUTE.get_version(),
-            timeout=60 * 30,
-        )
-        if not self.debug:
-            QuerySet(ToolRecord).update_or_create(
-                id=tool_record.id,
-                create_defaults={
-                    "id": tool_record.id,
-                    "tool_id": tool_record.tool_id,
-                    "state": tool_record.state,
-                    "workspace_id": tool_record.workspace_id,
-                    "source_type": tool_record.source_type,
-                    "source_id": tool_record.source_id,
-                    "meta": tool_record.meta,
-                    "run_time": tool_record.run_time,
-                },
-                defaults={
-                    "workspace_id": tool_record.workspace_id,
-                    "tool_id": tool_record.tool_id,
-                    "source_type": tool_record.source_type,
-                    "source_id": tool_record.source_id,
-                    "state": tool_record.state,
-                    "meta": tool_record.meta,
-                    "run_time": tool_record.run_time,
-                },
-            )
 
 
 class ChatInfo:
@@ -185,6 +104,8 @@ class ChatInfo:
             ]
             self.knowledge_id_list = knowledge_id_list
             self.exclude_document_id_list = exclude_document_id_list
+        else:
+            raise ChatException(400, _("Workflow applications are not supported by the local core"))
         self.application = application
         return application
 
@@ -510,28 +431,15 @@ class ChatInfo:
 
 
 def update_resource_mapping_by_application(application_id: str, other_resource_mapping=None):
-    from application.flow.tools import (
-        application_instance_field_call_dict,
-        get_instance_resource,
-        save_workflow_mapping,
-    )
-    from system_manage.models.resource_mapping import ResourceType
+    from django.db.models import QuerySet
+    from system_manage.models.resource_mapping import ResourceMapping
 
     if other_resource_mapping is None:
         other_resource_mapping = []
-    application = QuerySet(Application).filter(id=application_id).first()
-    instance_mapping = get_instance_resource(
-        application, ResourceType.APPLICATION, str(application.id), application_instance_field_call_dict
-    )
-    if application.type == "WORK_FLOW":
-        save_workflow_mapping(
-            application.work_flow,
-            ResourceType.APPLICATION,
-            str(application_id),
-            instance_mapping + other_resource_mapping,
-        )
-        return
-    else:
-        save_workflow_mapping(
-            {}, ResourceType.APPLICATION, str(application_id), instance_mapping + other_resource_mapping
+    QuerySet(ResourceMapping).filter(
+        source_type="APPLICATION", source_id=str(application_id)
+    ).delete()
+    if other_resource_mapping:
+        QuerySet(ResourceMapping).bulk_create(
+            {(str(item.target_type) + str(item.target_id)): item for item in other_resource_mapping}.values()
         )

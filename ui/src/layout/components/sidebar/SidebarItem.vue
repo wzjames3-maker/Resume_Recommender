@@ -36,34 +36,17 @@
 
 <script setup lang="ts">
 import { computed } from 'vue'
-import { useRouter, useRoute, type RouteRecordRaw } from 'vue-router'
-import { isWorkFlow } from '@/utils/application'
+import type { RouteRecordRaw } from 'vue-router'
 const props = defineProps<{
   menu: RouteRecordRaw
   activeMenu: any
 }>()
 
-const router = useRouter()
-const route = useRoute()
-const {
-  params: { id, type, from, folderId },
-} = route as any
-
 function showMenu() {
-  if (isWorkFlow(type)) {
-    return props.menu.name !== 'AppHitTest'
-  } else {
-    return true
-  }
+  return true
 }
 
-function clickHandle(item?: any) {
-  if (isWorkFlow(type) && item?.name === 'AppSetting') {
-    router.push({ path: `/application/${from}/${id}/workflow` })
-  } else if (type === '4' && item?.name === 'knowledgeWorkflowSetting') {
-    router.push({ path: `/knowledge/${id}/${folderId}/workflow` })
-  }
-}
+function clickHandle(item?: any) {}
 const menuIcon = computed(() => {
   if (props.activeMenu === props.menu.path) {
     return props.menu.meta?.iconActive || props.menu?.meta?.icon

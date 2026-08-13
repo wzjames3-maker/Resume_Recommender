@@ -51,14 +51,6 @@
           </el-button>
         </span>
         <div v-if="isBatch === false">
-          <el-button
-            class="ml-8"
-            v-if="!isShared && permissionPrecise.create()"
-            @click="openTemplateStoreDialog()"
-          >
-            <AppIcon iconName="app-template-center" class="mr-4" />
-            {{ $t('workflow.setting.templateCenter') }}
-          </el-button>
           <el-dropdown trigger="click" v-if="!isShared && permissionPrecise.create()">
             <el-button type="primary" class="ml-8">
               {{ $t('common.create') }}
@@ -117,21 +109,6 @@
                       </div>
                       <el-text type="info" size="small" class="color-secondary"
                         >{{ $t('views.knowledge.knowledgeType.larkInfo') }}
-                      </el-text>
-                    </div>
-                  </div>
-                </el-dropdown-item>
-                <el-dropdown-item @click="openCreateDialog(CreateWorkflowKnowledgeDialog)">
-                  <div class="flex">
-                    <el-avatar class="avatar-purple mt-4" shape="square" :size="32">
-                      <img src="@/assets/workflow/logo_workflow.svg" style="width: 60%" alt="" />
-                    </el-avatar>
-                    <div class="pre-wrap ml-8">
-                      <div class="lighter">
-                        {{ $t('views.knowledge.knowledgeType.workflowKnowledge') }}
-                      </div>
-                      <el-text type="info" size="small" class="color-secondary"
-                        >{{ $t('views.knowledge.knowledgeType.workflowInfo') }}
                       </el-text>
                     </div>
                   </div>
@@ -430,7 +407,6 @@
     ref="ResourceAuthorizationDrawerRef"
     v-if="apiType === 'workspace'"
   />
-  <TemplateStoreDialog ref="templateStoreDialogRef" :api-type="apiType" @refresh="getList" />
   <ResourceMappingDrawer ref="resourceMappingDrawerRef"></ResourceMappingDrawer>
   <ExportKnowledgeDialog ref="exportKnowledgeDialogRef" />
 </template>
@@ -443,14 +419,12 @@ import type { CheckboxValueType } from 'element-plus'
 import CreateKnowledgeDialog from '@/views/knowledge/create-component/CreateKnowledgeDialog.vue'
 import CreateWebKnowledgeDialog from '@/views/knowledge/create-component/CreateWebKnowledgeDialog.vue'
 import CreateLarkKnowledgeDialog from '@/views/knowledge/create-component/CreateLarkKnowledgeDialog.vue'
-import CreateWorkflowKnowledgeDialog from '@/views/knowledge/create-component/CreateWorkflowKnowledgeDialog.vue'
 import SyncWebDialog from '@/views/knowledge/component/SyncWebDialog.vue'
 import CreateFolderDialog from '@/components/folder-virtualized-tree/CreateFolderDialog.vue'
 import MoveToDialog from '@/components/folder-virtualized-tree/MoveToDialog.vue'
 import GenerateRelatedDialog from '@/components/generate-related-dialog/index.vue'
 import AuthorizedWorkspace from '@/views/system-shared/AuthorizedWorkspaceDialog.vue'
 import ResourceAuthorizationDrawer from '@/components/resource-authorization-drawer/index.vue'
-import TemplateStoreDialog from '@/views/knowledge/template-store/TemplateStoreDialog.vue'
 import ResourceMappingDrawer from '@/components/resource_mapping/index.vue'
 import { MsgSuccess, MsgConfirm } from '@/utils/message'
 import { numberFormat, i18n_name } from '@/utils/common'
@@ -827,12 +801,6 @@ function searchHandle() {
 
 function refreshFolder() {
   emit('refreshFolder')
-}
-
-const templateStoreDialogRef = ref()
-
-function openTemplateStoreDialog() {
-  templateStoreDialogRef.value?.open(folder.currentFolder.id)
 }
 
 function getUserList(query: string) {
