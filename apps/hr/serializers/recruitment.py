@@ -495,3 +495,38 @@ class RecruitmentService:
             raise NotFound404(404, "Resource not found")
         resume.delete()
         return True
+
+    def match_job_candidates(self, job_id, current_page, page_size):
+        job = self._job(job_id)
+        if job.status != JobStatus.OPEN:
+            raise AppApiException(400, "Job is closed")
+        requirements = job.skill_requirements
+        requirement_lower = [skill.lower() for skill in requirements]
+        candidates = Candidate.objects.filter(workspace_id=self.workspace_id, status=CandidateStatus.ACTIVE)
+        records = []
+        for candidate in candidates:
+            score = 0
+            matched = []
+            candidate_skills_lower = [skill.lower() for skill in candidate.skills]
+            for index, skill in enumerate(requirement_lower):
+                if skill in candidate_skills_lower:
+                    score += 2
+                    matched.append(requirements[index])
+            if job.city:
+                if candidate.current_city == job.city or candidate.target_city == job.city:
+                    score += 2
+            if score > 0:
+                records.append({
+                    "candidate_id": str(candidate.id),
+                    "name": candidate.name,
+                    "current_city": candidate.current_city,
+                    "target_city": candidate.target_city,
+                    "years_experience": candidate.years_experience,
+                    "skills": candidate.skills,
+                    "match_score": score,
+                    "matched_skills": matched,
+                })
+        records.sort(key=lambda item: item["match_score"], reverse=True)
+        total = len(records)
+        start = (current_page - 1) * page_size
+        return {"total": total, "records": records[start:start + page_size]}

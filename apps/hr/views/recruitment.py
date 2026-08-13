@@ -140,3 +140,13 @@ class ResumeDetailAPI(APIView):
     @manage_required
     def delete(self, request, workspace_id, resume_id):
         return result.success(_service(request, workspace_id).delete_resume(resume_id))
+
+
+class JobMatchAPI(APIView):
+    authentication_classes = [TokenAuth]
+
+    @member_required
+    def get(self, request, workspace_id, job_id, current_page, page_size):
+        return result.success(
+            _service(request, workspace_id).match_job_candidates(job_id, current_page, page_size)
+        )

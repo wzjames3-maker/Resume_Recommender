@@ -268,3 +268,49 @@ class AdvancedSearchTests(TestCase):
         Candidate.objects.create(name="NullExp", workspace_id="workspace-a", skills=[], years_experience=None)
         result = self.service.page_candidates(1, 20, {"years_min": "1"})
         self.assertEqual(result["total"], 2)
+
+
+class JobMatchTests(TestCase):
+    def setUp(self):
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=uuid.uuid7(), is_workspace_manage=True)
+        self.alice = Candidate.objects.create(
+            name="Alice", workspace_id="workspace-a", skills=["Python", "Django", "PostgreSQL"],
+            current_city="杭州", target_city="上海", years_experience=5, status="ACTIVE",
+        )
+        self.bob = Candidate.objects.create(
+            name="Bob", workspace_id="workspace-a", skills=["Java"], current_city="北京",
+            target_city="杭州", years_experience=3, status="ACTIVE",
+        )
+        self.job = Job.objects.create(
+            name="Python Engineer", department="Engineering", city="杭州", headcount=1,
+            workspace_id="workspace-a", skill_requirements=["Python", "Django"],
+        )
+
+    def test_match_scores_skills_and_city(self):
+        result = self.service.match_job_candidates(self.job.id, 1, 20)
+        by_name = {item["name"]: item for item in result["records"]}
+        self.assertEqual(by_name["Alice"]["match_score"], 6)
+        self.assertEqual(by_name["Alice"]["matched_skills"], ["Python", "Django"])
+        self.assertEqual(by_name["Bob"]["match_score"], 2)
+
+    def test_match_sorted_by_score_desc(self):
+        result = self.service.match_job_candidates(self.job.id, 1, 20)
+        scores = [item["match_score"] for item in result["records"]]
+        self.assertEqual(scores, sorted(scores, reverse=True))
+
+    def test_match_without_requirements_returns_empty(self):
+        self.job.skill_requirements = []
+        self.job.city = ""
+        self.job.save(update_fields=["skill_requirements", "city"])
+        result = self.service.match_job_candidates(self.job.id, 1, 20)
+        self.assertEqual(result["total"], 0)
+
+    def test_match_rejects_closed_job_and_cross_workspace(self):
+        self.job.status = "CLOSED"
+        self.job.save(update_fields=["status"])
+        with self.assertRaisesRegex(AppApiException, "closed"):
+            self.service.match_job_candidates(self.job.id, 1, 20)
+        foreign = Job.objects.create(name="F", workspace_id="workspace-b", headcount=1, city="杭州",
+                                     skill_requirements=["Python"])
+        with self.assertRaises(NotFound404):
+            self.service.match_job_candidates(foreign.id, 1, 20)
