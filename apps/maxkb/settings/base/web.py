@@ -131,7 +131,12 @@ WSGI_APPLICATION = 'maxkb.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/4.2/ref/settings/#databases
 
-DATABASES = {'default': CONFIG.get_db_setting()}
+DATABASES = {
+    'default': {
+        **CONFIG.get_db_setting(),
+        'TEST': {'TEMPLATE': CONFIG.get('DB_NAME')},
+    }
+}
 
 CACHES = CONFIG.get_cache_setting()
 
