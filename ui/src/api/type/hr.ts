@@ -57,3 +57,30 @@ export interface PageResult<T> {
   total: number
   records: T[]
 }
+
+export type ResumeStatus = 'PENDING' | 'SUCCESS' | 'FAILED'
+export type ResumeChannel = 'REFERRAL' | 'JOB_SITE' | 'HEADHUNTER' | 'CAMPUS' | 'OTHER'
+
+export interface ResumeFile {
+  id: string
+  file_name: string
+  extension: string
+  file_size: number
+  sha256: string
+  source_channel: ResumeChannel
+  status: ResumeStatus
+  error_message: string
+  candidate_id: string | null
+  create_time: string
+  update_time: string
+}
+
+export interface ResumeUploadResult {
+  resume_id: string
+  file_name: string
+  status: ResumeStatus
+  sha256: string
+  duplicate: boolean
+  candidate_id: string | null
+  error_message: string
+}

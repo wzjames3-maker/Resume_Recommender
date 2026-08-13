@@ -1,6 +1,15 @@
 import type { Result } from '@/request/Result'
-import { get, post, put } from '@/request'
-import type { Assignment, Candidate, CandidateDetail, Job, JobDetail, PageResult } from '@/api/type/hr'
+import { del, get, post, put } from '@/request'
+import type {
+  Assignment,
+  Candidate,
+  CandidateDetail,
+  Job,
+  JobDetail,
+  PageResult,
+  ResumeFile,
+  ResumeUploadResult,
+} from '@/api/type/hr'
 import type { pageRequest } from '@/api/type/common'
 import useStore from '@/stores'
 
@@ -43,16 +52,31 @@ const createAssignment = (jobId: string, candidateId: string, note = '') =>
 const updateAssignment = (assignmentId: string, data: Partial<Assignment>) =>
   put(`${prefix.value}/assignments/${assignmentId}`, data) as Promise<Result<Assignment>>
 
+const uploadResumes = (files: File[], sourceChannel: string) => {
+  const formData = new FormData()
+  files.forEach((file) => formData.append('files', file))
+  formData.append('source_channel', sourceChannel)
+  return post(`${prefix.value}/candidates/resumes`, formData) as Promise<Result<ResumeUploadResult[]>>
+}
+
+const getCandidateResumes = (candidateId: string) =>
+  get(`${prefix.value}/candidates/${candidateId}/resumes`) as Promise<Result<ResumeFile[]>>
+
+const deleteResume = (resumeId: string) => del(`${prefix.value}/resumes/${resumeId}`) as Promise<Result<boolean>>
+
 export default {
   archiveCandidate,
   createAssignment,
   createCandidate,
   createJob,
+  deleteResume,
   getCandidate,
+  getCandidateResumes,
   getCandidates,
   getJob,
   getJobs,
   updateAssignment,
   updateCandidate,
   updateJob,
+  uploadResumes,
 }

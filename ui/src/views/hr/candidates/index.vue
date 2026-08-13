@@ -6,12 +6,19 @@
         <span class="color-secondary">维护招聘候选人与职位指派</span>
       </div>
       <el-button type="primary" @click="openCandidateDialog()">新建候选人</el-button>
+      <el-button type="primary" plain @click="openResumeUpload()">上传简历</el-button>
+      <input ref="resumeInputRef" type="file" multiple accept=".docx,.txt" class="hidden-input" @change="handleResumeFiles" />
     </div>
 
     <el-card style="--el-card-padding: 0" v-loading="loading">
       <div class="p-16 border-b flex gap-12">
         <el-input v-model="filters.name" placeholder="按姓名搜索" clearable @change="refresh" />
         <el-input v-model="filters.city" placeholder="按城市搜索" clearable @change="refresh" />
+        <el-input v-model="filters.skills" placeholder="按技能搜索" clearable @change="refresh" />
+        <el-input-number v-model="filters.years_min" :min="0" :max="99" placeholder="最低年限" @change="refresh" style="width: 140px" />
+        <el-select v-model="filters.source" placeholder="来源" clearable @change="refresh" style="width: 140px">
+          <el-option v-for="(label, value) in channelLabels" :key="value" :label="label" :value="value" />
+        </el-select>
         <el-select v-model="filters.status" placeholder="状态" clearable @change="refresh" style="width: 140px">
           <el-option label="在库" value="ACTIVE" />
           <el-option label="已归档" value="ARCHIVED" />
@@ -64,6 +71,32 @@
       <template #footer><el-button @click="candidateDialogVisible = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveCandidate">保存</el-button></template>
     </el-dialog>
 
+    <el-dialog v-model="uploadDialogVisible" title="上传简历" width="520px">
+      <el-form label-width="96px">
+        <el-form-item label="来源渠道">
+          <el-select v-model="uploadChannel" style="width: 100%">
+            <el-option v-for="(label, value) in channelLabels" :key="value" :label="label" :value="value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="上传结果">
+          <div class="w-full">
+            <div v-for="record in uploadResults" :key="record.resume_id" class="upload-result">
+              <el-tag :type="record.status === 'SUCCESS' ? 'success' : 'danger'" size="small">
+                {{ record.status === 'SUCCESS' ? '成功' : '失败' }}
+              </el-tag>
+              <span class="ml-8">{{ record.file_name }}</span>
+              <span v-if="record.duplicate" class="ml-8 color-secondary">重复，已关联既有候选人</span>
+              <span v-if="record.status === 'FAILED'" class="ml-8 color-secondary">{{ record.error_message }}</span>
+            </div>
+          </div>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="uploadDialogVisible = false">关闭</el-button>
+        <el-button type="primary" @click="openResumeUpload()">继续上传</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="assignmentDialogVisible" title="加入职位" width="480px">
       <el-form label-width="96px">
         <el-form-item label="候选人"><span>{{ assigningCandidate?.name }}</span></el-form-item>
@@ -79,19 +112,31 @@
 import { computed, onMounted, reactive, ref } from 'vue'
 import AppTable from '@/components/app-table/index.vue'
 import HrApi from '@/api/hr/recruitment'
-import type { Candidate, Job } from '@/api/type/hr'
-import { MsgConfirm, MsgSuccess } from '@/utils/message'
+import type { Candidate, Job, ResumeUploadResult } from '@/api/type/hr'
+import { MsgConfirm, MsgError, MsgSuccess } from '@/utils/message'
 import { hasPermission } from '@/utils/permission'
 import { RoleConst } from '@/utils/permission/data'
+
+const channelLabels: Record<string, string> = {
+  REFERRAL: '内推',
+  JOB_SITE: '招聘网站',
+  HEADHUNTER: '猎头',
+  CAMPUS: '校园',
+  OTHER: '其他',
+}
 
 const loading = ref(false)
 const saving = ref(false)
 const candidates = ref<Candidate[]>([])
 const openJobs = ref<Job[]>([])
-const filters = reactive({ name: '', city: '', status: '' })
+const filters = reactive({ name: '', city: '', skills: '', years_min: null as number | null, source: '', status: '' })
 const pagination = reactive({ current_page: 1, page_size: 20, total: 0 })
 const candidateDialogVisible = ref(false)
 const assignmentDialogVisible = ref(false)
+const uploadDialogVisible = ref(false)
+const uploadChannel = ref('OTHER')
+const uploadResults = ref<ResumeUploadResult[]>([])
+const resumeInputRef = ref<HTMLInputElement>()
 const editingCandidate = ref<Candidate | null>(null)
 const assigningCandidate = ref<Candidate | null>(null)
 const selectedJobId = ref('')
@@ -179,10 +224,34 @@ function createAssignment() {
     .finally(() => { saving.value = false })
 }
 
+function openResumeUpload() {
+  uploadResults.value = []
+  resumeInputRef.value?.click()
+}
+
+function handleResumeFiles(event: Event) {
+  const input = event.target as HTMLInputElement
+  const files = input.files ? Array.from(input.files) : []
+  input.value = ''
+  if (files.length === 0) return
+  uploadDialogVisible.value = true
+  HrApi.uploadResumes(files, uploadChannel.value)
+    .then((response) => {
+      uploadResults.value = response.data
+      const failed = uploadResults.value.some((record) => record.status === 'FAILED')
+      if (failed) MsgError('部分简历解析失败，请查看结果')
+      else MsgSuccess('简历上传完成')
+      refresh()
+    })
+    .catch(() => {})
+}
+
 onMounted(loadCandidates)
 </script>
 
 <style scoped>
 .hr-page { min-width: 0; }
 .gap-12 { gap: 12px; }
+.hidden-input { display: none; }
+.upload-result { padding: 6px 0; }
 </style>

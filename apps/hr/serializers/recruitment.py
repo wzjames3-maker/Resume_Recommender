@@ -412,6 +412,7 @@ class RecruitmentService:
                     "sha256": existing.sha256,
                     "duplicate": True,
                     "candidate_id": str(existing.candidate_id) if existing.candidate_id else None,
+                    "error_message": existing.error_message,
                 })
                 continue
             stored = os.path.join(self._resume_dir(), f"{sha256}.{extension}")
@@ -456,6 +457,7 @@ class RecruitmentService:
                 "sha256": resume.sha256,
                 "duplicate": False,
                 "candidate_id": str(resume.candidate_id) if resume.candidate_id else None,
+                "error_message": resume.error_message,
             })
         return records
 
