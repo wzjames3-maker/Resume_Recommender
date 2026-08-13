@@ -417,3 +417,537 @@ pnpm exec vite build --mode chat
 git add README-hr.md docs/superpowers/deviation-log.md
 git commit -m "docs(裁剪): 记录本地内核验收范围"
 ```
+
+---
+
+## 审查修复阶段
+
+**背景：** 任务 1-8 的裁剪提交已完成，但对 `v2...slim-local-core` 的对照审查发现：全新安装可以加载和构建，已有 v2 数据库升级及少数保留页面仍存在运行时断链。本阶段不恢复工作流、工具、MCP、Trigger、语音或专用 Provider；它们的历史数据必须被显式停用或拒绝，不能被静默当作简单应用执行。
+
+**完成标准：**
+
+- `stream=false` 的文字聊天不再引用已删除的 MCP/工具方法。
+- 已裁剪 Provider、工作流应用、工作流知识库、Trigger 定时任务在升级后均不会出现裸 `KeyError`、`AttributeError`、模块导入失败或静默降级。
+- 前端不再提供会调用已删除后端能力的入口。
+- OpenAPI、模型枚举、应用创建请求与精简内核实际支持范围一致。
+- 依赖锁文件可复现，且新库安装、升级演练、Django 检查和两套前端构建均通过。
+
+### 任务 9：修复简单问答运行时的工具残留
+
+**文件：**
+
+- 修改：`apps/application/chat_pipeline/step/chat_step/impl/base_chat_step.py:573-639`
+- 修改：`apps/application/tests.py`
+
+- [ ] **步骤 1：编写非流式简单聊天的失败回归测试**
+
+在 `apps/application/tests.py` 中用 `SimpleTestCase` 添加最小假模型，覆盖没有命中知识库直返答案、`stream=False` 的 `get_block_result()` 分支：
+
+```python
+from django.test import SimpleTestCase
+from langchain_core.messages import AIMessage
+
+from application.chat_pipeline.step.chat_step.impl.base_chat_step import BaseChatStep
+
+
+class FakeChatModel:
+    def invoke(self, messages):
+        return AIMessage(content="ok")
+
+
+class SimpleChatRuntimeTests(SimpleTestCase):
+    def test_block_chat_does_not_call_removed_mcp_handler(self):
+        result, is_ai_chat = BaseChatStep().get_block_result(
+            message_list=[],
+            chat_model=FakeChatModel(),
+            paragraph_list=[],
+            no_references_setting={"status": "ai_questioning"},
+            problem_text="question",
+        )
+
+        self.assertTrue(is_ai_chat)
+        self.assertEqual(result.content, "ok")
+```
+
+- [ ] **步骤 2：运行测试验证当前失败**
+
+运行：
+
+```bash
+PYTHONPATH=apps SERVER_NAME=web DJANGO_SETTINGS_MODULE=maxkb.settings \
+  .venv/bin/python apps/manage.py test application.tests.SimpleChatRuntimeTests -v 2
+```
+
+预期：FAIL，报错包含 `AttributeError` 和 `_handle_mcp_request`。
+
+- [ ] **步骤 3：删除非流式分支的 MCP/工具调用残留**
+
+从 `get_block_result()` 删除以下仅服务已删除功能的代码：
+
+```python
+runtime_user_id = get_runtime_user_id(...)
+all_tool_ids = list(set(...))
+authorized_set = set(filter_authorized_ids("tool", ...))
+mcp_result = self._handle_mcp_request(...)
+if mcp_result:
+    return mcp_result, True
+```
+
+保留直返段落、指定回答、未配置模型处理，最后的普通路径固定为：
+
+```python
+return chat_model.invoke(message_list), True
+```
+
+不得重新引入 `tools`、`application.flow`、`ToolExecutor`、MCP 适配器或仅为其存在的授权过滤。
+
+- [ ] **步骤 4：运行回归测试和静态引用扫描**
+
+运行：
+
+```bash
+PYTHONPATH=apps SERVER_NAME=web DJANGO_SETTINGS_MODULE=maxkb.settings \
+  .venv/bin/python apps/manage.py test application.tests.SimpleChatRuntimeTests -v 2
+rg -n --glob '*.py' '_handle_mcp_request|get_tools|mcp_response_generator|ToolExecutor|from tools' apps/application apps/chat apps/common
+```
+
+预期：测试 PASS；扫描没有可执行保留链路中的工具/MCP 调用。
+
+- [ ] **步骤 5：提交运行时修复**
+
+```bash
+git add apps/application/chat_pipeline/step/chat_step/impl/base_chat_step.py apps/application/tests.py
+git commit -m "fix(问答): 删除非流式聊天的工具调用残留"
+```
+
+### 任务 10：为已裁剪 Provider 增加升级处置和可读错误
+
+**文件：**
+
+- 创建：`apps/models_provider/migrations/0002_disable_unsupported_providers.py`
+- 修改：`apps/models_provider/tools.py:54-60`
+- 修改：`apps/models_provider/serializers/model_serializer.py:107-125`
+- 修改：`apps/models_provider/tests.py`
+
+- [ ] **步骤 1：编写旧 Provider 的失败测试**
+
+在 `apps/models_provider/tests.py` 添加不访问数据库的测试，规定未知或已删除 Provider 的错误必须是业务错误、包含 Provider 名称，不能泄露 `KeyError`：
+
+```python
+from django.test import SimpleTestCase
+
+from common.exception.app_exception import AppApiException
+from models_provider.tools import get_provider
+
+
+class ProviderCompatibilityTests(SimpleTestCase):
+    def test_removed_provider_has_readable_error(self):
+        with self.assertRaisesRegex(AppApiException, "model_local_provider"):
+            get_provider("model_local_provider")
+```
+
+- [ ] **步骤 2：运行测试验证当前失败**
+
+运行：
+
+```bash
+PYTHONPATH=apps SERVER_NAME=web DJANGO_SETTINGS_MODULE=maxkb.settings \
+  .venv/bin/python apps/manage.py test models_provider.tests.ProviderCompatibilityTests -v 2
+```
+
+预期：FAIL，当前抛出裸 `KeyError: 'model_local_provider'`。
+
+- [ ] **步骤 3：将未知 Provider 转为业务错误**
+
+在 `get_provider()` 使用 `ModelProvideConstants.__members__.get(provider)` 查找。未找到时抛出 `AppApiException`，消息同时说明模型供应商已被本地精简内核移除，并包含当前 Provider 值：
+
+```python
+provider_enum = ModelProvideConstants.__members__.get(provider)
+if provider_enum is None:
+    raise AppApiException(400, _("Model provider {provider} is no longer supported").format(provider=provider))
+return provider_enum.value
+```
+
+将 `ModelSerializer.model_to_dict()` 和 `Operate.is_valid()` 改为复用 `get_provider()`，禁止继续直接索引 `ModelProvideConstants[...]`。
+
+- [ ] **步骤 4：新增前向数据迁移，停用旧模型而不改写凭据**
+
+创建 `0002_disable_unsupported_providers.py`，依赖 `('models_provider', '0001_initial')`。迁移只处理 `provider != 'model_openai_provider'` 的 `Model`：
+
+```python
+def forwards(apps, schema_editor):
+    Model = apps.get_model("models_provider", "Model")
+    for model in Model.objects.exclude(provider="model_openai_provider").iterator():
+        meta = dict(model.meta or {})
+        meta["disabled_reason"] = "provider_removed_by_local_core"
+        model.status = "ERROR"
+        model.meta = meta
+        model.save(update_fields=["status", "meta"])
+```
+
+反向迁移使用 `migrations.RunPython.noop`。不得删除模型行、不得伪造 OpenAI credential、不得修改已应用的 `0001_initial.py` 来解决已有数据库问题。
+
+- [ ] **步骤 5：编写并执行迁移演练测试**
+
+在 `apps/models_provider/tests.py` 添加 `TransactionTestCase`，用 `MigrationExecutor` 迁移到 `0001_initial`，插入 `model_local_provider` 记录，迁移到 `0002_disable_unsupported_providers`，断言：
+
+```python
+self.assertEqual(model.status, "ERROR")
+self.assertEqual(model.meta["disabled_reason"], "provider_removed_by_local_core")
+```
+
+运行：
+
+```bash
+PYTHONPATH=apps SERVER_NAME=web DJANGO_SETTINGS_MODULE=maxkb.settings \
+  .venv/bin/python apps/manage.py test models_provider.tests -v 2
+```
+
+预期：Provider 可读错误测试与迁移演练均 PASS。
+
+- [ ] **步骤 6：提交 Provider 升级修复**
+
+```bash
+git add apps/models_provider/migrations/0002_disable_unsupported_providers.py apps/models_provider/tools.py \
+  apps/models_provider/serializers/model_serializer.py apps/models_provider/tests.py
+git commit -m "fix(模型): 停用已裁剪 Provider 的历史记录"
+```
+
+### 任务 11：显式停用历史工作流数据并清理 Trigger 定时任务
+
+**文件：**
+
+- 创建：`apps/application/migrations/0015_disable_workflow_applications.py`
+- 创建：`apps/knowledge/migrations/0012_mark_workflow_knowledge_unsupported.py`
+- 修改：`apps/chat/serializers/chat.py:431-441`
+- 修改：`apps/application/serializers/common.py:74-108`
+- 修改：`apps/application/serializers/application.py:175-248`
+- 修改：`apps/knowledge/serializers/knowledge.py:401-454`
+- 修改：`apps/common/job/scheduler.py:1-12`
+- 修改：`apps/application/tests.py`、`apps/knowledge/tests.py`
+
+- [ ] **步骤 1：编写历史工作流应用的失败测试**
+
+在 `apps/application/tests.py` 用测试数据库创建 `type='WORK_FLOW'` 的 `Application` 和已发布版本，调用聊天校验路径，断言它返回业务错误且信息包含“workflow applications are not supported”，而不是继续进入 `chat_simple()`：
+
+```python
+with self.assertRaisesRegex(ChatException, "workflow applications are not supported"):
+    serializer.chat(instance, SystemToResponse())
+```
+
+同时添加创建请求校验：`type='WORK_FLOW'` 必须被拒绝，`type='SIMPLE'` 仍通过。
+
+- [ ] **步骤 2：运行测试验证当前错误行为**
+
+运行：
+
+```bash
+PYTHONPATH=apps SERVER_NAME=web DJANGO_SETTINGS_MODULE=maxkb.settings \
+  .venv/bin/python apps/manage.py test application.tests -v 2
+```
+
+预期：FAIL；当前工作流应用会越过类型检查进入简单聊天，且创建 serializer 仍接受 `WORK_FLOW`。
+
+- [ ] **步骤 3：收缩运行时和创建契约到 SIMPLE**
+
+做以下最小修改：
+
+```python
+# application/serializers/application.py
+type = serializers.ChoiceField(choices=[ApplicationTypeChoices.SIMPLE])
+
+# chat/serializers/chat.py，在 get_application() 后、chat_simple() 前
+if chat_info.application.type != ApplicationTypeChoices.SIMPLE.value:
+    raise ChatException(400, _("Workflow applications are not supported by the local core"))
+```
+
+同步使 `ChatInfo.get_application()` 对非 `SIMPLE` 立即抛出相同的 `ChatException`，保证嵌入聊天、恢复会话和普通聊天入口行为一致。将 `ApplicationCreateRequest` 改为直接使用 `ApplicationCreateSerializer.SimplateRequest`，删除要求 `work_flow` 的 OpenAPI 字段。
+
+- [ ] **步骤 4：新增应用和知识库的前向迁移**
+
+`0015_disable_workflow_applications.py` 依赖 `application.0014_applicationversion_knowledge_ids`，对 `Application.type='WORK_FLOW'`：
+
+```python
+Application.objects.filter(type="WORK_FLOW").update(is_publish=False)
+ApplicationVersion.objects.filter(type="WORK_FLOW").update(
+    mcp_enable=False,
+    mcp_tool_ids=[],
+    mcp_servers={},
+    tool_enable=False,
+    tool_ids=[],
+    skill_tool_ids=[],
+)
+```
+
+不得把工作流 JSON 转换为简单应用，也不得将其 `type` 改为 `SIMPLE`；保留记录以供管理员识别和手工迁移。
+
+`0012_mark_workflow_knowledge_unsupported.py` 依赖 `knowledge.0011_delete_knowledgeaction`，对 `Knowledge.type=4` 在 `meta` 加入：
+
+```python
+meta["disabled_reason"] = "workflow_knowledge_removed_by_local_core"
+```
+
+在知识库详情、编辑、任务触发和命中测试入口读取该标记并返回 400 业务错误。不得删除原知识库、文档或 `KnowledgeWorkflow*` 行，避免无法恢复的用户数据损失。
+
+- [ ] **步骤 5：在 scheduler 启动前清理遗留 Trigger job**
+
+在 `apps/common/job/scheduler.py` 的 `scheduler.start()` 前使用可选导入清理 `DjangoJob`：
+
+```python
+try:
+    from django_apscheduler.models import DjangoJob
+    DjangoJob.objects.filter(id__startswith="trigger:").delete()
+except Exception:
+    pass
+```
+
+只删除 `trigger:` 前缀的已删除能力任务；不得清理 `clean_chat_log`、`client_access_num_reset` 或其他核心 scheduler job。为该清理提取一个小函数，方便 mock `DjangoJob.objects.filter(...).delete()` 并单测前缀限定。
+
+- [ ] **步骤 6：执行应用、知识库与 scheduler 回归测试**
+
+运行：
+
+```bash
+PYTHONPATH=apps SERVER_NAME=web DJANGO_SETTINGS_MODULE=maxkb.settings \
+  .venv/bin/python apps/manage.py test application.tests knowledge.tests -v 2
+PYTHONPATH=apps SERVER_NAME=web DJANGO_SETTINGS_MODULE=maxkb.settings \
+  .venv/bin/python apps/manage.py makemigrations --check --dry-run
+```
+
+预期：历史工作流应用和知识库得到明确拒绝；新简单应用继续可创建；不产生未提交 migration。
+
+- [ ] **步骤 7：提交历史数据处置修复**
+
+```bash
+git add apps/application apps/knowledge apps/chat/serializers/chat.py apps/common/job/scheduler.py
+git commit -m "fix(裁剪): 显式停用历史工作流和触发器数据"
+```
+
+### 任务 12：移除所有可达的已删除能力入口
+
+**文件：**
+
+- 修改：`ui/src/layout/layout-header/top-about/index.vue`
+- 修改：`ui/src/views/home/component/ResourceAggregation.vue`
+- 修改：`ui/src/api/home-page/home.ts`
+- 修改：`ui/src/views/home/component/QuickCreate.vue`
+- 修改：`ui/src/views/application/index.vue`
+- 修改：`ui/src/api/application/application.ts`
+- 修改：`ui/src/router/modules/system.ts`
+- 修改：`ui/src/views/system/resource-authorization/index.vue`
+- 修改：`ui/src/views/system/resource-authorization/component/PermissionTable.vue`
+- 修改：`ui/src/views/application/ApplicationSetting.vue`
+- 修改：`ui/src/api/system-resource-management/application.ts`
+- 修改：`ui/src/components/dynamics-form/items/model/provider-data.ts`
+- 修改：`ui/src/components/dynamics-form/items/model/Model.vue`
+- 修改：`ui/src/components/dynamics-form/constructor/items/ModelConstructor.vue`
+
+- [ ] **步骤 1：先为路由和接口表建立失败检查脚本**
+
+创建 `ui/scripts/check-local-core-surface.mjs`。脚本读取 `ui/src` 源文件并失败于以下可执行残留：
+
+```js
+const forbidden = [
+  "name: 'trigger'",
+  "router.push('/tool')",
+  'getToolAggregation(',
+  'importApplication(',
+  'exportApplication(',
+  '/text_to_speech',
+  '/speech_to_text',
+  '/play_demo_text',
+  "SourceTypeEnum.TOOL",
+  "resource: 'TOOL'",
+]
+```
+
+脚本的扫描范围限定在保留入口、路由、应用设置和 API 客户端；不扫描 locale、注释、`references/agentkb/` 或历史迁移，防止把非执行文本误判为问题。
+
+- [ ] **步骤 2：运行脚本验证当前失败**
+
+运行：
+
+```bash
+cd ui
+node scripts/check-local-core-surface.mjs
+```
+
+预期：FAIL，至少报告 Trigger 页头入口、首页工具聚合、应用导入/导出、TTS/STT 和 Tool 授权路由。
+
+- [ ] **步骤 3：删除 Trigger、工具统计、导入/导出和 Tool 授权入口**
+
+完成以下收口：
+
+- 从 `top-about/index.vue` 删除 Trigger tooltip、按钮、`PermissionConst.TRIGGER_READ` 和不再使用的 `route`。
+- 从 `ResourceAggregation.vue` 删除工具卡片、`toolAggregation`、`getToolAggregation()` 调用；从 `home.ts` 删除该 API。
+- 从 `QuickCreate.vue`、应用列表创建菜单和卡片操作菜单删除应用导入/导出；从 `application.ts` 删除对应 API。
+- 从 `system.ts` 删除工具授权父级权限和 `/system/authorization/tool` 子路由；从授权页和权限表删除 `SourceTypeEnum.TOOL` 选项及工具权限判断。
+
+- [ ] **步骤 4：删除语音、MCP/工具设置和前端 Provider 静态数据**
+
+保持浏览器端文字回答展示，但删除服务端语音与工具配置：
+
+- 从 `ApplicationSetting.vue` 删除 STT/TTS 表单、试听、服务器语音调用、MCP、工具、技能、代理组合区块及其 imports、状态和初始化请求。
+- 从 `application.ts`、`system-resource-management/application.ts` 删除 TTS/STT/MCP API 封装。
+- 删除 `provider-data.ts` 中除 `model_openai_provider` 外的 Provider 条目；组件继续只按实际后端 `provider_list` 分组渲染。
+- 同步移除不再使用的组件 imports，不能以固定权限返回 `false` 隐藏已删除能力。
+
+- [ ] **步骤 5：执行表面检查与前端构建**
+
+运行：
+
+```bash
+cd ui
+node scripts/check-local-core-surface.mjs
+pnpm exec vue-tsc --build
+NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
+NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat
+```
+
+预期：全部 PASS；构建后使用 `rg -n '/workflow|/mcp_tools|/text_to_speech|/speech_to_text|/play_demo_text' dist/assets`，结果不含已删除服务端端点。
+
+- [ ] **步骤 6：提交前端契约收口**
+
+```bash
+git add ui/src ui/scripts/check-local-core-surface.mjs
+git commit -m "fix(前端): 移除裁剪后不可用的功能入口"
+```
+
+### 任务 13：锁定依赖和 API 契约
+
+**文件：**
+
+- 修改：`.gitignore:190-192`
+- 创建或修改：`uv.lock`
+- 修改：`README-hr.md`
+- 修改：`apps/application/api/application_api.py:21-23`
+
+- [ ] **步骤 1：删除 `uv.lock` 忽略规则并生成锁文件**
+
+从 `.gitignore` 移除单独的 `uv.lock` 行，然后运行：
+
+```bash
+uv lock
+uv lock --check
+uv sync --locked --dry-run
+```
+
+预期：锁文件包含 `pycryptodome` 的固定版本和 hash；所有命令退出码为 0。
+
+- [ ] **步骤 2：验证 OpenAPI 不再要求工作流对象**
+
+在 `apps/application/tests.py` 增加 schema 回归测试：
+
+```python
+request = ApplicationCreateAPI.get_request()
+self.assertNotIn("work_flow", request().get_fields())
+```
+
+运行：
+
+```bash
+PYTHONPATH=apps SERVER_NAME=web DJANGO_SETTINGS_MODULE=maxkb.settings \
+  .venv/bin/python apps/manage.py test application.tests -v 2
+```
+
+预期：PASS，创建 API 仅暴露简单应用实际需要的字段。
+
+- [ ] **步骤 3：更新开发说明并提交**
+
+在 `README-hr.md` 明确写入：
+
+- 从未裁剪 v2 升级前必须备份 PostgreSQL，并在 staging 副本演练 migration。
+- 已裁剪 Provider 会被标为 `ERROR`，须创建并重新绑定 OpenAI 兼容 LLM/Embedding。
+- 工作流应用和工作流知识库被保留为历史数据但不可运行；必须在原版实例手工导出或重建为简单应用/基础知识库。
+- 旧 Trigger job 会在启动 scheduler 前清理。
+- 依赖安装必须使用 `uv sync --locked`。
+
+提交：
+
+```bash
+git add .gitignore uv.lock README-hr.md apps/application/api/application_api.py apps/application/tests.py
+git commit -m "chore(依赖): 锁定本地精简内核依赖"
+```
+
+### 任务 14：在全新库和 v2 升级副本上完成验收
+
+**文件：**
+
+- 修改：`README-hr.md`
+- 修改：`docs/superpowers/audits/2026-08-13-local-core-slimming-baseline.md`
+
+- [ ] **步骤 1：验证代码、Django 注册和 Provider 表面**
+
+运行：
+
+```bash
+export MAXKB_CONFIG_TYPE=ENV
+export SERVER_NAME=web
+export DJANGO_SETTINGS_MODULE=maxkb.settings
+export PYTHONPATH=apps
+.venv/bin/python -m compileall -q apps main.py
+.venv/bin/python apps/manage.py check
+.venv/bin/python apps/manage.py makemigrations --check --dry-run
+.venv/bin/python - <<'PY'
+import django
+django.setup()
+from models_provider.constants.model_provider_constants import ModelProvideConstants
+assert list(ModelProvideConstants.__members__) == ["model_openai_provider"]
+print("provider registry: PASS")
+PY
+```
+
+预期：所有命令通过；Provider 注册表仅包含 OpenAI。
+
+- [ ] **步骤 2：执行全套回归测试和前端构建**
+
+运行：
+
+```bash
+.venv/bin/python apps/manage.py test application.tests knowledge.tests models_provider.tests -v 2
+cd ui
+node scripts/check-local-core-surface.mjs
+pnpm exec vue-tsc --build
+NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
+NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat
+```
+
+预期：测试和两套构建均 PASS。
+
+- [ ] **步骤 3：演练真实 PostgreSQL 升级路径**
+
+在隔离 PostgreSQL 数据库执行，不得对开发主库或生产库执行：
+
+```bash
+pg_dump --format=custom --file=/tmp/maxkb-v2-before-slim.dump <v2_staging_database>
+python main.py upgrade_db
+```
+
+升级后以 SQL 检查迁移效果：
+
+```sql
+SELECT provider, status, meta->>'disabled_reason'
+FROM model
+WHERE provider <> 'model_openai_provider';
+
+SELECT id, name, type, is_publish
+FROM application
+WHERE type = 'WORK_FLOW';
+
+SELECT id, meta->>'disabled_reason'
+FROM knowledge
+WHERE type = 4;
+
+SELECT id
+FROM django_apscheduler_djangojob
+WHERE id LIKE 'trigger:%';
+```
+
+预期：旧 Provider 状态为 `ERROR`；工作流应用均未发布；工作流知识库有禁用原因；最后一条查询无记录。记录数据库版本、迁移输出和四项查询结果到审计文档。
+
+- [ ] **步骤 4：更新审计记录并提交验收证据**
+
+```bash
+git add README-hr.md docs/superpowers/audits/2026-08-13-local-core-slimming-baseline.md
+git commit -m "test(裁剪): 验证精简内核升级兼容性"
+```
