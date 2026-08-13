@@ -188,7 +188,6 @@ apps/xpack
 data
 .dev
 poetry.lock
-uv.lock
 apps/models_provider/impl/*/icon/
 apps/models_provider/impl/tencent_model_provider/credential/stt.py
 apps/models_provider/impl/tencent_model_provider/model/stt.py

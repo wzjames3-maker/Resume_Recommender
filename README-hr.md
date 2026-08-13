@@ -40,7 +40,7 @@
 ```bash
 # 后端（Python 3.11 由 uv 管理）
 export PATH="$HOME/.local/bin:$PATH"
-uv venv --python 3.11 && uv sync
+uv venv --python 3.11 && uv sync --locked
 export MAXKB_CONFIG_TYPE=ENV MAXKB_DB_HOST=127.0.0.1 MAXKB_DB_PORT=5432 \
   MAXKB_DB_NAME=maxkb MAXKB_DB_USER=postgres MAXKB_DB_PASSWORD=xxx \
   MAXKB_REDIS_HOST=127.0.0.1 MAXKB_REDIS_PORT=6379 MAXKB_REDIS_DB=0
@@ -49,12 +49,26 @@ PYTHONPATH=apps SERVER_NAME=web DJANGO_SETTINGS_MODULE=maxkb.settings .venv/bin/
 # 验证
 python apps/manage.py check
 python apps/manage.py makemigrations --check --dry-run
+.venv/bin/python apps/manage.py test application.tests knowledge.tests models_provider.tests --keepdb
 
-# 前端
+# 前端（表面检查 + 类型检查 + 构建）
 cd ui && pnpm install
+node scripts/check-local-core-surface.mjs
 NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vue-tsc --build
 NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
 ```
+
+## 从原版 v2 升级（重要）
+
+- 升级前必须备份 PostgreSQL，并在 staging 副本演练全部 migration；禁止直接在生产库执行。
+- 已裁剪 Provider 的模型记录会被迁移标为 `ERROR` 并写入 `meta.disabled_reason=provider_removed_by_local_core`，
+  须在原版实例导出或重新创建 OpenAI 兼容 LLM/Embedding 模型并重新绑定知识库与应用。
+- 历史工作流应用（`type=WORK_FLOW`）会被迁移取消发布（`is_publish=false`），本内核聊天/调试入口会返回
+  "Workflow applications are not supported"；必须在原版实例手工导出或重建为简单应用。
+- 工作流知识库（`type=4`）会被标记（`meta.disabled_reason=workflow_knowledge_removed_by_local_core`），
+  管理、编辑、任务触发与命中测试均返回 400；原数据保留不删除。
+- 旧 Trigger 定时任务（`trigger:*`）会在 scheduler 启动前自动清理。
+- 依赖安装必须使用 `uv sync --locked`（`uv.lock` 已入库）。
 
 ## 新增模块
 - apps/hr：人事业务 Django app（骨架，后续阶段实现）

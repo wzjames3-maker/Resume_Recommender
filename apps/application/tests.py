@@ -4,6 +4,7 @@ from langchain_core.messages import AIMessage
 from unittest.mock import patch
 from rest_framework.exceptions import ValidationError
 
+from application.api.application_api import ApplicationCreateAPI
 from application.chat_pipeline.step.chat_step.impl.base_chat_step import BaseChatStep
 from application.models import Application, ApplicationTypeChoices, ApplicationVersion
 from application.serializers.application import ApplicationCreateSerializer
@@ -72,6 +73,10 @@ class WorkflowApplicationRejectionTests(TestCase):
 
 
 class ApplicationCreateValidationTests(TestCase):
+    def test_create_schema_excludes_workflow_field(self):
+        request = ApplicationCreateAPI.get_request()
+        self.assertNotIn("work_flow", request().get_fields())
+
     def _payload(self, app_type):
         return {
             "name": "new-app",
