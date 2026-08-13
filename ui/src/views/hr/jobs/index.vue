@@ -96,7 +96,12 @@
           <el-col :span="12"><el-form-item label="招聘人数"><el-input-number v-model="jobForm.headcount" :min="1" :max="999" /></el-form-item></el-col>
         </el-row>
         <el-form-item label="职位描述"><el-input v-model="jobForm.description" type="textarea" :rows="5" maxlength="4096" show-word-limit /></el-form-item>
-        <el-form-item label="技能要求"><el-input v-model="jobSkillsText" placeholder="用逗号分隔，例如 Python, Django" /></el-form-item>
+        <el-form-item label="技能要求">
+          <div class="w-full">
+            <el-input v-model="jobSkillsText" placeholder="用逗号分隔，例如 Python, Django" />
+            <el-button class="mt-8" size="small" :loading="extractingSkills" :disabled="!jobForm.description.trim()" @click="extractSkillsFromDescription">AI 抽取技能</el-button>
+          </div>
+        </el-form-item>
       </el-form>
       <template #footer><el-button @click="jobDialogVisible = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveJob">保存</el-button></template>
     </el-dialog>
@@ -168,6 +173,7 @@ const jobDialogVisible = ref(false)
 const aiSettingVisible = ref(false)
 const editingJob = ref<Job | null>(null)
 const jobSkillsText = ref('')
+const extractingSkills = ref(false)
 const expandTab = reactive<Record<string, string>>({})
 const jobForm = reactive({ name: '', department: '', city: '', level: '', headcount: 1, description: '' })
 const isWorkspaceManage = computed(() => hasPermission([RoleConst.WORKSPACE_MANAGE.getWorkspaceRole], 'OR'))
@@ -230,6 +236,21 @@ function openJobDialog(job?: Job) {
   editingJob.value = job || null
   resetJobForm(job)
   jobDialogVisible.value = true
+}
+
+function extractSkillsFromDescription() {
+  const description = jobForm.description.trim()
+  if (!description) return
+  extractingSkills.value = true
+  HrApi.extractSkills(description)
+    .then((response) => {
+      jobSkillsText.value = response.data.skills.join(', ')
+      MsgSuccess('技能已抽取，可编辑后随职位保存')
+    })
+    .catch(() => {})
+    .finally(() => {
+      extractingSkills.value = false
+    })
 }
 
 function saveJob() {
