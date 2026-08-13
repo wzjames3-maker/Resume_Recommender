@@ -6,6 +6,7 @@ import uuid_utils.compat as uuid
 from common.exception.app_exception import AppApiException, AppUnauthorizedFailed, NotFound404
 from hr.models import AssignmentStatus, Candidate, CandidateAssignment, Interview, Job, ResumeFile
 from hr.serializers.recruitment import RecruitmentService
+from hr.services.ai_parser import extract_skills, parse_search_conditions
 from hr.services.resume_parser import parse_resume_text
 
 
@@ -383,3 +384,83 @@ class InterviewServiceTests(TestCase):
         )
         with self.assertRaises(NotFound404):
             self.service.update_interview(foreign.id, {"status": "PASSED"})
+
+
+class _StubModel:
+    def __init__(self, content):
+        self._content = content
+
+    def invoke(self, prompt):
+        return type("Response", (), {"content": self._content})()
+
+
+class AiParserTests(TestCase):
+    def test_parse_returns_full_conditions(self):
+        model = _StubModel(
+            '{"skills": ["Python", "Kafka"], "city": "上海", "years_min": 3, "years_max": 5, '
+            '"highest_degree": "本科", "status": "ACTIVE"}'
+        )
+        result = parse_search_conditions(model, "找3到5年Python和Kafka经验在上海的本科学历候选人")
+        self.assertEqual(result, {
+            "skills": ["Python", "Kafka"],
+            "city": "上海",
+            "years_min": 3,
+            "years_max": 5,
+            "highest_degree": "本科",
+            "status": "ACTIVE",
+        })
+
+    def test_parse_fills_missing_fields_with_defaults(self):
+        model = _StubModel('{"skills": null}')
+        result = parse_search_conditions(model, "找后端")
+        self.assertEqual(result, {
+            "skills": [], "city": None, "years_min": None,
+            "years_max": None, "highest_degree": None, "status": None,
+        })
+
+    def test_parse_rejects_invalid_json(self):
+        model = _StubModel("这不是 JSON")
+        with self.assertRaisesRegex(AppApiException, "AI 解析失败"):
+            parse_search_conditions(model, "找后端")
+
+    def test_parse_rejects_non_dict_json(self):
+        model = _StubModel("[1, 2, 3]")
+        with self.assertRaisesRegex(AppApiException, "AI 解析失败"):
+            parse_search_conditions(model, "找后端")
+
+    def test_parse_invoke_error_returns_400(self):
+        class _BrokenModel:
+            def invoke(self, prompt):
+                raise RuntimeError("connection refused")
+
+        with self.assertRaisesRegex(AppApiException, "AI 解析失败"):
+            parse_search_conditions(_BrokenModel(), "找后端")
+
+    def test_parse_swaps_reversed_year_range(self):
+        model = _StubModel('{"years_min": 10, "years_max": 2, "skills": []}')
+        result = parse_search_conditions(model, "q")
+        self.assertEqual(result["years_min"], 2)
+        self.assertEqual(result["years_max"], 10)
+
+    def test_parse_drops_non_positive_years(self):
+        model = _StubModel('{"years_min": "3", "years_max": 0, "skills": []}')
+        result = parse_search_conditions(model, "q")
+        self.assertEqual(result["years_min"], None)
+        self.assertEqual(result["years_max"], None)
+
+    def test_parse_cleans_skills(self):
+        model = _StubModel('{"skills": [" Python ", "", "Python", 123]}')
+        result = parse_search_conditions(model, "q")
+        self.assertEqual(result["skills"], ["Python"])
+
+    def test_extract_skills_cleans_and_dedups(self):
+        model = _StubModel('{"skills": [" Python ", "Django", "python", "", 1]}')
+        self.assertEqual(extract_skills(model, "描述"), ["Python", "Django"])
+
+    def test_extract_skills_truncates_to_20(self):
+        model = _StubModel('{"skills": [' + ', '.join('"s%d"' % i for i in range(30)) + ']}')
+        self.assertEqual(len(extract_skills(model, "描述")), 20)
+
+    def test_extract_skills_non_list_returns_empty(self):
+        model = _StubModel('{"skills": "Python"}')
+        self.assertEqual(extract_skills(model, "描述"), [])
