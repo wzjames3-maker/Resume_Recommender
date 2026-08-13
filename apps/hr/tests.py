@@ -1,3 +1,4 @@
+import tempfile
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 import uuid_utils.compat as uuid
@@ -191,3 +192,46 @@ class ResumeFileModelTests(TestCase):
         ResumeFile.objects.create(file_name="b.txt", extension="txt", file_path="/tmp/b.txt",
                                   file_size=1, sha256="abc", workspace_id="w2")
         self.assertEqual(ResumeFile.objects.count(), 2)
+
+
+class ResumeServiceTests(TestCase):
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=True)
+
+    def _txt_file(self, content, name="resume.txt"):
+        handle = tempfile.NamedTemporaryFile(suffix=".txt", delete=False)
+        handle.write(content.encode("utf-8"))
+        handle.close()
+        return handle.name, name, "txt"
+
+    def test_upload_creates_candidate_and_marks_success(self):
+        path, name, ext = self._txt_file("姓名：李四\n电话：13912345678\n3年工作经验")
+        result = self.service.upload_resumes([(path, name, ext)], "OTHER")
+        self.assertEqual(result[0]["status"], "SUCCESS")
+        self.assertIsNotNone(result[0]["candidate_id"])
+        self.assertEqual(result[0]["duplicate"], False)
+
+    def test_duplicate_upload_reuses_candidate(self):
+        path, name, ext = self._txt_file("姓名：王五\n邮箱：wangwu@example.com")
+        first = self.service.upload_resumes([(path, name, ext)], "OTHER")[0]
+        path2, _, _ = self._txt_file("姓名：王五\n邮箱：wangwu@example.com")
+        second = self.service.upload_resumes([(path2, name, ext)], "OTHER")[0]
+        self.assertEqual(second["duplicate"], True)
+        self.assertEqual(second["candidate_id"], first["candidate_id"])
+        self.assertEqual(Candidate.objects.count(), 1)
+
+    def test_reject_unsupported_extension_and_oversize(self):
+        with self.assertRaisesRegex(AppApiException, "not supported"):
+            self.service.upload_resumes([("/tmp/x.pdf", "x.pdf", "pdf")], "OTHER")
+        path, name, ext = self._txt_file("a" * (21 * 1024 * 1024))
+        with self.assertRaisesRegex(AppApiException, "20"):
+            self.service.upload_resumes([(path, name, ext)], "OTHER")
+
+    def test_duplicate_upload_keeps_first_success(self):
+        path, name, ext = self._txt_file("姓名：赵六")
+        first = self.service.upload_resumes([(path, name, ext)], "OTHER")[0]
+        path2, _, _ = self._txt_file("姓名：赵六")
+        self.service.upload_resumes([(path2, name, ext)], "OTHER")
+        first_resume = ResumeFile.objects.get(id=first["resume_id"])
+        self.assertEqual(first_resume.status, "SUCCESS")

@@ -1,8 +1,24 @@
+import hashlib
+import os
+import shutil
+
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Q
 
 from common.exception.app_exception import AppApiException, AppUnauthorizedFailed, NotFound404
-from hr.models import AssignmentStatus, Candidate, CandidateAssignment, CandidateStatus, Job, JobStatus
+from hr.models import (
+    AssignmentStatus,
+    Candidate,
+    CandidateAssignment,
+    CandidateStatus,
+    Job,
+    JobStatus,
+    ResumeChannel,
+    ResumeFile,
+    ResumeStatus,
+)
+from hr.services.resume_parser import extract_text_from_docx, extract_text_from_txt, parse_resume_text
+from maxkb.const import PROJECT_DIR
 
 
 class RecruitmentService:
@@ -130,6 +146,9 @@ class RecruitmentService:
         name = query.get("name")
         city = query.get("city")
         status = query.get("status")
+        skills = query.get("skills")
+        years_min = query.get("years_min")
+        source = query.get("source")
         if name:
             queryset = queryset.filter(name__icontains=name)
         if city:
@@ -138,6 +157,19 @@ class RecruitmentService:
             if status not in CandidateStatus.values:
                 raise AppApiException(400, "status is invalid")
             queryset = queryset.filter(status=status)
+        if skills:
+            for skill in skills.split(","):
+                skill = skill.strip()
+                if skill:
+                    queryset = queryset.filter(skills__contains=[skill])
+        if years_min:
+            try:
+                years_min = int(years_min)
+            except (TypeError, ValueError) as exc:
+                raise AppApiException(400, "years_min is invalid") from exc
+            queryset = queryset.filter(years_experience__gte=years_min)
+        if source:
+            queryset = queryset.filter(source=source)
         total = queryset.count()
         start = (current_page - 1) * page_size
         records = queryset.order_by("-update_time")[start:start + page_size]
@@ -334,3 +366,108 @@ class RecruitmentService:
         except IntegrityError as exc:
             raise AppApiException(400, "An active assignment already exists") from exc
         return self._assignment_output(assignment)
+
+    def _resume_dir(self):
+        directory = os.path.join(PROJECT_DIR, "data", "resume", self.workspace_id)
+        os.makedirs(directory, exist_ok=True)
+        return directory
+
+    @staticmethod
+    def _resume_output(resume):
+        return {
+            "id": str(resume.id),
+            "file_name": resume.file_name,
+            "extension": resume.extension,
+            "file_size": resume.file_size,
+            "sha256": resume.sha256,
+            "source_channel": resume.source_channel,
+            "status": resume.status,
+            "error_message": resume.error_message,
+            "candidate_id": str(resume.candidate_id) if resume.candidate_id else None,
+            "create_time": resume.create_time,
+            "update_time": resume.update_time,
+        }
+
+    def upload_resumes(self, files, source_channel):
+        if source_channel not in ResumeChannel.values:
+            raise AppApiException(400, "source_channel is invalid")
+        records = []
+        for file_path, file_name, extension in files:
+            extension = extension.lower()
+            if extension not in ("docx", "txt"):
+                raise AppApiException(400, f"File format {extension} is not supported")
+            size = os.path.getsize(file_path)
+            if size > 20 * 1024 * 1024:
+                raise AppApiException(400, "File exceeds 20 MB limit")
+            digest = hashlib.sha256()
+            with open(file_path, "rb") as handle:
+                digest.update(handle.read())
+            sha256 = digest.hexdigest()
+            existing = ResumeFile.objects.filter(workspace_id=self.workspace_id, sha256=sha256).first()
+            if existing:
+                records.append({
+                    "resume_id": str(existing.id),
+                    "file_name": existing.file_name,
+                    "status": existing.status,
+                    "sha256": existing.sha256,
+                    "duplicate": True,
+                    "candidate_id": str(existing.candidate_id) if existing.candidate_id else None,
+                })
+                continue
+            stored = os.path.join(self._resume_dir(), f"{sha256}.{extension}")
+            shutil.move(file_path, stored)
+            try:
+                if extension == "docx":
+                    text = extract_text_from_docx(stored)
+                else:
+                    text = extract_text_from_txt(stored)
+                parsed = parse_resume_text(text)
+                candidate = Candidate.objects.create(
+                    workspace_id=self.workspace_id,
+                    user_id=self.user_id,
+                    name=parsed["name"] or file_name,
+                    email=parsed["email"] or None,
+                    phone=parsed["phone"],
+                    current_city=parsed["current_city"],
+                    target_city=parsed["target_city"],
+                    highest_degree=parsed["highest_degree"],
+                    years_experience=parsed["years_experience"],
+                    skills=parsed["skills"],
+                    source=source_channel,
+                    note=parsed["note"],
+                )
+                resume = ResumeFile.objects.create(
+                    workspace_id=self.workspace_id, file_name=file_name, extension=extension,
+                    file_path=stored, file_size=size, sha256=sha256,
+                    source_channel=source_channel, status=ResumeStatus.SUCCESS, candidate=candidate,
+                    user_id=self.user_id,
+                )
+            except Exception as exc:
+                resume = ResumeFile.objects.create(
+                    workspace_id=self.workspace_id, file_name=file_name, extension=extension,
+                    file_path=stored, file_size=size, sha256=sha256,
+                    source_channel=source_channel, status=ResumeStatus.FAILED,
+                    error_message=str(exc), user_id=self.user_id,
+                )
+            records.append({
+                "resume_id": str(resume.id),
+                "file_name": resume.file_name,
+                "status": resume.status,
+                "sha256": resume.sha256,
+                "duplicate": False,
+                "candidate_id": str(resume.candidate_id) if resume.candidate_id else None,
+            })
+        return records
+
+    def list_candidate_resumes(self, candidate_id):
+        candidate = self._candidate(candidate_id)
+        resumes = ResumeFile.objects.filter(workspace_id=self.workspace_id, candidate=candidate).order_by("-create_time")
+        return [self._resume_output(resume) for resume in resumes]
+
+    def delete_resume(self, resume_id):
+        self._require_manage()
+        resume = ResumeFile.objects.filter(id=resume_id, workspace_id=self.workspace_id).first()
+        if resume is None:
+            raise NotFound404(404, "Resource not found")
+        resume.delete()
+        return True

@@ -1,3 +1,8 @@
+import os
+import tempfile
+
+import uuid_utils.compat as uuid
+from rest_framework.parsers import MultiPartParser
 from rest_framework.views import APIView
 
 from common import result
@@ -101,3 +106,37 @@ class AssignmentAPI(APIView):
     @member_required
     def put(self, request, workspace_id, assignment_id):
         return result.success(_service(request, workspace_id).update_assignment(assignment_id, request.data))
+
+
+class ResumeAPI(APIView):
+    authentication_classes = [TokenAuth]
+    parser_classes = [MultiPartParser]
+
+    @member_required
+    def post(self, request, workspace_id):
+        source_channel = request.data.get("source_channel", "OTHER")
+        files = []
+        for upload in request.FILES.getlist("files"):
+            temp_path = os.path.join(tempfile.gettempdir(), f"{uuid.uuid7()}_{upload.name}")
+            with open(temp_path, "wb") as handle:
+                for chunk in upload.chunks():
+                    handle.write(chunk)
+            extension = os.path.splitext(upload.name)[1].lstrip(".").lower()
+            files.append((temp_path, upload.name, extension))
+        return result.success(_service(request, workspace_id).upload_resumes(files, source_channel))
+
+
+class ResumeListAPI(APIView):
+    authentication_classes = [TokenAuth]
+
+    @member_required
+    def get(self, request, workspace_id, candidate_id):
+        return result.success(_service(request, workspace_id).list_candidate_resumes(candidate_id))
+
+
+class ResumeDetailAPI(APIView):
+    authentication_classes = [TokenAuth]
+
+    @manage_required
+    def delete(self, request, workspace_id, resume_id):
+        return result.success(_service(request, workspace_id).delete_resume(resume_id))
