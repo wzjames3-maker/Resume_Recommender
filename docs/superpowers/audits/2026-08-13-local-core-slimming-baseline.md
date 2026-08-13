@@ -192,3 +192,19 @@ pnpm exec eslint .
 | `ui: vue-tsc --build` | PASS |
 | `ui: vite build` / `vite build --mode chat` | PASS；产物无已裁剪端点 |
 | 状态机与面试测试 | 完整流转链、非法流转拒绝、终态不可再流转、HIRED 禁止再指派、关闭职位限制、面试轮次自增、跨工作区 404 均覆盖 |
+
+---
+
+## 人事五期验收记录（2026-08-13）
+
+实现范围：HrConfig 工作区级 LLM 配置、自然语言搜索条件解析、职位描述技能抽取、前端 AI 设置对话框与两处功能入口。
+本期未引入 Embedding 语义检索（后续期候选）、异步任务（六期）、简历下载与候选人合并（七期）。
+
+| 验证项 | 结果 |
+|--------|------|
+| `manage.py test hr.tests application.tests knowledge.tests models_provider.tests --keepdb` | 74/74 PASS |
+| `manage.py check` | System check identified no issues (0 silenced) |
+| `manage.py makemigrations --check --dry-run` | No changes detected |
+| `ui: vue-tsc --build` | PASS |
+| `ui: vite build` / `vite build --mode chat` | PASS；产物无已裁剪端点 |
+| 服务层 | LLM 契约（invoke/content）、JSON 容错、年限倒挂交换、技能清洗去重截断、配置校验（LLM 类型/共享模型/未配置 400）、实例化路径 LLM 类型校验均覆盖 |
