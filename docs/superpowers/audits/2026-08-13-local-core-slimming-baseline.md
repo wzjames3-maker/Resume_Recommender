@@ -208,3 +208,21 @@ pnpm exec eslint .
 | `ui: vue-tsc --build` | PASS |
 | `ui: vite build` / `vite build --mode chat` | PASS；产物无已裁剪端点 |
 | 服务层 | LLM 契约（invoke/content）、JSON 容错、年限倒挂交换、技能清洗去重截断、配置校验（LLM 类型/共享模型/未配置 400）、实例化路径 LLM 类型校验均覆盖 |
+
+---
+
+## 人事六期验收记录（2026-08-13）
+
+实现范围：简历解析 Celery 异步化（每文件一任务 + QueueOnce）、上传接口异步派发、批量状态查询接口、前端上传轮询。
+本期未引入任务自动重试、上传历史页、简历下载与候选人合并（七期）。
+
+| 验证项 | 结果 |
+|--------|------|
+| `manage.py test hr.tests application.tests knowledge.tests models_provider.tests --keepdb` | 84/84 PASS |
+| `manage.py check` | System check identified no issues (0 silenced) |
+| `manage.py makemigrations --check --dry-run` | No changes detected（无新迁移） |
+| `ui: vue-tsc --build` | PASS |
+| `ui: vite build` / `vite build --mode chat` | PASS；产物无已裁剪端点 |
+| 任务函数 | 成功建候选人+SUCCESS、损坏文件 FAILED+error_message、缺失简历静默、事务原子性均覆盖 |
+| 上传/查询 | PENDING+派发、duplicate 同步判定、AlreadyQueued 500、派发异常降级 FAILED、ids 上限 200、跨工作区隔离、路由顺序修正、路由冒烟均覆盖 |
+| 端到端（真实 worker） | 跳过：worker heartbeat 硬编码 `/opt/maxkb-app/tmp`，本机无该目录且 sudo 需终端认证；任务函数同步链路已由测试覆盖 |

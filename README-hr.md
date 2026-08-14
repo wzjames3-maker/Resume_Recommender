@@ -117,6 +117,16 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
 - 检查：`manage.py check` 无问题；`makemigrations --check --dry-run` 无变更。
 - 前端：AI 设置对话框、AI 搜索、技能抽取可构建；`vue-tsc`、管理端和聊天端 Vite 构建均 PASS。
 
+## 人事六期验收（2026-08-13）
+
+- 异步解析：简历上传后每文件一个 Celery 解析任务（QueueOnce 防重），立即返回 PENDING，前端轮询收敛状态。
+- 状态查询：`GET /hr/resumes/batch-status` 批量查询（上限 200），跨工作区隔离。
+- 失败处理：解析失败写 FAILED + error_message，可删除重传；派发 AlreadyQueued 返回 500 提示。
+- 测试：`hr.tests application.tests knowledge.tests models_provider.tests`，84/84 PASS。
+- 检查：`manage.py check` 无问题；`makemigrations --check --dry-run` 无变更（无新迁移）。
+- 前端：上传对话框轮询展示解析进度可构建；`vue-tsc`、管理端和聊天端 Vite 构建均 PASS。
+- 端到端：真实 celery worker 验证因本机无法创建 `/opt/maxkb-app/tmp`（worker heartbeat 硬编码路径，sudo 需终端认证）而跳过；任务函数同步调用链路已由自动化测试覆盖。
+
 ## 旧版参考
 
 - `references/agentkb/` 是旧版 AgentKB 的固定源码快照，仅用于业务规则、状态机、接口和测试迁移参考。
