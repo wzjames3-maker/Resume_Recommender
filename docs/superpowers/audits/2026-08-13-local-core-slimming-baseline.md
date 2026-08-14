@@ -226,3 +226,22 @@ pnpm exec eslint .
 | 任务函数 | 成功建候选人+SUCCESS、损坏文件 FAILED+error_message、缺失简历静默、事务原子性均覆盖 |
 | 上传/查询 | PENDING+派发、duplicate 同步判定、AlreadyQueued 500、派发异常降级 FAILED、ids 上限 200、跨工作区隔离、路由顺序修正、路由冒烟均覆盖 |
 | 端到端（真实 worker） | 跳过：worker heartbeat 硬编码 `/opt/maxkb-app/tmp`，本机无该目录且 sudo 需终端认证；任务函数同步链路已由测试覆盖 |
+
+---
+
+## 人事七期验收记录（2026-08-13）
+
+实现范围：简历下载（FileResponse 原文件流）与原文查看（实时提取）、候选人重复标记与编辑查重、候选人合并（主优先补充+关系迁移+冲突拒绝）。
+本期未引入姓名模糊相似度检测、批量合并、合并历史审计。
+
+| 验证项 | 结果 |
+|--------|------|
+| `manage.py test hr.tests application.tests knowledge.tests models_provider.tests --keepdb` | 106/106 PASS |
+| `manage.py check` | System check identified no issues (0 silenced) |
+| `manage.py makemigrations --check --dry-run` | No changes detected（无新迁移） |
+| `ui: vue-tsc --build` | PASS |
+| `ui: vite build` / `vite build --mode chat` | PASS；产物无已裁剪端点 |
+| 下载/查看 | 200 附件流、缺失文件 404、跨工作区 404、损坏 docx 400、txt 内容一致均覆盖 |
+| 查重 | 同手机号/邮箱标记（邮箱忽略大小写）、跨工作区排除、exclude 自身、空参数、编辑查重均覆盖 |
+| 合并 | 字段补充/技能并集/备注拼接、简历与指派迁移、Interview 保留、同人 400、冲突指派 400、跨工作区 404、非 manage 无权限、归档从候选人合并均覆盖 |
+| 备注 | 首次全量跑出现 1 次 failures=1，随后连续 5 次全量 OK 未复现，记录为瞬态观察 |

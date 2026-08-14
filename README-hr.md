@@ -127,6 +127,15 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
 - 前端：上传对话框轮询展示解析进度可构建；`vue-tsc`、管理端和聊天端 Vite 构建均 PASS。
 - 端到端：真实 celery worker 验证因本机无法创建 `/opt/maxkb-app/tmp`（worker heartbeat 硬编码路径，sudo 需终端认证）而跳过；任务函数同步调用链路已由自动化测试覆盖。
 
+## 人事七期验收（2026-08-13）
+
+- 简历：候选人简历可下载原文件、可查看提取文本（docx/txt），跨工作区与文件缺失正确 404。
+- 查重：列表标记疑似重复（同手机号/邮箱，邮箱忽略大小写）；新建/编辑保存前查重提示。
+- 合并：主优先补充字段、技能并集、备注拼接，简历/指派迁移、从候选人删除；有效指派同职位冲突拒绝。
+- 测试：`hr.tests application.tests knowledge.tests models_provider.tests`，106/106 PASS。
+- 检查：`manage.py check` 无问题；`makemigrations --check --dry-run` 无变更。
+- 前端：简历对话框、重复标记、合并对话框可构建；`vue-tsc`、管理端和聊天端 Vite 构建均 PASS。
+
 ## 旧版参考
 
 - `references/agentkb/` 是旧版 AgentKB 的固定源码快照，仅用于业务规则、状态机、接口和测试迁移参考。
