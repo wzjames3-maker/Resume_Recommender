@@ -159,6 +159,80 @@ class RecruitmentServiceTests(TestCase):
             self.service.create_assignment(self.job.id, self.candidate.id, {})
 
 
+class ActiveAssignmentArchiveTests(TestCase):
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.service = RecruitmentService(
+            workspace_id="workspace-a",
+            user_id=self.user_id,
+            is_workspace_manage=True,
+        )
+        self.candidate = Candidate.objects.create(name="Alice", workspace_id="workspace-a")
+        self.job = Job.objects.create(
+            name="Python Engineer",
+            department="Engineering",
+            headcount=1,
+            workspace_id="workspace-a",
+        )
+
+    def _transition(self, assignment_id, to_status):
+        return self.service.update_assignment(assignment_id, {"status": to_status})
+
+    def _to_interviewing(self, candidate):
+        assignment = self.service.create_assignment(self.job.id, candidate.id, {})
+        self._transition(assignment["id"], AssignmentStatus.SCREEN_PASSED)
+        self._transition(assignment["id"], AssignmentStatus.INTERVIEWING)
+        return assignment["id"]
+
+    def test_archive_rejects_interviewing_assignment(self):
+        self._to_interviewing(self.candidate)
+
+        with self.assertRaisesRegex(AppApiException, "active assignment"):
+            self.service.archive_candidate(self.candidate.id)
+
+    def test_archive_rejects_offer_assignment(self):
+        assignment_id = self._to_interviewing(self.candidate)
+        self._transition(assignment_id, AssignmentStatus.OFFER)
+
+        with self.assertRaisesRegex(AppApiException, "active assignment"):
+            self.service.archive_candidate(self.candidate.id)
+
+    def test_archive_allows_terminal_assignment_statuses(self):
+        for status in (AssignmentStatus.HIRED, AssignmentStatus.REJECTED, AssignmentStatus.CLOSED):
+            with self.subTest(status=status):
+                candidate = Candidate.objects.create(name=f"C-{status}", workspace_id="workspace-a")
+                assignment_id = self.service.create_assignment(self.job.id, candidate.id, {})["id"]
+                if status == AssignmentStatus.HIRED:
+                    self._transition(assignment_id, AssignmentStatus.SCREEN_PASSED)
+                    self._transition(assignment_id, AssignmentStatus.INTERVIEWING)
+                    self._transition(assignment_id, AssignmentStatus.OFFER)
+                self._transition(assignment_id, status)
+
+                result = self.service.archive_candidate(candidate.id)
+                self.assertEqual(result["status"], "ARCHIVED")
+
+    def test_active_assignment_count_includes_interviewing_and_offer(self):
+        for status in (AssignmentStatus.INTERVIEWING, AssignmentStatus.OFFER, AssignmentStatus.HIRED):
+            candidate = Candidate.objects.create(name=f"C-{status}", workspace_id="workspace-a")
+            assignment_id = self.service.create_assignment(self.job.id, candidate.id, {})["id"]
+            if status == AssignmentStatus.OFFER:
+                self._transition(assignment_id, AssignmentStatus.SCREEN_PASSED)
+                self._transition(assignment_id, AssignmentStatus.INTERVIEWING)
+                self._transition(assignment_id, AssignmentStatus.OFFER)
+            elif status == AssignmentStatus.HIRED:
+                self._transition(assignment_id, AssignmentStatus.SCREEN_PASSED)
+                self._transition(assignment_id, AssignmentStatus.INTERVIEWING)
+                self._transition(assignment_id, AssignmentStatus.OFFER)
+                self._transition(assignment_id, AssignmentStatus.HIRED)
+            else:
+                self._transition(assignment_id, AssignmentStatus.SCREEN_PASSED)
+                self._transition(assignment_id, AssignmentStatus.INTERVIEWING)
+
+        result = self.service.page_jobs(1, 20, {})
+        job_record = next(item for item in result["records"] if item["id"] == str(self.job.id))
+        self.assertEqual(job_record["active_assignment_count"], 2)
+
+
 class ResumeParserTests(TestCase):
     def test_extracts_contact_and_profile_fields(self):
         text = (

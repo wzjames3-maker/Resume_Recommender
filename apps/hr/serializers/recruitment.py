@@ -294,7 +294,7 @@ class RecruitmentService:
         if CandidateAssignment.objects.filter(
             workspace_id=self.workspace_id,
             candidate=candidate,
-            status__in=[AssignmentStatus.PENDING_SCREEN, AssignmentStatus.SCREEN_PASSED],
+            status__in=ACTIVE_ASSIGNMENT_STATUSES,
         ).exists():
             raise AppApiException(400, "Candidate has an active assignment")
         candidate.status = CandidateStatus.ARCHIVED
@@ -332,10 +332,7 @@ class RecruitmentService:
         queryset = queryset.annotate(
             active_assignment_count=Count(
                 "candidateassignment",
-                filter=Q(candidateassignment__status__in=[
-                    AssignmentStatus.PENDING_SCREEN,
-                    AssignmentStatus.SCREEN_PASSED,
-                ]),
+                filter=Q(candidateassignment__status__in=ACTIVE_ASSIGNMENT_STATUSES),
             )
         )
         total = queryset.count()

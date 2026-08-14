@@ -58,8 +58,9 @@
         <el-table-column label="状态" width="100">
           <template #default="{ row }"><el-tag :type="row.status === 'ACTIVE' ? 'success' : 'info'">{{ row.status === 'ACTIVE' ? '在库' : '已归档' }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="操作" width="320" fixed="right">
+        <el-table-column label="操作" width="380" fixed="right">
           <template #default="{ row }">
+            <el-button link type="primary" @click="openCandidateDetail(row)">详情</el-button>
             <el-button v-if="isWorkspaceManage" link type="primary" @click="openCandidateDialog(row)">编辑</el-button>
             <el-button link type="primary" :disabled="row.status !== 'ACTIVE'" @click="openAssignmentDialog(row)">加入职位</el-button>
             <el-button v-if="isWorkspaceManage" link type="danger" :disabled="row.status !== 'ACTIVE'" @click="archive(row)">归档</el-button>
@@ -90,6 +91,45 @@
         <el-form-item label="备注"><el-input v-model="candidateForm.note" type="textarea" :rows="3" maxlength="4096" show-word-limit /></el-form-item>
       </el-form>
       <template #footer><el-button @click="candidateDialogVisible = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveCandidate">保存</el-button></template>
+    </el-dialog>
+
+    <el-dialog v-model="candidateDetailVisible" title="候选人详情" width="640px">
+      <el-descriptions :column="2" border>
+        <el-descriptions-item label="姓名">{{ candidateDetail?.name }}</el-descriptions-item>
+        <el-descriptions-item label="状态">
+          <el-tag :type="candidateDetail?.status === 'ACTIVE' ? 'success' : 'info'" size="small">{{ candidateDetail?.status === 'ACTIVE' ? '在库' : '已归档' }}</el-tag>
+        </el-descriptions-item>
+        <el-descriptions-item label="邮箱">{{ candidateDetail?.email || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="手机号">{{ candidateDetail?.phone || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="当前城市">{{ candidateDetail?.current_city || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="目标城市">{{ candidateDetail?.target_city || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="最高学历">{{ candidateDetail?.highest_degree || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="工作年限">{{ candidateDetail?.years_experience == null ? '-' : `${candidateDetail.years_experience} 年` }}</el-descriptions-item>
+        <el-descriptions-item label="来源">{{ candidateDetail?.source || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="创建时间">{{ candidateDetail ? new Date(candidateDetail.create_time).toLocaleString() : '-' }}</el-descriptions-item>
+        <el-descriptions-item label="更新时间">{{ candidateDetail ? new Date(candidateDetail.update_time).toLocaleString() : '-' }}</el-descriptions-item>
+        <el-descriptions-item label="技能" :span="2">
+          <template v-if="candidateDetail?.skills?.length">
+            <el-tag v-for="skill in candidateDetail.skills" :key="skill" size="small" class="mr-8 mb-8">{{ skill }}</el-tag>
+          </template>
+          <span v-else>-</span>
+        </el-descriptions-item>
+        <el-descriptions-item label="备注" :span="2">{{ candidateDetail?.note || '-' }}</el-descriptions-item>
+      </el-descriptions>
+      <div class="mt-16">
+        <div class="mb-8 color-secondary">关联职位</div>
+        <el-empty v-if="!candidateDetail?.assignments?.length" description="暂无关联职位" />
+        <el-table v-else :data="candidateDetail.assignments" size="small">
+          <el-table-column prop="job_name" label="职位" min-width="140" />
+          <el-table-column label="指派状态" width="120">
+            <template #default="{ row }">
+              <el-tag :type="assignmentTagType(row.status)" size="small">{{ assignmentStatusLabels[row.status] || row.status }}</el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="note" label="备注" show-overflow-tooltip />
+        </el-table>
+      </div>
+      <template #footer><el-button @click="candidateDetailVisible = false">关闭</el-button></template>
     </el-dialog>
 
     <el-dialog v-model="uploadDialogVisible" title="上传简历" width="520px">
@@ -179,7 +219,7 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import AppTable from '@/components/app-table/index.vue'
 import AiSettingDialog from '@/views/hr/components/AiSettingDialog.vue'
 import HrApi from '@/api/hr/recruitment'
-import type { Candidate, Job, ResumeFile, ResumeUploadResult } from '@/api/type/hr'
+import type { Candidate, CandidateDetail, Job, ResumeFile, ResumeUploadResult } from '@/api/type/hr'
 import { MsgConfirm, MsgError, MsgSuccess } from '@/utils/message'
 import { hasPermission } from '@/utils/permission'
 import { RoleConst } from '@/utils/permission/data'
@@ -190,6 +230,16 @@ const channelLabels: Record<string, string> = {
   HEADHUNTER: '猎头',
   CAMPUS: '校园',
   OTHER: '其他',
+}
+
+const assignmentStatusLabels: Record<string, string> = {
+  PENDING_SCREEN: '待筛选',
+  SCREEN_PASSED: '筛选通过',
+  INTERVIEWING: '面试中',
+  OFFER: 'Offer 中',
+  HIRED: '已入职',
+  REJECTED: '已淘汰',
+  CLOSED: '已关闭',
 }
 
 const loading = ref(false)
@@ -239,6 +289,23 @@ function openCandidateDialog(candidate?: Candidate) {
   editingCandidate.value = candidate || null
   resetCandidateForm(candidate)
   candidateDialogVisible.value = true
+}
+
+const candidateDetailVisible = ref(false)
+const candidateDetail = ref<CandidateDetail | null>(null)
+
+function openCandidateDetail(candidate: Candidate) {
+  candidateDetail.value = null
+  candidateDetailVisible.value = true
+  HrApi.getCandidate(candidate.id).then((response) => {
+    candidateDetail.value = response.data
+  })
+}
+
+function assignmentTagType(status: string) {
+  if (status === 'HIRED') return 'success'
+  if (status === 'REJECTED' || status === 'CLOSED') return 'info'
+  return 'primary'
 }
 
 function loadCandidates() {
