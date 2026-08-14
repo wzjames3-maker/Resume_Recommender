@@ -65,6 +65,13 @@ class CandidateDetailAPI(APIView):
         def put(self, request, workspace_id, candidate_id):
             return result.success(_service(request, workspace_id).archive_candidate(candidate_id))
 
+    class Merge(APIView):
+        authentication_classes = [TokenAuth]
+
+        @manage_required
+        def post(self, request, workspace_id, candidate_id):
+            return result.success(_service(request, workspace_id).merge_candidates(candidate_id, request.data))
+
 
 class CandidateCheckDuplicateAPI(APIView):
     authentication_classes = [TokenAuth]

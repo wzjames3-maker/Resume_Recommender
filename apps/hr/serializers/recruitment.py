@@ -600,6 +600,48 @@ class RecruitmentService:
             ]
         }
 
+    def merge_candidates(self, primary_id, data):
+        self._require_manage()
+        secondary_id = data.get("secondary_id")
+        if not isinstance(secondary_id, str) or not secondary_id.strip():
+            raise AppApiException(400, "secondary_id is required")
+        primary = self._candidate(primary_id)
+        secondary = self._candidate(secondary_id)
+        if primary.id == secondary.id:
+            raise AppApiException(400, "不能与自己合并")
+        primary_jobs = set(
+            CandidateAssignment.objects.filter(candidate=primary, status__in=ACTIVE_ASSIGNMENT_STATUSES)
+            .values_list("job_id", flat=True)
+        )
+        if CandidateAssignment.objects.filter(
+            candidate=secondary, status__in=ACTIVE_ASSIGNMENT_STATUSES, job_id__in=primary_jobs
+        ).exists():
+            raise AppApiException(400, "存在与主候选人冲突的有效指派，请先调整")
+        with transaction.atomic():
+            if not primary.name:
+                primary.name = secondary.name
+            if not primary.email:
+                primary.email = secondary.email
+            if not primary.phone:
+                primary.phone = secondary.phone
+            if not primary.current_city:
+                primary.current_city = secondary.current_city
+            if not primary.target_city:
+                primary.target_city = secondary.target_city
+            if not primary.highest_degree:
+                primary.highest_degree = secondary.highest_degree
+            if primary.years_experience is None:
+                primary.years_experience = secondary.years_experience
+            if not primary.source:
+                primary.source = secondary.source
+            primary.skills = primary.skills + [skill for skill in secondary.skills if skill not in primary.skills]
+            primary.note = "\n".join(part for part in [primary.note, secondary.note] if part)
+            primary.save()
+            ResumeFile.objects.filter(candidate=secondary).update(candidate=primary)
+            CandidateAssignment.objects.filter(candidate=secondary).update(candidate=primary)
+            secondary.delete()
+        return self.get_candidate(primary_id)
+
     def batch_resume_status(self, resume_ids):
         try:
             cleaned_ids = [uuid.UUID(item) for item in resume_ids]

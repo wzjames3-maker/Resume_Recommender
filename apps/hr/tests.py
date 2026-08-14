@@ -811,3 +811,82 @@ class DuplicateDetectionTests(TestCase):
     def test_check_duplicate_empty_returns_empty(self):
         result = self.service.check_duplicate({})
         self.assertEqual(result["candidates"], [])
+
+
+class CandidateMergeTests(TestCase):
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=True)
+        self.primary = Candidate.objects.create(
+            name="Alice", workspace_id="workspace-a", phone="13800000001", skills=["Python"],
+        )
+        self.secondary = Candidate.objects.create(
+            name="Alice Wang", workspace_id="workspace-a", email="alice@example.com",
+            current_city="上海", years_experience=5, skills=["Python", "Django"], note="从简历解析",
+        )
+
+    def test_merge_fills_missing_fields_and_unions_skills(self):
+        result = self.service.merge_candidates(str(self.primary.id), {"secondary_id": str(self.secondary.id)})
+        self.assertEqual(result["name"], "Alice")
+        self.assertEqual(result["email"], "alice@example.com")
+        self.assertEqual(result["current_city"], "上海")
+        self.assertEqual(result["years_experience"], 5)
+        self.assertEqual(result["skills"], ["Python", "Django"])
+        self.assertIn("从简历解析", result["note"])
+        self.assertFalse(Candidate.objects.filter(id=self.secondary.id).exists())
+
+    def test_merge_migrates_resumes_and_assignments(self):
+        job = Job.objects.create(name="Engineer", workspace_id="workspace-a", headcount=1)
+        resume = ResumeFile.objects.create(
+            workspace_id="workspace-a", file_name="r.txt", extension="txt",
+            file_path="/tmp/r.txt", file_size=1, sha256="sha-" + uuid.uuid7().hex,
+            candidate=self.secondary,
+        )
+        assignment_id = self.service.create_assignment(job.id, self.secondary.id, {})["id"]
+        interview = Interview.objects.create(workspace_id="workspace-a", assignment_id=assignment_id, round_no=1)
+        self.service.merge_candidates(str(self.primary.id), {"secondary_id": str(self.secondary.id)})
+        resume.refresh_from_db()
+        self.assertEqual(resume.candidate_id, self.primary.id)
+        assignment = CandidateAssignment.objects.get(id=assignment_id)
+        self.assertEqual(assignment.candidate_id, self.primary.id)
+        interview.refresh_from_db()
+        self.assertEqual(str(interview.assignment_id), assignment_id)
+
+    def test_merge_rejects_conflicting_active_assignment(self):
+        job = Job.objects.create(name="Engineer", workspace_id="workspace-a", headcount=2)
+        self.service.create_assignment(job.id, self.primary.id, {})
+        self.service.create_assignment(job.id, self.secondary.id, {})
+        with self.assertRaisesRegex(AppApiException, "冲突"):
+            self.service.merge_candidates(str(self.primary.id), {"secondary_id": str(self.secondary.id)})
+
+    def test_merge_allows_different_job_active_assignments(self):
+        job_a = Job.objects.create(name="Engineer A", workspace_id="workspace-a", headcount=1)
+        job_b = Job.objects.create(name="Engineer B", workspace_id="workspace-a", headcount=1)
+        self.service.create_assignment(job_a.id, self.primary.id, {})
+        self.service.create_assignment(job_b.id, self.secondary.id, {})
+        self.service.merge_candidates(str(self.primary.id), {"secondary_id": str(self.secondary.id)})
+        self.assertFalse(Candidate.objects.filter(id=self.secondary.id).exists())
+
+    def test_merge_rejects_self(self):
+        with self.assertRaisesRegex(AppApiException, "自己"):
+            self.service.merge_candidates(str(self.primary.id), {"secondary_id": str(self.primary.id)})
+
+    def test_merge_cross_workspace_raises_404(self):
+        foreign = Candidate.objects.create(name="Dave", workspace_id="workspace-b")
+        with self.assertRaises(NotFound404):
+            self.service.merge_candidates(str(self.primary.id), {"secondary_id": str(foreign.id)})
+
+    def test_merge_requires_manage(self):
+        member_service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=False)
+        with self.assertRaises(AppUnauthorizedFailed):
+            member_service.merge_candidates(str(self.primary.id), {"secondary_id": str(self.secondary.id)})
+
+    def test_merge_secondary_id_required(self):
+        with self.assertRaisesRegex(AppApiException, "secondary_id is required"):
+            self.service.merge_candidates(str(self.primary.id), {})
+
+    def test_merge_archived_secondary_allowed(self):
+        self.secondary.status = "ARCHIVED"
+        self.secondary.save(update_fields=["status"])
+        self.service.merge_candidates(str(self.primary.id), {"secondary_id": str(self.secondary.id)})
+        self.assertFalse(Candidate.objects.filter(id=self.secondary.id).exists())
