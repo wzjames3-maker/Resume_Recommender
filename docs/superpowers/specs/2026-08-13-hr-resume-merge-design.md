@@ -36,7 +36,7 @@ HR 模块已完成简历上传与异步解析，但候选人简历无法查看/�
 
 - 候选人操作列新增「简历」按钮（`@member_required` 可见，与「加入职位」同权限）→ dialog：
   - 调 `list_candidate_resumes(candidate_id)` 展示列表（file_name、extension、file_size、状态、时间）。
-  - 每行「查看」→ content dialog（`<pre>` 展示文本）；「下载」→ 触发浏览器下载（`window.open` 或 a 标签指向 download URL；项目内其他下载先例以实际为准，实现时确认）。
+  - 每行「查看」→ content dialog（`<pre>` 展示文本）；「下载」→ axios blob 获取 + 触发浏览器保存（`TokenAuth` 为 header 认证，不能 `window.open`/a 标签直接跳转；实现时确认项目既有 blob 下载先例，若无可按 axios responseType: 'blob' + Blob URL + 临时 a[download] 点击实现）。
 
 ## 2. 重复检测
 
@@ -49,7 +49,10 @@ HR 模块已完成简历上传与异步解析，但候选人简历无法查看/�
 ### 2.2 列表标记（`page_candidates` 扩展）
 
 - 返回每条记录追加 `duplicate_ids: [str, ...]`（按 2.1 规则命中其他候选人的 id 列表）。
-- 实现：对当前页候选人的非空 phone 集合与 email 集合各做一次查询：`filter(workspace_id=..., phone__in=phones)`（精确等值分组）+ `filter(workspace_id=..., email__in=emails)`（精确查询后 Python 侧按 lowercase 归组，兼容录入时大小写差异）。汇总去重后得 duplicate_ids（排除自身）。
+- 实现：对当前页候选人（≤100 条）：
+  - phone：一次查询 `filter(workspace_id=..., phone__in=phones)` 精确分组。
+  - email：逐值 `filter(workspace_id=..., email__iexact=email)` 查询归组（≤100 条索引查询，语义精确兼容大小写差异；避免精确 `email__in` 漏检大小写变体）。
+  - 汇总去重（排除自身）后得 duplicate_ids。
 - 空列表时返回 `[]`。
 
 ### 2.3 编辑查重 `POST /workspace/{wid}/hr/candidates/check-duplicate`
