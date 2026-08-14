@@ -119,6 +119,14 @@ export interface HrConfig {
   llm_model_id: string | null
 }
 
+export interface ResumeBatchStatus {
+  resume_id: string
+  file_name: string
+  status: 'PENDING' | 'SUCCESS' | 'FAILED'
+  candidate_id: string | null
+  error_message: string
+}
+
 export interface AiConditions {
   skills: string[]
   city: string | null

@@ -11,6 +11,7 @@ import type {
   JobDetail,
   JobMatchPage,
   PageResult,
+  ResumeBatchStatus,
   ResumeFile,
   ResumeUploadResult,
 } from '@/api/type/hr'
@@ -91,6 +92,9 @@ const parseSearch = (query: string) =>
 const extractSkills = (description: string) =>
   post(`${prefix.value}/ai/extract-skills`, { description }) as Promise<Result<{ skills: string[] }>>
 
+const getResumeBatchStatus = (ids: string[]) =>
+  get(`${prefix.value}/resumes/batch-status`, { ids: ids.join(',') }) as Promise<Result<ResumeBatchStatus[]>>
+
 export default {
   archiveCandidate,
   createAssignment,
@@ -107,6 +111,7 @@ export default {
   getJob,
   getJobMatches,
   getJobs,
+  getResumeBatchStatus,
   parseSearch,
   putAiConfig,
   updateAssignment,
