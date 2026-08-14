@@ -48,14 +48,23 @@
         <el-table-column label="技能" min-width="180" show-overflow-tooltip>
           <template #default="{ row }">{{ row.skills.join('、') || '-' }}</template>
         </el-table-column>
+        <el-table-column label="重复" width="110">
+          <template #default="{ row }">
+            <el-tooltip v-if="row.duplicate_ids?.length" :content="`与 ${row.duplicate_ids.length} 名候选人重复`" placement="top">
+              <el-tag type="warning" size="small">疑似重复</el-tag>
+            </el-tooltip>
+          </template>
+        </el-table-column>
         <el-table-column label="状态" width="100">
           <template #default="{ row }"><el-tag :type="row.status === 'ACTIVE' ? 'success' : 'info'">{{ row.status === 'ACTIVE' ? '在库' : '已归档' }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="操作" width="240" fixed="right">
+        <el-table-column label="操作" width="320" fixed="right">
           <template #default="{ row }">
             <el-button v-if="isWorkspaceManage" link type="primary" @click="openCandidateDialog(row)">编辑</el-button>
             <el-button link type="primary" :disabled="row.status !== 'ACTIVE'" @click="openAssignmentDialog(row)">加入职位</el-button>
             <el-button v-if="isWorkspaceManage" link type="danger" :disabled="row.status !== 'ACTIVE'" @click="archive(row)">归档</el-button>
+            <el-button link type="primary" @click="openResumeListDialog(row)">简历</el-button>
+            <el-button v-if="isWorkspaceManage" link type="danger" :disabled="!row.duplicate_ids?.length" @click="openMergeDialog(row)">合并</el-button>
           </template>
         </el-table-column>
       </AppTable>
@@ -118,6 +127,49 @@
       <template #footer><el-button @click="assignmentDialogVisible = false">取消</el-button><el-button type="primary" :disabled="!selectedJobId" :loading="saving" @click="createAssignment">确认加入</el-button></template>
     </el-dialog>
 
+    <el-dialog v-model="resumeListVisible" title="简历" width="620px">
+      <el-table :data="candidateResumes" size="small">
+        <el-table-column prop="file_name" label="文件名" min-width="160" />
+        <el-table-column prop="file_size" label="大小" width="90">
+          <template #default="{ row }">{{ (row.file_size / 1024).toFixed(1) }} KB</template>
+        </el-table-column>
+        <el-table-column label="状态" width="90">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 'SUCCESS' ? 'success' : row.status === 'FAILED' ? 'danger' : 'info'" size="small">
+              {{ row.status === 'SUCCESS' ? '成功' : row.status === 'FAILED' ? '失败' : '解析中' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column prop="create_time" label="上传时间" min-width="150">
+          <template #default="{ row }">{{ new Date(row.create_time).toLocaleString() }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="130">
+          <template #default="{ row }">
+            <el-button link type="primary" size="small" :disabled="row.status !== 'SUCCESS'" @click="viewResumeContent(row)">查看</el-button>
+            <el-button link type="primary" size="small" @click="downloadResumeFile(row)">下载</el-button>
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer><el-button @click="resumeListVisible = false">关闭</el-button></template>
+    </el-dialog>
+
+    <el-dialog v-model="resumeContentVisible" title="简历原文" width="640px">
+      <pre class="resume-content">{{ resumeContent }}</pre>
+    </el-dialog>
+
+    <el-dialog v-model="mergeDialogVisible" title="合并候选人" width="480px">
+      <el-form label-width="96px">
+        <el-form-item label="主候选人"><span>{{ mergingCandidate?.name }}</span></el-form-item>
+        <el-form-item label="目标候选人">
+          <el-select v-model="mergeTargetId" filterable placeholder="选择要合并进来的候选人" style="width: 100%">
+            <el-option v-for="c in mergeCandidatesList" :key="c.id" :label="`${c.name}${c.phone ? ` · ${c.phone}` : ''}`" :value="c.id" />
+          </el-select>
+        </el-form-item>
+        <div class="color-secondary">合并后目标候选人的简历与指派将迁移至主候选人，目标候选人被删除；存在冲突有效指派时将被拒绝。</div>
+      </el-form>
+      <template #footer><el-button @click="mergeDialogVisible = false">取消</el-button><el-button type="primary" :disabled="!mergeTargetId" :loading="saving" @click="confirmMerge">确认合并</el-button></template>
+    </el-dialog>
+
     <AiSettingDialog v-model="aiSettingVisible" />
   </div>
 </template>
@@ -127,7 +179,7 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import AppTable from '@/components/app-table/index.vue'
 import AiSettingDialog from '@/views/hr/components/AiSettingDialog.vue'
 import HrApi from '@/api/hr/recruitment'
-import type { Candidate, Job, ResumeUploadResult } from '@/api/type/hr'
+import type { Candidate, Job, ResumeFile, ResumeUploadResult } from '@/api/type/hr'
 import { MsgConfirm, MsgError, MsgSuccess } from '@/utils/message'
 import { hasPermission } from '@/utils/permission'
 import { RoleConst } from '@/utils/permission/data'
@@ -227,8 +279,22 @@ function aiSearch() {
 
 function saveCandidate() {
   if (!candidateForm.name.trim()) return
-  saving.value = true
   const data = { ...candidateForm, skills: skillsText.value.split(',').map((skill) => skill.trim()).filter(Boolean) }
+  HrApi.checkDuplicate({ phone: candidateForm.phone, email: candidateForm.email, exclude_id: editingCandidate.value?.id || '' })
+    .then((response) => {
+      if (response.data.candidates.length > 0) {
+        MsgConfirm('发现疑似重复候选人', `有 ${response.data.candidates.length} 名候选人手机号或邮箱相同，是否继续保存？`, { type: 'warning' })
+          .then(() => doSaveCandidate(data))
+          .catch(() => {})
+      } else {
+        doSaveCandidate(data)
+      }
+    })
+    .catch(() => {})
+}
+
+function doSaveCandidate(data: Record<string, unknown>) {
+  saving.value = true
   const request = editingCandidate.value
     ? HrApi.updateCandidate(editingCandidate.value.id, data)
     : HrApi.createCandidate(data)
@@ -329,6 +395,59 @@ function stopResumePolling() {
   }
 }
 
+const resumeListVisible = ref(false)
+const candidateResumes = ref<ResumeFile[]>([])
+const resumeContentVisible = ref(false)
+const resumeContent = ref('')
+const mergingCandidate = ref<Candidate | null>(null)
+const mergeDialogVisible = ref(false)
+const mergeTargetId = ref('')
+const mergeCandidatesList = ref<Candidate[]>([])
+
+function openResumeListDialog(candidate: Candidate) {
+  candidateResumes.value = []
+  resumeListVisible.value = true
+  HrApi.getCandidateResumes(candidate.id).then((response) => {
+    candidateResumes.value = response.data
+  })
+}
+
+function viewResumeContent(resume: ResumeFile) {
+  resumeContent.value = ''
+  resumeContentVisible.value = true
+  HrApi.getResumeContent(resume.id).then((response) => {
+    resumeContent.value = response.data.content
+  })
+}
+
+function downloadResumeFile(resume: ResumeFile) {
+  HrApi.downloadResume(resume.id, resume.file_name)
+}
+
+function openMergeDialog(candidate: Candidate) {
+  mergingCandidate.value = candidate
+  mergeTargetId.value = ''
+  HrApi.getCandidates({ current_page: 1, page_size: 100 }, { status: '' }).then((response) => {
+    mergeCandidatesList.value = response.data.records.filter((item) => item.id !== candidate.id)
+    mergeDialogVisible.value = true
+  })
+}
+
+function confirmMerge() {
+  if (!mergingCandidate.value || !mergeTargetId.value) return
+  saving.value = true
+  HrApi.mergeCandidates(mergingCandidate.value.id, mergeTargetId.value)
+    .then(() => {
+      mergeDialogVisible.value = false
+      MsgSuccess('候选人已合并')
+      refresh()
+    })
+    .catch(() => {})
+    .finally(() => {
+      saving.value = false
+    })
+}
+
 onMounted(loadCandidates)
 watch(uploadDialogVisible, (visible) => {
   if (!visible) stopResumePolling()
@@ -342,4 +461,11 @@ onUnmounted(stopResumePolling)
 .gap-12 { gap: 12px; }
 .hidden-input { display: none; }
 .upload-result { padding: 6px 0; }
+.resume-content {
+  white-space: pre-wrap;
+  word-break: break-all;
+  max-height: 480px;
+  overflow-y: auto;
+  margin: 0;
+}
 </style>
