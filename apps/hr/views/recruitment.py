@@ -9,6 +9,7 @@ from common import result
 from common.auth import TokenAuth
 from common.auth.authentication import has_permissions
 from common.constants.permission_constants import RoleConstants
+from common.exception.app_exception import AppApiException
 from hr.serializers.recruitment import RecruitmentService
 from users.serializers.user import is_workspace_manage
 
@@ -170,3 +171,17 @@ class InterviewDetailAPI(APIView):
     @member_required
     def put(self, request, workspace_id, interview_id):
         return result.success(_service(request, workspace_id).update_interview(interview_id, request.data))
+
+
+class ResumeBatchStatusAPI(APIView):
+    authentication_classes = [TokenAuth]
+
+    @member_required
+    def get(self, request, workspace_id):
+        ids_param = request.query_params.get("ids", "")
+        resume_ids = [item.strip() for item in ids_param.split(",") if item.strip()]
+        if not resume_ids:
+            raise AppApiException(400, "ids is required")
+        if len(resume_ids) > 200:
+            raise AppApiException(400, "too many ids")
+        return result.success(_service(request, workspace_id).batch_resume_status(resume_ids))

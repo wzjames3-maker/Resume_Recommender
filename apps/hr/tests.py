@@ -660,3 +660,39 @@ class ResumeParseTaskTests(TestCase):
 
     def test_task_ignores_missing_resume(self):
         parse_resume_task.run(str(uuid.uuid7()))
+
+
+class ResumeBatchStatusTests(TestCase):
+    def setUp(self):
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=uuid.uuid7(), is_workspace_manage=True)
+
+    def _resume(self, status="PENDING"):
+        return ResumeFile.objects.create(
+            workspace_id="workspace-a", file_name="r.txt", extension="txt",
+            file_path="/tmp/r.txt", file_size=1, sha256="sha-" + uuid.uuid7().hex,
+            source_channel="OTHER", status=status,
+        )
+
+    def test_batch_status_returns_only_existing(self):
+        r1 = self._resume()
+        r2 = self._resume("FAILED")
+        result = self.service.batch_resume_status([str(r1.id), str(r2.id), str(uuid.uuid7())])
+        self.assertEqual(len(result), 2)
+        by_id = {item["resume_id"]: item for item in result}
+        self.assertEqual(by_id[str(r1.id)]["status"], "PENDING")
+        self.assertEqual(by_id[str(r2.id)]["status"], "FAILED")
+        self.assertEqual(by_id[str(r2.id)]["error_message"], "")
+
+    def test_batch_status_filters_by_workspace(self):
+        foreign = ResumeFile.objects.create(
+            workspace_id="workspace-b", file_name="f.txt", extension="txt",
+            file_path="/tmp/f.txt", file_size=1, sha256="sha-" + uuid.uuid7().hex,
+        )
+        result = self.service.batch_resume_status([str(foreign.id)])
+        self.assertEqual(result, [])
+
+
+class ResumeBatchStatusRouteTests(TestCase):
+    def test_route_is_registered_and_protected(self):
+        response = self.client.get("/admin/api/workspace/workspace-a/hr/resumes/batch-status?ids=a")
+        self.assertIn(response.status_code, (401, 403))

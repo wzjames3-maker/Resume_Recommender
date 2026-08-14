@@ -524,6 +524,19 @@ class RecruitmentService:
         resume.delete()
         return True
 
+    def batch_resume_status(self, resume_ids):
+        resumes = ResumeFile.objects.filter(workspace_id=self.workspace_id, id__in=resume_ids)
+        return [
+            {
+                "resume_id": str(resume.id),
+                "file_name": resume.file_name,
+                "status": resume.status,
+                "candidate_id": str(resume.candidate_id) if resume.candidate_id else None,
+                "error_message": resume.error_message,
+            }
+            for resume in resumes
+        ]
+
     def match_job_candidates(self, job_id, current_page, page_size):
         job = self._job(job_id)
         if job.status != JobStatus.OPEN:

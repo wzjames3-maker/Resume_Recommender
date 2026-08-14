@@ -8,6 +8,7 @@ from .recruitment import (
     JobDetailAPI,
     JobMatchAPI,
     ResumeAPI,
+    ResumeBatchStatusAPI,
     ResumeDetailAPI,
     ResumeListAPI,
 )
@@ -23,6 +24,7 @@ __all__ = [
     "JobDetailAPI",
     "JobMatchAPI",
     "ResumeAPI",
+    "ResumeBatchStatusAPI",
     "ResumeDetailAPI",
     "ResumeListAPI",
     "HrAIConfigAPI",
