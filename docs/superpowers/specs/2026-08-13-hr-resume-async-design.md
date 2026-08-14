@@ -29,10 +29,9 @@ def parse_resume_task(resume_id):
 1. 取 `ResumeFile`（按 id；不存在则直接返回，不抛错）。
 2. 按 `extension` 提取文本（docx → `extract_text_from_docx`，txt → `extract_text_from_txt`）。
 3. `parse_resume_text(text)` 解析。
-4. 创建 `Candidate`（name 兜底 `file_name`、skills/source/note 等回填，与现状 `upload_resumes` 的建人逻辑一致；`source` 取 `ResumeFile.source_channel`）。
-5. 更新 `ResumeFile`：`status=SUCCESS`、关联 `candidate`、清空 `error_message`。
-6. 任何异常（提取/解析/建库）：更新 `ResumeFile` `status=FAILED` + `error_message=str(exc)`；**不自动重试**（用户可删除后重新上传）。
-7. 任务内不打印堆栈到响应，错误信息写入 `error_message`。
+4. 在 `transaction.atomic` 内：创建 `Candidate`（name 兜底 `file_name`、skills/source/note 等回填，与现状 `upload_resumes` 的建人逻辑一致；`source` 取 `ResumeFile.source_channel`；`user_id` 取 `ResumeFile.user_id`）→ 更新 `ResumeFile`：`status=SUCCESS`、关联 `candidate`、清空 `error_message`。原子性保证不产生「已建候选人但简历未标记成功」的孤儿状态。
+5. 任何异常（提取/解析/建库）：更新 `ResumeFile` `status=FAILED` + `error_message=str(exc)`；**不自动重试**（用户可删除后重新上传）。若异常发生在更新 `ResumeFile` 自身时（DB 级故障），任务抛出由 Celery 记录失败，不做额外处理。
+6. 任务内不打印堆栈到响应，错误信息写入 `error_message`。
 
 ### 1.3 与既有服务的关系
 
@@ -51,13 +50,14 @@ def parse_resume_task(resume_id):
    - 派发失败（delay 抛其他异常）：将 `ResumeFile` 置为 `FAILED` + `error_message`，records 中该条返回 `status=FAILED` + `error_message`（不抛错，不让整个上传失败）。
 5. 返回 records：新文件 `status=PENDING`、`duplicate=False`、`candidate_id=None`；duplicate 记录同现状。
 6. `RecruitmentService.upload_resumes` 的签名与返回结构保持兼容（records 列表字段不变），解析与建人逻辑移除。
+7. **已知限制（与现状一致）**：并发上传同一文件可能同时通过查重并各自建候选人（sha256 唯一约束未在模型层实施）；属既有行为，六期不处理。
 
 ## 3. 状态查询接口
 
 ### 3.1 `GET /workspace/{wid}/hr/resumes/batch-status?ids=a,b,c`
 
 - `@member_required`，`authentication_classes = [TokenAuth]`。
-- `ids` 必填，逗号分隔；空或非法格式 → 400「ids is required」。
+- `ids` 必填，逗号分隔；空或非法格式 → 400「ids is required」；**超过 200 个 → 400「too many ids」**。
 - 查询 `ResumeFile`（按 id，限制在工作区）；**不存在的 id 直接忽略**，仅返回存在记录的列表。
 - 返回 `[{resume_id, file_name, status, candidate_id, error_message}]`。
   - **不返回 `duplicate` 字段**（现状未持久化该信息）；前端「重复」提示沿用上传时同步返回的 duplicate 记录（不进入轮询）。
@@ -75,6 +75,7 @@ def parse_resume_task(resume_id):
      - 全部终态或 60s 超时 → `clearInterval` 停止轮询。
      - 对话框关闭（`uploadDialogVisible` 变 false）→ 停止轮询。
   3. 轮询中/结束后的候选人列表刷新：**全部结束后** `refresh()` 一次（避免每轮都刷新）。
+  4. 停止条件：全部终态、60s 超时、对话框关闭（`uploadDialogVisible` 变 false）、**组件卸载（`onUnmounted`）**——四者任一即 `clearInterval`。
 - `ui/src/api/hr/recruitment.ts` 追加 `getResumeBatchStatus(ids: string[])`；`ui/src/api/type/hr.ts` 追加 `ResumeBatchStatus` 类型（可选）。
 - 复用现有 `uploadResults` 展示区与「继续上传」按钮；上传对话框标题/说明提示异步解析。
 
@@ -99,7 +100,11 @@ def parse_resume_task(resume_id):
 - 多 id 混合（存在/不存在）→ 仅返回存在记录。
 - 空 ids / 缺参 → 400。
 
-### 5.4 回归与构建
+### 5.4 既有测试适配
+
+- `ResumeServiceTests` 中断言 `upload_resumes` 同步建候选人/SUCCESS/FAILED 的用例需改造：解析与建人断言迁移到任务函数测试（5.1），`upload_resumes` 仅保留校验/查重/落库 PENDING 断言。
+
+### 5.5 回归与构建
 
 - `manage.py test hr.tests application.tests knowledge.tests models_provider.tests --keepdb`：原 76 项 + 新增全过。
 - `manage.py check`、`makemigrations --check --dry-run`。
