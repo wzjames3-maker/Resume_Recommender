@@ -136,6 +136,16 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
 - 检查：`manage.py check` 无问题；`makemigrations --check --dry-run` 无变更。
 - 前端：简历对话框、重复标记、合并对话框可构建；`vue-tsc`、管理端和聊天端 Vite 构建均 PASS。
 
+## 人事 A 阶段验收（生产基础补齐，2026-08-14）
+
+- 流程模型：职位支持草稿/暂停/关闭（原因）、负责人；关联支持渠道、关系类型、进入日期、负责人、终止原因、候选人退出；状态迁移矩阵服务端强制，终态必填原因，误拒绝仅管理员恢复，关闭职位批量收尾。
+- 访问控制：HR 模块显式授权（查看者/操作员/管理员），查看者联系方式脱敏，未授权 403 并审计；人事成员与审计日志页面。
+- 审计与生命周期：操作审计事件表（查看/创建/流转/简历/合并/导出/授权/越权）；候选人删除匿名化（PII 清空、简历联动删除）；未关联简历 30 天 TTL 每日清理；受控字段白名单 CSV 导出（不含联系方式）。
+- 测试：`hr.tests application.tests knowledge.tests models_provider.tests`，227/227 PASS（keepdb 稳定）。
+- 检查：`manage.py check` 无问题；`makemigrations --check --dry-run` 无变更；`migrate --check` 无未应用迁移。
+- 前端：人事成员/审计日志页面与角色化渲染、合规字段/删除/导出可构建；`vue-tsc`、管理端和聊天端 Vite 构建均 PASS。
+- 部署验证项：Celery beat 真实调度、对象存储权限、TLS/静态加密、日志脱敏、备份与租户注销流程见 `docs/superpowers/audits/2026-08-14-hr-production-baseline.md`，须在目标部署环境完成后才可导入真实 PII。
+
 ## 旧版参考
 
 - `references/agentkb/` 是旧版 AgentKB 的固定源码快照，仅用于业务规则、状态机、接口和测试迁移参考。
