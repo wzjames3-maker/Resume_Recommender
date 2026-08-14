@@ -1,4 +1,4 @@
-import { Permission, Role, Edition } from '@/utils/permission/type'
+import { Permission, Role, Edition, HrRole } from '@/utils/permission/type'
 // class Operate(Enum):
 //     """
 //      一个权限组的操作权限
@@ -539,4 +539,9 @@ const EditionConst = {
   IS_EE: new Edition('X-PACK-EE'),
   IS_CE: new Edition('X-PACK-CE'),
 }
-export { PermissionConst, RoleConst, EditionConst }
+const HrRoleConst = {
+  VIEWER: new HrRole('VIEWER'),
+  OPERATOR: new HrRole('OPERATOR'),
+  ADMIN: new HrRole('ADMIN'),
+}
+export { PermissionConst, RoleConst, EditionConst, HrRoleConst }

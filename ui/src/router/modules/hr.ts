@@ -1,4 +1,4 @@
-import { RoleConst } from '@/utils/permission/data'
+import { RoleConst, HrRoleConst } from '@/utils/permission/data'
 
 const hrRouter = {
   path: '/hr',
@@ -25,6 +25,18 @@ const hrRouter = {
       name: 'hr-jobs',
       meta: { title: '职位', activeMenu: '/hr', sameRoute: 'hr' },
       component: () => import('@/views/hr/jobs/index.vue'),
+    },
+    {
+      path: '/hr/access',
+      name: 'hr-access',
+      meta: { title: '人事成员', activeMenu: '/hr', sameRoute: 'hr', permission: [HrRoleConst.ADMIN] },
+      component: () => import('@/views/hr/access/index.vue'),
+    },
+    {
+      path: '/hr/audit-logs',
+      name: 'hr-audit-logs',
+      meta: { title: '审计日志', activeMenu: '/hr', sameRoute: 'hr', permission: [HrRoleConst.ADMIN] },
+      component: () => import('@/views/hr/audit/index.vue'),
     },
   ],
 }

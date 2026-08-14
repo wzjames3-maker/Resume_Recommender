@@ -170,3 +170,53 @@ export interface DuplicateCheckCandidate {
   email: string | null
   current_city: string
 }
+
+export type HrRole = 'VIEWER' | 'OPERATOR' | 'ADMIN'
+
+export interface HrAccessMember {
+  id: string
+  nick_name: string
+  roles: string[]
+  hr_role: HrRole | null
+}
+
+export type HrAuditAction =
+  | 'VIEW_DETAIL'
+  | 'CREATE'
+  | 'UPDATE'
+  | 'ARCHIVE'
+  | 'RESTORE'
+  | 'DELETE'
+  | 'JOB_CLOSE'
+  | 'JOB_REOPEN'
+  | 'ASSIGNMENT_TRANSITION'
+  | 'RESUME_UPLOAD'
+  | 'RESUME_DOWNLOAD'
+  | 'RESUME_DELETE'
+  | 'MERGE'
+  | 'GRANT_ACCESS'
+  | 'REVOKE_ACCESS'
+  | 'EXPORT'
+  | 'ACCESS_DENIED'
+
+export type HrAuditObjectType = 'CANDIDATE' | 'JOB' | 'ASSIGNMENT' | 'RESUME' | 'HR_ACCESS' | 'OTHER'
+export type HrAuditResult = 'SUCCESS' | 'FAILED' | 'DENIED'
+
+export interface HrAuditLog {
+  id: string
+  user_id: string
+  nick_name: string | null
+  action: HrAuditAction
+  object_type: HrAuditObjectType
+  object_id: string
+  result: HrAuditResult
+  detail: string
+  create_time: string
+}
+
+export interface HrAuditLogPage extends PageResult<HrAuditLog> {}
+
+export interface HrAccessSetItem {
+  user_id: string
+  role: HrRole | null
+}

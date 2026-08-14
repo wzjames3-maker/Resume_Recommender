@@ -5,9 +5,9 @@
         <h2>候选人</h2>
         <span class="color-secondary">维护招聘候选人与职位指派</span>
       </div>
-      <el-button type="primary" @click="openCandidateDialog()">新建候选人</el-button>
-      <el-button type="primary" plain @click="openResumeUpload()">上传简历</el-button>
-      <el-button v-if="isWorkspaceManage" plain @click="aiSettingVisible = true">AI 设置</el-button>
+      <el-button v-if="isHrOperator" type="primary" @click="openCandidateDialog()">新建候选人</el-button>
+      <el-button v-if="isHrOperator" type="primary" plain @click="openResumeUpload()">上传简历</el-button>
+      <el-button v-if="isHrAdmin" plain @click="aiSettingVisible = true">AI 设置</el-button>
       <input ref="resumeInputRef" type="file" multiple accept=".docx,.txt" class="hidden-input" @change="handleResumeFiles" />
     </div>
 
@@ -34,8 +34,8 @@
           <el-option label="已归档" value="ARCHIVED" />
         </el-select>
         <el-button :type="filters.owner_id ? 'primary' : 'default'" plain @click="toggleMyCandidates">待我处理</el-button>
-        <el-input v-model="aiQuery" placeholder="AI 搜索：如 找 3 年以上 Python 经验在上海的人" clearable @keyup.enter="aiSearch" style="width: 300px" />
-        <el-button type="primary" plain :loading="aiSearching" @click="aiSearch">AI 搜索</el-button>
+        <el-input v-if="isHrOperator" v-model="aiQuery" placeholder="AI 搜索：如 找 3 年以上 Python 经验在上海的人" clearable @keyup.enter="aiSearch" style="width: 300px" />
+        <el-button v-if="isHrOperator" type="primary" plain :loading="aiSearching" @click="aiSearch">AI 搜索</el-button>
       </div>
 
       <AppTable :data="candidates" :pagination-config="pagination" @change-page="loadCandidates" @size-change="refresh">
@@ -62,11 +62,11 @@
         <el-table-column label="操作" width="380" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="openCandidateDetail(row)">详情</el-button>
-            <el-button v-if="isWorkspaceManage" link type="primary" @click="openCandidateDialog(row)">编辑</el-button>
-            <el-button link type="primary" :disabled="row.status !== 'ACTIVE'" @click="openAssignmentDialog(row)">加入职位</el-button>
-            <el-button v-if="isWorkspaceManage" link type="danger" :disabled="row.status !== 'ACTIVE'" @click="archive(row)">归档</el-button>
+            <el-button v-if="isHrAdmin" link type="primary" @click="openCandidateDialog(row)">编辑</el-button>
+            <el-button v-if="isHrOperator" link type="primary" :disabled="row.status !== 'ACTIVE'" @click="openAssignmentDialog(row)">加入职位</el-button>
+            <el-button v-if="isHrAdmin" link type="danger" :disabled="row.status !== 'ACTIVE'" @click="archive(row)">归档</el-button>
             <el-button link type="primary" @click="openResumeListDialog(row)">简历</el-button>
-            <el-button v-if="isWorkspaceManage" link type="danger" :disabled="!row.duplicate_ids?.length" @click="openMergeDialog(row)">合并</el-button>
+            <el-button v-if="isHrAdmin" link type="danger" :disabled="!row.duplicate_ids?.length" @click="openMergeDialog(row)">合并</el-button>
           </template>
         </el-table-column>
       </AppTable>
@@ -210,8 +210,8 @@
         </el-table-column>
         <el-table-column label="操作" width="130">
           <template #default="{ row }">
-            <el-button link type="primary" size="small" :disabled="row.status !== 'SUCCESS'" @click="viewResumeContent(row)">查看</el-button>
-            <el-button link type="primary" size="small" @click="downloadResumeFile(row)">下载</el-button>
+            <el-button v-if="isHrOperator" link type="primary" size="small" :disabled="row.status !== 'SUCCESS'" @click="viewResumeContent(row)">查看</el-button>
+            <el-button v-if="isHrOperator" link type="primary" size="small" @click="downloadResumeFile(row)">下载</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -248,8 +248,6 @@ import AuthorizationApi from '@/api/system/resource-authorization'
 import type { Candidate, CandidateDetail, Job, RelationType, ResumeChannel, ResumeFile, ResumeUploadResult } from '@/api/type/hr'
 import useStore from '@/stores'
 import { MsgConfirm, MsgError, MsgSuccess } from '@/utils/message'
-import { hasPermission } from '@/utils/permission'
-import { RoleConst } from '@/utils/permission/data'
 
 interface WorkspaceMember {
   id: string
@@ -312,7 +310,8 @@ const assignmentChannel = ref<ResumeChannel>('OTHER')
 const assignmentOwnerId = ref<string | null>(null)
 const skillsText = ref('')
 const { user } = useStore()
-const isWorkspaceManage = computed(() => hasPermission([RoleConst.WORKSPACE_MANAGE.getWorkspaceRole], 'OR'))
+const isHrAdmin = computed(() => user.getHrRole() === 'ADMIN')
+const isHrOperator = computed(() => user.getHrRole() === 'OPERATOR' || user.getHrRole() === 'ADMIN')
 const candidateForm = reactive({
   name: '', email: '', phone: '', current_city: '', target_city: '', highest_degree: '',
   years_experience: null as number | null, source: '', note: '',

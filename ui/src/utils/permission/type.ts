@@ -1,6 +1,6 @@
 import useStore from '@/stores'
 import { useRoute } from 'vue-router'
-export type PF = () => Role | string | Permission | ComplexPermission
+export type PF = () => Role | string | Permission | ComplexPermission | HrRole
 export type CRF = () => Role | string
 export type CPF = () => Permission | string
 /**
@@ -140,5 +140,20 @@ export class Edition {
   }
   toString() {
     return this.edition
+  }
+}
+
+/**
+ * HR 模块角色对象（与工作空间角色独立，来自 HR 授权）
+ */
+export class HrRole {
+  role: string
+
+  constructor(role: string) {
+    this.role = role
+  }
+
+  toString() {
+    return this.role
   }
 }

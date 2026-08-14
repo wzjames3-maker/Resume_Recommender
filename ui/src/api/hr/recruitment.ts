@@ -6,7 +6,13 @@ import type {
   Candidate,
   CandidateDetail,
   DuplicateCheckCandidate,
+  HrAccessMember,
+  HrAccessSetItem,
+  HrAuditAction,
+  HrAuditLogPage,
+  HrAuditObjectType,
   HrConfig,
+  HrRole,
   Interview,
   Job,
   JobCloseReason,
@@ -118,6 +124,23 @@ const checkDuplicate = (data: Record<string, unknown>) =>
 const mergeCandidates = (primaryId: string, secondaryId: string) =>
   post(`${prefix.value}/candidates/${primaryId}/merge`, { secondary_id: secondaryId }) as Promise<Result<CandidateDetail>>
 
+const getAccess = () => get(`${prefix.value}/access`) as Promise<Result<HrAccessMember[]>>
+
+const updateAccess = (items: HrAccessSetItem[]) =>
+  put(`${prefix.value}/access`, { items }) as Promise<Result<HrAccessMember[]>>
+
+const getMyHrRole = () => get(`${prefix.value}/access/me`) as Promise<Result<{ role: HrRole }>>
+
+const getAuditLogs = (params: {
+  current_page: number
+  page_size: number
+  user_id?: string
+  action?: HrAuditAction
+  object_type?: HrAuditObjectType
+  start_time?: string
+  end_time?: string
+}) => get(`${prefix.value}/audit-logs`, params) as Promise<Result<HrAuditLogPage>>
+
 export default {
   archiveCandidate,
   checkDuplicate,
@@ -129,7 +152,9 @@ export default {
   deleteResume,
   downloadResume,
   extractSkills,
+  getAccess,
   getAiConfig,
+  getAuditLogs,
   getCandidate,
   getCandidateResumes,
   getCandidates,
@@ -137,12 +162,14 @@ export default {
   getJob,
   getJobMatches,
   getJobs,
+  getMyHrRole,
   getResumeBatchStatus,
   getResumeContent,
   mergeCandidates,
   parseSearch,
   putAiConfig,
   reopenJob,
+  updateAccess,
   updateAssignment,
   updateCandidate,
   updateInterview,

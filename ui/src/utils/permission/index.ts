@@ -4,6 +4,7 @@ import {
   Permission,
   ComplexPermission,
   Edition,
+  HrRole,
   type PF,
   type CPF,
   type CRF,
@@ -16,7 +17,7 @@ import { isFunction } from '@/utils/common'
  * @returns  True 包含 false 不包含
  */
 const hasPermissionChild = (
-  permission: Role | string | Permission | ComplexPermission | Edition | PF,
+  permission: Role | string | Permission | ComplexPermission | Edition | HrRole | PF,
 ) => {
   const { user } = useStore()
   const permissions = user.getPermissions()
@@ -27,6 +28,9 @@ const hasPermissionChild = (
   }
   if (isFunction(permission)) {
     permission = (permission as PF)()
+  }
+  if (permission instanceof HrRole) {
+    return user.getHrRole() === permission.role
   }
   if (permission instanceof Role) {
     return role.includes(permission.role)
@@ -70,12 +74,13 @@ const hasPermissionChild = (
  */
 export const hasPermission = (
   permission:
-    | Array<Role | string | Permission | ComplexPermission | Edition | PF>
+    | Array<Role | string | Permission | ComplexPermission | Edition | HrRole | PF>
     | Role
     | string
     | Permission
     | Edition
     | ComplexPermission
+    | HrRole
     | PF,
   compare: 'OR' | 'AND',
 ): boolean => {

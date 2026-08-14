@@ -18,6 +18,7 @@ export interface userStateTypes {
   workspace_id: string
   workspace_list: Array<any>,
   rsaKey: string
+  hrRole: string
 }
 
 const useUserStore = defineStore('user', {
@@ -29,6 +30,7 @@ const useUserStore = defineStore('user', {
     workspace_id: '',
     workspace_list: [],
     rsaKey: '',
+    hrRole: '',
   }),
   actions: {
     getLanguage() {
@@ -36,11 +38,27 @@ const useUserStore = defineStore('user', {
     },
     setWorkspaceId(workspace_id: string) {
       this.workspace_id = workspace_id
+      this.hrRole = ''
       localStorage.setItem('workspace_id', workspace_id)
     },
     getWorkspaceId(): string | null {
       this.workspace_id = this.workspace_id || localStorage.getItem('workspace_id') || 'default'
       return this.workspace_id
+    },
+    getHrRole() {
+      return this.hrRole
+    },
+    setHrRole(hrRole: string) {
+      this.hrRole = hrRole
+    },
+    async fetchHrRole() {
+      const HrApi = await import('@/api/hr/recruitment')
+      try {
+        const response = await HrApi.default.getMyHrRole()
+        this.hrRole = response.data.role || ''
+      } catch (e) {
+        this.hrRole = ''
+      }
     },
 
     getPermissions() {
@@ -130,7 +148,7 @@ const useUserStore = defineStore('user', {
           ok?.data?.language || this.getLanguage()
         const theme = useThemeStore()
         theme.setTheme()
-        return this.asyncGetProfile()
+        return this.asyncGetProfile().then(() => this.fetchHrRole())
       })
     },
 

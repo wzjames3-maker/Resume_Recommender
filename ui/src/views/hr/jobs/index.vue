@@ -5,8 +5,8 @@
         <h2>职位</h2>
         <span class="color-secondary">维护开放职位与候选人筛选进度</span>
       </div>
-      <el-button v-if="isWorkspaceManage" type="primary" @click="openJobDialog()">新建职位</el-button>
-      <el-button v-if="isWorkspaceManage" plain @click="aiSettingVisible = true">AI 设置</el-button>
+      <el-button v-if="isHrAdmin" type="primary" @click="openJobDialog()">新建职位</el-button>
+      <el-button v-if="isHrAdmin" plain @click="aiSettingVisible = true">AI 设置</el-button>
     </div>
 
     <el-card style="--el-card-padding: 0" v-loading="loading">
@@ -29,28 +29,28 @@
                     <el-table-column prop="candidate_name" label="候选人" />
                     <el-table-column label="筛选状态" width="190">
                       <template #default="{ row: assignment }">
-                        <el-select :model-value="assignment.status" size="small" @change="(value: AssignmentStatus) => onAssignmentStatusChange(assignment, value)">
+                        <el-select :model-value="assignment.status" size="small" :disabled="!isHrOperator" @change="(value: AssignmentStatus) => onAssignmentStatusChange(assignment, value)">
                           <el-option v-for="(label, value) in assignmentStatusOptions" :key="value" :label="label" :value="value" />
                         </el-select>
                       </template>
                     </el-table-column>
                     <el-table-column label="关系类型" width="120">
                       <template #default="{ row: assignment }">
-                        <el-select :model-value="assignment.relation_type" size="small" @change="(value: RelationType) => updateAssignmentFields(assignment, { relation_type: value })">
+                        <el-select :model-value="assignment.relation_type" size="small" :disabled="!isHrOperator" @change="(value: RelationType) => updateAssignmentFields(assignment, { relation_type: value })">
                           <el-option v-for="(label, value) in relationTypeLabels" :key="value" :label="label" :value="value" />
                         </el-select>
                       </template>
                     </el-table-column>
                     <el-table-column label="渠道" width="120">
                       <template #default="{ row: assignment }">
-                        <el-select :model-value="assignment.channel" size="small" @change="(value: ResumeChannel) => updateAssignmentFields(assignment, { channel: value })">
+                        <el-select :model-value="assignment.channel" size="small" :disabled="!isHrOperator" @change="(value: ResumeChannel) => updateAssignmentFields(assignment, { channel: value })">
                           <el-option v-for="(label, value) in channelLabels" :key="value" :label="label" :value="value" />
                         </el-select>
                       </template>
                     </el-table-column>
                     <el-table-column label="负责人" width="130">
                       <template #default="{ row: assignment }">
-                        <el-select :model-value="assignment.owner_id" size="small" placeholder="负责人" clearable
+                        <el-select :model-value="assignment.owner_id" size="small" placeholder="负责人" clearable :disabled="!isHrOperator"
                                    @change="(value: string | null) => updateAssignmentFields(assignment, { owner_id: value })">
                           <el-option v-for="member in members" :key="member.id" :label="member.nick_name" :value="member.id" />
                         </el-select>
@@ -59,7 +59,7 @@
                     <el-table-column prop="note" label="备注" show-overflow-tooltip />
                     <el-table-column label="操作" width="90">
                       <template #default="{ row: assignment }">
-                        <el-button link type="primary" size="small" @click="openInterviewDrawer(row, assignment)">面试</el-button>
+                        <el-button v-if="isHrOperator" link type="primary" size="small" @click="openInterviewDrawer(row, assignment)">面试</el-button>
                       </template>
                     </el-table-column>
                   </el-table>
@@ -77,7 +77,7 @@
                     <el-table-column prop="current_city" label="现居" width="100"><template #default="{ row: match }">{{ match.current_city || '-' }}</template></el-table-column>
                     <el-table-column label="操作" width="110">
                       <template #default="{ row: match }">
-                        <el-button link type="primary" size="small" :disabled="row.status === 'CLOSED'" @click="addMatchToJob(row, match)">加入职位</el-button>
+                        <el-button v-if="isHrOperator" link type="primary" size="small" :disabled="row.status === 'CLOSED'" @click="addMatchToJob(row, match)">加入职位</el-button>
                       </template>
                     </el-table-column>
                   </el-table>
@@ -98,9 +98,9 @@
         </el-table-column>
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
-            <el-button v-if="isWorkspaceManage" link type="primary" @click="openJobDialog(row)">编辑</el-button>
-            <el-button v-if="isWorkspaceManage" link type="warning" :disabled="row.status !== 'ON_HOLD' && row.status !== 'CLOSED'" @click="reopenJob(row)">恢复</el-button>
-            <el-button v-if="isWorkspaceManage" link type="danger" :disabled="row.status === 'CLOSED'" @click="openCloseDialog(row)">关闭</el-button>
+            <el-button v-if="isHrAdmin" link type="primary" @click="openJobDialog(row)">编辑</el-button>
+            <el-button v-if="isHrAdmin" link type="warning" :disabled="row.status !== 'ON_HOLD' && row.status !== 'CLOSED'" @click="reopenJob(row)">恢复</el-button>
+            <el-button v-if="isHrAdmin" link type="danger" :disabled="row.status === 'CLOSED'" @click="openCloseDialog(row)">关闭</el-button>
           </template>
         </el-table-column>
       </AppTable>
@@ -152,7 +152,7 @@
     <el-dialog v-model="interviewDrawerVisible" title="面试记录" width="640px">
       <div class="flex-between mb-16">
         <span>{{ interviewCandidateName }} · 第 {{ interviewAssignment?.id?.slice(0, 8) }} 指派</span>
-        <el-button type="primary" size="small" @click="addInterviewFormVisible = true">安排面试</el-button>
+        <el-button v-if="isHrOperator" type="primary" size="small" @click="addInterviewFormVisible = true">安排面试</el-button>
       </div>
       <el-form v-if="addInterviewFormVisible" label-width="88px" class="mb-16 p-16 border rounded">
         <el-row :gutter="16">
@@ -172,7 +172,7 @@
         </el-table-column>
         <el-table-column label="结果" width="130">
           <template #default="{ row }">
-            <el-select v-model="row.status" size="small" @change="updateInterviewRecord(row)">
+            <el-select v-model="row.status" size="small" :disabled="!isHrOperator" @change="updateInterviewRecord(row)">
               <el-option label="待面试" value="PENDING" />
               <el-option label="通过" value="PASSED" />
               <el-option label="未通过" value="FAILED" />
@@ -183,7 +183,7 @@
         </el-table-column>
         <el-table-column label="反馈" min-width="160">
           <template #default="{ row }">
-            <el-input v-model="row.feedback" size="small" @change="updateInterviewRecord(row)" placeholder="填写反馈" />
+            <el-input v-model="row.feedback" size="small" :disabled="!isHrOperator" @change="updateInterviewRecord(row)" placeholder="填写反馈" />
           </template>
         </el-table-column>
       </el-table>
@@ -254,8 +254,6 @@ import type {
 } from '@/api/type/hr'
 import useStore from '@/stores'
 import { MsgConfirm, MsgError, MsgSuccess } from '@/utils/message'
-import { hasPermission } from '@/utils/permission'
-import { RoleConst } from '@/utils/permission/data'
 
 interface WorkspaceMember {
   id: string
@@ -342,7 +340,8 @@ const jobForm = reactive({
   name: '', department: '', city: '', level: '', headcount: 1, description: '',
   status: 'OPEN' as JobStatus, close_reason: null as JobCloseReason | null, owner_id: null as string | null,
 })
-const isWorkspaceManage = computed(() => hasPermission([RoleConst.WORKSPACE_MANAGE.getWorkspaceRole], 'OR'))
+const isHrAdmin = computed(() => user.getHrRole() === 'ADMIN')
+const isHrOperator = computed(() => user.getHrRole() === 'OPERATOR' || user.getHrRole() === 'ADMIN')
 const interviewDrawerVisible = ref(false)
 const interviewList = ref<Interview[]>([])
 const interviewAssignment = ref<Assignment | null>(null)
