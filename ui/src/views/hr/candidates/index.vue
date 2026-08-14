@@ -33,6 +33,7 @@
           <el-option label="在库" value="ACTIVE" />
           <el-option label="已归档" value="ARCHIVED" />
         </el-select>
+        <el-button :type="filters.owner_id ? 'primary' : 'default'" plain @click="toggleMyCandidates">待我处理</el-button>
         <el-input v-model="aiQuery" placeholder="AI 搜索：如 找 3 年以上 Python 经验在上海的人" clearable @keyup.enter="aiSearch" style="width: 300px" />
         <el-button type="primary" plain :loading="aiSearching" @click="aiSearch">AI 搜索</el-button>
       </div>
@@ -126,6 +127,15 @@
               <el-tag :type="assignmentTagType(row.status)" size="small">{{ assignmentStatusLabels[row.status] || row.status }}</el-tag>
             </template>
           </el-table-column>
+          <el-table-column label="关系类型" width="90">
+            <template #default="{ row }">{{ relationTypeLabels[row.relation_type] || row.relation_type || '-' }}</template>
+          </el-table-column>
+          <el-table-column label="渠道" width="90">
+            <template #default="{ row }">{{ channelLabels[row.channel] || row.channel || '-' }}</template>
+          </el-table-column>
+          <el-table-column label="负责人" width="100">
+            <template #default="{ row }">{{ memberName(row.owner_id) || '-' }}</template>
+          </el-table-column>
           <el-table-column prop="note" label="备注" show-overflow-tooltip />
         </el-table>
       </div>
@@ -162,6 +172,21 @@
       <el-form label-width="96px">
         <el-form-item label="候选人"><span>{{ assigningCandidate?.name }}</span></el-form-item>
         <el-form-item label="开放职位"><el-select v-model="selectedJobId" filterable placeholder="选择职位" style="width: 100%"><el-option v-for="job in openJobs" :key="job.id" :label="`${job.name}${job.city ? ` · ${job.city}` : ''}`" :value="job.id" /></el-select></el-form-item>
+        <el-form-item label="关系类型">
+          <el-select v-model="assignmentRelationType" style="width: 100%">
+            <el-option v-for="(label, value) in relationTypeLabels" :key="value" :label="label" :value="value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="渠道">
+          <el-select v-model="assignmentChannel" style="width: 100%">
+            <el-option v-for="(label, value) in channelLabels" :key="value" :label="label" :value="value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="负责人">
+          <el-select v-model="assignmentOwnerId" clearable filterable placeholder="选择负责人" style="width: 100%">
+            <el-option v-for="member in members" :key="member.id" :label="member.nick_name" :value="member.id" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="备注"><el-input v-model="assignmentNote" type="textarea" :rows="3" /></el-form-item>
       </el-form>
       <template #footer><el-button @click="assignmentDialogVisible = false">取消</el-button><el-button type="primary" :disabled="!selectedJobId" :loading="saving" @click="createAssignment">确认加入</el-button></template>
@@ -219,10 +244,18 @@ import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import AppTable from '@/components/app-table/index.vue'
 import AiSettingDialog from '@/views/hr/components/AiSettingDialog.vue'
 import HrApi from '@/api/hr/recruitment'
-import type { Candidate, CandidateDetail, Job, ResumeFile, ResumeUploadResult } from '@/api/type/hr'
+import AuthorizationApi from '@/api/system/resource-authorization'
+import type { Candidate, CandidateDetail, Job, RelationType, ResumeChannel, ResumeFile, ResumeUploadResult } from '@/api/type/hr'
+import useStore from '@/stores'
 import { MsgConfirm, MsgError, MsgSuccess } from '@/utils/message'
 import { hasPermission } from '@/utils/permission'
 import { RoleConst } from '@/utils/permission/data'
+
+interface WorkspaceMember {
+  id: string
+  nick_name: string
+  roles: string[]
+}
 
 const channelLabels: Record<string, string> = {
   REFERRAL: '内推',
@@ -232,6 +265,13 @@ const channelLabels: Record<string, string> = {
   OTHER: '其他',
 }
 
+const relationTypeLabels: Record<string, string> = {
+  APPLY: '投递',
+  SEEK: '主动寻访',
+  REFERRAL: '内推',
+  HEADHUNTER: '猎头推荐',
+}
+
 const assignmentStatusLabels: Record<string, string> = {
   PENDING_SCREEN: '待筛选',
   SCREEN_PASSED: '筛选通过',
@@ -239,6 +279,7 @@ const assignmentStatusLabels: Record<string, string> = {
   OFFER: 'Offer 中',
   HIRED: '已入职',
   REJECTED: '已淘汰',
+  WITHDRAWN: '已退出',
   CLOSED: '已关闭',
 }
 
@@ -246,9 +287,10 @@ const loading = ref(false)
 const saving = ref(false)
 const candidates = ref<Candidate[]>([])
 const openJobs = ref<Job[]>([])
+const members = ref<WorkspaceMember[]>([])
 const filters = reactive({
   name: '', city: '', skills: '', years_min: null as number | null, years_max: null as number | null,
-  highest_degree: '', source: '', status: '',
+  highest_degree: '', source: '', status: '', owner_id: '',
 })
 const pagination = reactive({ current_page: 1, page_size: 20, total: 0 })
 const candidateDialogVisible = ref(false)
@@ -265,12 +307,32 @@ const editingCandidate = ref<Candidate | null>(null)
 const assigningCandidate = ref<Candidate | null>(null)
 const selectedJobId = ref('')
 const assignmentNote = ref('')
+const assignmentRelationType = ref<RelationType>('APPLY')
+const assignmentChannel = ref<ResumeChannel>('OTHER')
+const assignmentOwnerId = ref<string | null>(null)
 const skillsText = ref('')
+const { user } = useStore()
 const isWorkspaceManage = computed(() => hasPermission([RoleConst.WORKSPACE_MANAGE.getWorkspaceRole], 'OR'))
 const candidateForm = reactive({
   name: '', email: '', phone: '', current_city: '', target_city: '', highest_degree: '',
   years_experience: null as number | null, source: '', note: '',
 })
+
+function memberName(memberId: string | null) {
+  if (!memberId) return ''
+  return members.value.find((member) => member.id === memberId)?.nick_name || ''
+}
+
+function loadMembers() {
+  AuthorizationApi.getUserMember(user.getWorkspaceId() || '').then((response) => {
+    members.value = response.data || []
+  }).catch(() => {})
+}
+
+function toggleMyCandidates() {
+  filters.owner_id = filters.owner_id ? '' : user.userInfo?.id || ''
+  refresh()
+}
 
 function resetCandidateForm(candidate?: Candidate) {
   candidateForm.name = candidate?.name || ''
@@ -304,7 +366,7 @@ function openCandidateDetail(candidate: Candidate) {
 
 function assignmentTagType(status: string) {
   if (status === 'HIRED') return 'success'
-  if (status === 'REJECTED' || status === 'CLOSED') return 'info'
+  if (status === 'REJECTED' || status === 'WITHDRAWN' || status === 'CLOSED') return 'info'
   return 'primary'
 }
 
@@ -388,6 +450,9 @@ function openAssignmentDialog(candidate: Candidate) {
   assigningCandidate.value = candidate
   selectedJobId.value = ''
   assignmentNote.value = ''
+  assignmentRelationType.value = 'APPLY'
+  assignmentChannel.value = 'OTHER'
+  assignmentOwnerId.value = null
   HrApi.getJobs({ current_page: 1, page_size: 100 }, { status: 'OPEN' }).then((response) => {
     openJobs.value = response.data.records
     assignmentDialogVisible.value = true
@@ -397,11 +462,16 @@ function openAssignmentDialog(candidate: Candidate) {
 function createAssignment() {
   if (!assigningCandidate.value || !selectedJobId.value) return
   saving.value = true
-  HrApi.createAssignment(selectedJobId.value, assigningCandidate.value.id, assignmentNote.value)
+  HrApi.createAssignment(selectedJobId.value, assigningCandidate.value.id, assignmentNote.value, {
+    relation_type: assignmentRelationType.value,
+    channel: assignmentChannel.value,
+    owner_id: assignmentOwnerId.value || null,
+  })
     .then(() => {
       assignmentDialogVisible.value = false
       MsgSuccess('已加入职位')
     })
+    .catch(() => {})
     .finally(() => { saving.value = false })
 }
 
@@ -517,7 +587,10 @@ function confirmMerge() {
     })
 }
 
-onMounted(loadCandidates)
+onMounted(() => {
+  loadMembers()
+  loadCandidates()
+})
 watch(uploadDialogVisible, (visible) => {
   if (!visible) stopResumePolling()
 })

@@ -9,6 +9,7 @@ import type {
   HrConfig,
   Interview,
   Job,
+  JobCloseReason,
   JobDetail,
   JobMatchPage,
   PageResult,
@@ -52,8 +53,17 @@ const getJob = (jobId: string) => get(`${prefix.value}/jobs/${jobId}`) as Promis
 const updateJob = (jobId: string, data: Partial<Job>) =>
   put(`${prefix.value}/jobs/${jobId}`, data) as Promise<Result<Job>>
 
-const createAssignment = (jobId: string, candidateId: string, note = '') =>
-  post(`${prefix.value}/jobs/${jobId}/assignments`, { candidate_id: candidateId, note }) as Promise<Result<Assignment>>
+const closeJob = (jobId: string, closeReason: JobCloseReason) =>
+  put(`${prefix.value}/jobs/${jobId}/close`, { close_reason: closeReason }) as Promise<Result<{ closed_count: number }>>
+
+const reopenJob = (jobId: string) => put(`${prefix.value}/jobs/${jobId}/reopen`) as Promise<Result<Job>>
+
+const createAssignment = (jobId: string, candidateId: string, note = '', extra: Partial<Assignment> = {}) =>
+  post(`${prefix.value}/jobs/${jobId}/assignments`, {
+    candidate_id: candidateId,
+    note,
+    ...extra,
+  }) as Promise<Result<Assignment>>
 
 const updateAssignment = (assignmentId: string, data: Partial<Assignment>) =>
   put(`${prefix.value}/assignments/${assignmentId}`, data) as Promise<Result<Assignment>>
@@ -111,6 +121,7 @@ const mergeCandidates = (primaryId: string, secondaryId: string) =>
 export default {
   archiveCandidate,
   checkDuplicate,
+  closeJob,
   createAssignment,
   createCandidate,
   createInterview,
@@ -131,6 +142,7 @@ export default {
   mergeCandidates,
   parseSearch,
   putAiConfig,
+  reopenJob,
   updateAssignment,
   updateCandidate,
   updateInterview,

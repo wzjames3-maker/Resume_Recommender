@@ -13,9 +13,9 @@
       <div class="p-16 border-b flex gap-12">
         <el-input v-model="filters.name" placeholder="按职位名称搜索" clearable @change="refresh" />
         <el-select v-model="filters.status" placeholder="状态" clearable @change="refresh" style="width: 140px">
-          <el-option label="开放" value="OPEN" />
-          <el-option label="已关闭" value="CLOSED" />
+          <el-option v-for="(label, value) in jobStatusLabels" :key="value" :label="label" :value="value" />
         </el-select>
+        <el-button :type="filters.owner_id ? 'primary' : 'default'" plain @click="toggleMyJobs">待我处理</el-button>
       </div>
 
       <AppTable :data="jobs" :pagination-config="pagination" @change-page="loadJobs" @size-change="refresh" @expand-change="handleExpand">
@@ -29,14 +29,30 @@
                     <el-table-column prop="candidate_name" label="候选人" />
                     <el-table-column label="筛选状态" width="190">
                       <template #default="{ row: assignment }">
-                        <el-select v-model="assignment.status" size="small" @change="updateAssignmentStatus(assignment)">
-                          <el-option label="待筛选" value="PENDING_SCREEN" />
-                          <el-option label="筛选通过" value="SCREEN_PASSED" />
-                          <el-option label="面试中" value="INTERVIEWING" />
-                          <el-option label="Offer 中" value="OFFER" />
-                          <el-option label="已入职" value="HIRED" />
-                          <el-option label="已淘汰" value="REJECTED" />
-                          <el-option label="已关闭" value="CLOSED" />
+                        <el-select :model-value="assignment.status" size="small" @change="(value: AssignmentStatus) => onAssignmentStatusChange(assignment, value)">
+                          <el-option v-for="(label, value) in assignmentStatusOptions" :key="value" :label="label" :value="value" />
+                        </el-select>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="关系类型" width="120">
+                      <template #default="{ row: assignment }">
+                        <el-select :model-value="assignment.relation_type" size="small" @change="(value: RelationType) => updateAssignmentFields(assignment, { relation_type: value })">
+                          <el-option v-for="(label, value) in relationTypeLabels" :key="value" :label="label" :value="value" />
+                        </el-select>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="渠道" width="120">
+                      <template #default="{ row: assignment }">
+                        <el-select :model-value="assignment.channel" size="small" @change="(value: ResumeChannel) => updateAssignmentFields(assignment, { channel: value })">
+                          <el-option v-for="(label, value) in channelLabels" :key="value" :label="label" :value="value" />
+                        </el-select>
+                      </template>
+                    </el-table-column>
+                    <el-table-column label="负责人" width="130">
+                      <template #default="{ row: assignment }">
+                        <el-select :model-value="assignment.owner_id" size="small" placeholder="负责人" clearable
+                                   @change="(value: string | null) => updateAssignmentFields(assignment, { owner_id: value })">
+                          <el-option v-for="member in members" :key="member.id" :label="member.nick_name" :value="member.id" />
                         </el-select>
                       </template>
                     </el-table-column>
@@ -74,11 +90,17 @@
         <el-table-column prop="department" label="部门" min-width="130"><template #default="{ row }">{{ row.department || '-' }}</template></el-table-column>
         <el-table-column prop="city" label="城市" width="120"><template #default="{ row }">{{ row.city || '-' }}</template></el-table-column>
         <el-table-column label="HC" width="90"><template #default="{ row }">{{ row.active_assignment_count }}/{{ row.headcount }}</template></el-table-column>
-        <el-table-column label="状态" width="100"><template #default="{ row }"><el-tag :type="row.status === 'OPEN' ? 'success' : 'info'">{{ row.status === 'OPEN' ? '开放' : '已关闭' }}</el-tag></template></el-table-column>
-        <el-table-column label="操作" width="170" fixed="right">
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }"><el-tag :type="jobStatusTagType(row.status)">{{ jobStatusLabels[row.status] || row.status }}</el-tag></template>
+        </el-table-column>
+        <el-table-column label="负责人" width="110">
+          <template #default="{ row }">{{ memberName(row.owner_id) || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
             <el-button v-if="isWorkspaceManage" link type="primary" @click="openJobDialog(row)">编辑</el-button>
-            <el-button v-if="isWorkspaceManage" link type="danger" :disabled="row.status === 'CLOSED'" @click="closeJob(row)">关闭</el-button>
+            <el-button v-if="isWorkspaceManage" link type="warning" :disabled="row.status !== 'ON_HOLD' && row.status !== 'CLOSED'" @click="reopenJob(row)">恢复</el-button>
+            <el-button v-if="isWorkspaceManage" link type="danger" :disabled="row.status === 'CLOSED'" @click="openCloseDialog(row)">关闭</el-button>
           </template>
         </el-table-column>
       </AppTable>
@@ -95,6 +117,27 @@
           <el-col :span="12"><el-form-item label="职级"><el-input v-model="jobForm.level" /></el-form-item></el-col>
           <el-col :span="12"><el-form-item label="招聘人数"><el-input-number v-model="jobForm.headcount" :min="1" :max="999" /></el-form-item></el-col>
         </el-row>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="状态">
+              <el-select v-model="jobForm.status" style="width: 100%">
+                <el-option v-for="(label, value) in jobStatusLabels" :key="value" :label="label" :value="value" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+          <el-col :span="12">
+            <el-form-item label="负责人">
+              <el-select v-model="jobForm.owner_id" clearable filterable placeholder="选择负责人" style="width: 100%">
+                <el-option v-for="member in members" :key="member.id" :label="member.nick_name" :value="member.id" />
+              </el-select>
+            </el-form-item>
+          </el-col>
+        </el-row>
+        <el-form-item v-if="jobForm.status === 'CLOSED'" label="关闭原因" required>
+          <el-select v-model="jobForm.close_reason" placeholder="选择关闭原因" style="width: 100%">
+            <el-option v-for="(label, value) in jobCloseReasonLabels" :key="value" :label="label" :value="value" />
+          </el-select>
+        </el-form-item>
         <el-form-item label="职位描述"><el-input v-model="jobForm.description" type="textarea" :rows="5" maxlength="4096" show-word-limit /></el-form-item>
         <el-form-item label="技能要求">
           <div class="w-full">
@@ -147,6 +190,44 @@
       <template #footer><el-button @click="interviewDrawerVisible = false">关闭</el-button></template>
     </el-dialog>
 
+    <el-dialog v-model="closeDialogVisible" title="关闭职位" width="440px">
+      <el-form label-width="96px">
+        <el-form-item label="职位"><span>{{ closingJob?.name }}</span></el-form-item>
+        <el-form-item label="在途关联">
+          <el-tag type="warning">{{ closingJob?.active_assignment_count || 0 }}</el-tag>
+          <span class="ml-8 color-secondary">将被批量收尾并标记为「职位关闭」</span>
+        </el-form-item>
+        <el-form-item label="关闭原因" required>
+          <el-select v-model="closeReason" placeholder="选择关闭原因" style="width: 100%">
+            <el-option v-for="(label, value) in jobCloseReasonLabels" :key="value" :label="label" :value="value" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="closeDialogVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="!closeReason" :loading="saving" @click="confirmCloseJob">确认关闭</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="statusDialogVisible" title="状态变更" width="440px">
+      <el-form label-width="96px">
+        <el-form-item label="候选人"><span>{{ statusDialogAssignment?.candidate_name }}</span></el-form-item>
+        <el-form-item label="目标状态"><span>{{ assignmentStatusOptions[statusDialogTarget] || statusDialogTarget }}</span></el-form-item>
+        <el-form-item v-if="isRestoreTransition" label="恢复原因" required>
+          <el-input v-model="statusDialogNote" placeholder="填写误拒绝恢复原因" />
+        </el-form-item>
+        <el-form-item v-else label="终止原因" required>
+          <el-select v-model="statusDialogReason" placeholder="选择终止原因" style="width: 100%">
+            <el-option v-for="(label, value) in terminationReasonLabels" :key="value" :label="label" :value="value" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="statusDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="confirmStatusChange">确认</el-button>
+      </template>
+    </el-dialog>
+
     <AiSettingDialog v-model="aiSettingVisible" />
   </div>
 </template>
@@ -156,15 +237,89 @@ import { computed, onMounted, reactive, ref } from 'vue'
 import AppTable from '@/components/app-table/index.vue'
 import AiSettingDialog from '@/views/hr/components/AiSettingDialog.vue'
 import HrApi from '@/api/hr/recruitment'
-import type { Assignment, Interview, Job, JobDetail, JobMatchCandidate, JobMatchPage } from '@/api/type/hr'
+import AuthorizationApi from '@/api/system/resource-authorization'
+import type {
+  Assignment,
+  AssignmentStatus,
+  Interview,
+  Job,
+  JobCloseReason,
+  JobDetail,
+  JobMatchCandidate,
+  JobMatchPage,
+  JobStatus,
+  RelationType,
+  ResumeChannel,
+  TerminationReason,
+} from '@/api/type/hr'
+import useStore from '@/stores'
 import { MsgConfirm, MsgError, MsgSuccess } from '@/utils/message'
 import { hasPermission } from '@/utils/permission'
 import { RoleConst } from '@/utils/permission/data'
 
+interface WorkspaceMember {
+  id: string
+  nick_name: string
+  roles: string[]
+}
+
+const jobStatusLabels: Record<string, string> = {
+  DRAFT: '草稿',
+  OPEN: '开放',
+  ON_HOLD: '暂停',
+  CLOSED: '已关闭',
+}
+
+const jobCloseReasonLabels: Record<string, string> = {
+  FILLED: '招满',
+  CANCELLED: '取消',
+  DUPLICATE: '重复需求',
+  OTHER: '其他',
+}
+
+const assignmentStatusOptions: Record<string, string> = {
+  PENDING_SCREEN: '待筛选',
+  SCREEN_PASSED: '筛选通过',
+  INTERVIEWING: '面试中',
+  OFFER: 'Offer 中',
+  HIRED: '已入职',
+  REJECTED: '已淘汰',
+  WITHDRAWN: '已退出',
+  CLOSED: '已关闭',
+}
+
+const relationTypeLabels: Record<string, string> = {
+  APPLY: '投递',
+  SEEK: '主动寻访',
+  REFERRAL: '内推',
+  HEADHUNTER: '猎头推荐',
+}
+
+const channelLabels: Record<string, string> = {
+  REFERRAL: '内推',
+  JOB_SITE: '招聘网站',
+  HEADHUNTER: '猎头',
+  CAMPUS: '校园',
+  OTHER: '其他',
+}
+
+const terminationReasonLabels: Record<string, string> = {
+  NOT_FIT: '不合适',
+  SALARY: '薪资不符',
+  UNREACHABLE: '无法联系',
+  CANDIDATE_WITHDRAW: '候选人退出',
+  JOB_CLOSED: '职位关闭',
+  MERGED: '合并',
+  OTHER: '其他',
+}
+
+const TERMINAL_STATUSES = ['REJECTED', 'WITHDRAWN', 'CLOSED']
+
 const loading = ref(false)
 const saving = ref(false)
 const jobs = ref<Job[]>([])
-const filters = reactive({ name: '', status: '' })
+const members = ref<WorkspaceMember[]>([])
+const filters = reactive({ name: '', status: '', owner_id: '' })
 const pagination = reactive({ current_page: 1, page_size: 20, total: 0 })
 const jobDetails = reactive<Record<string, JobDetail>>({})
 const matches = reactive<Record<string, JobMatchPage>>({})
@@ -175,7 +330,10 @@ const editingJob = ref<Job | null>(null)
 const jobSkillsText = ref('')
 const extractingSkills = ref(false)
 const expandTab = reactive<Record<string, string>>({})
-const jobForm = reactive({ name: '', department: '', city: '', level: '', headcount: 1, description: '' })
+const jobForm = reactive({
+  name: '', department: '', city: '', level: '', headcount: 1, description: '',
+  status: 'OPEN' as JobStatus, close_reason: null as JobCloseReason | null, owner_id: null as string | null,
+})
 const isWorkspaceManage = computed(() => hasPermission([RoleConst.WORKSPACE_MANAGE.getWorkspaceRole], 'OR'))
 const interviewDrawerVisible = ref(false)
 const interviewList = ref<Interview[]>([])
@@ -183,6 +341,30 @@ const interviewAssignment = ref<Assignment | null>(null)
 const interviewCandidateName = ref('')
 const addInterviewFormVisible = ref(false)
 const interviewForm = reactive({ interviewer: '', scheduled_at: null as string | null })
+const closeDialogVisible = ref(false)
+const closingJob = ref<Job | null>(null)
+const closeReason = ref('')
+const statusDialogVisible = ref(false)
+const statusDialogAssignment = ref<Assignment | null>(null)
+const statusDialogTarget = ref<AssignmentStatus | ''>('')
+const statusDialogReason = ref<TerminationReason | ''>('')
+const statusDialogNote = ref('')
+const { user } = useStore()
+
+const isRestoreTransition = computed(
+  () => statusDialogAssignment.value?.status === 'REJECTED' && statusDialogTarget.value === 'PENDING_SCREEN',
+)
+
+function memberName(memberId: string | null) {
+  if (!memberId) return ''
+  return members.value.find((member) => member.id === memberId)?.nick_name || ''
+}
+
+function loadMembers() {
+  AuthorizationApi.getUserMember(user.getWorkspaceId() || '').then((response) => {
+    members.value = response.data || []
+  }).catch(() => {})
+}
 
 function resetJobForm(job?: Job) {
   jobForm.name = job?.name || ''
@@ -191,6 +373,9 @@ function resetJobForm(job?: Job) {
   jobForm.level = job?.level || ''
   jobForm.headcount = job?.headcount || 1
   jobForm.description = job?.description || ''
+  jobForm.status = (job?.status || 'OPEN') as JobStatus
+  jobForm.close_reason = job?.close_reason || null
+  jobForm.owner_id = job?.owner_id || null
   jobSkillsText.value = job?.skill_requirements?.join(', ') || ''
 }
 
@@ -255,36 +440,140 @@ function extractSkillsFromDescription() {
 
 function saveJob() {
   if (!jobForm.name.trim()) return
+  if (jobForm.status === 'CLOSED' && !jobForm.close_reason) {
+    MsgError('关闭职位需要选择关闭原因')
+    return
+  }
   saving.value = true
   const data = {
     ...jobForm,
     skill_requirements: jobSkillsText.value.split(',').map((skill) => skill.trim()).filter(Boolean),
+  }
+  if (editingJob.value && jobForm.status === 'CLOSED' && editingJob.value.status !== 'CLOSED') {
+    HrApi.closeJob(editingJob.value.id, jobForm.close_reason as JobCloseReason)
+      .then((response) => {
+        jobDialogVisible.value = false
+        const count = response.data.closed_count
+        MsgSuccess(count > 0 ? `职位已关闭，收尾 ${count} 个在途关联` : '职位已关闭')
+        refresh()
+      })
+      .catch(() => {})
+      .finally(() => { saving.value = false })
+    return
   }
   const request = editingJob.value ? HrApi.updateJob(editingJob.value.id, data) : HrApi.createJob(data)
   request.then(() => {
     jobDialogVisible.value = false
     MsgSuccess('职位已保存')
     refresh()
-  }).finally(() => { saving.value = false })
+  }).catch(() => {}).finally(() => { saving.value = false })
 }
 
-function closeJob(job: Job) {
-  MsgConfirm('关闭职位', `关闭后不能再向“${job.name}”加入候选人。`, { confirmButtonClass: 'danger' })
-    .then(() => HrApi.updateJob(job.id, { status: 'CLOSED' }))
+function toggleMyJobs() {
+  filters.owner_id = filters.owner_id ? '' : user.userInfo?.id || ''
+  refresh()
+}
+
+function openCloseDialog(job: Job) {
+  closingJob.value = job
+  closeReason.value = ''
+  closeDialogVisible.value = true
+}
+
+function confirmCloseJob() {
+  if (!closingJob.value || !closeReason.value) return
+  saving.value = true
+  HrApi.closeJob(closingJob.value.id, closeReason.value as JobCloseReason)
+    .then((response) => {
+      closeDialogVisible.value = false
+      const count = response.data.closed_count
+      MsgSuccess(count > 0 ? `职位已关闭，收尾 ${count} 个在途关联` : '职位已关闭')
+      refresh()
+    })
+    .catch(() => {})
+    .finally(() => { saving.value = false })
+}
+
+function reopenJob(job: Job) {
+  MsgConfirm('恢复招聘', `将把“${job.name}”重新开放，并清空关闭原因。`)
+    .then(() => HrApi.reopenJob(job.id))
     .then(() => {
-      MsgSuccess('职位已关闭')
+      MsgSuccess('职位已恢复')
       refresh()
     })
     .catch(() => {})
 }
 
-function updateAssignmentStatus(assignment: Assignment) {
-  HrApi.updateAssignment(assignment.id, { status: assignment.status }).then(() => {
-    MsgSuccess('筛选状态已更新')
-    const job = jobs.value.find((item) => item.id === assignment.job_id)
-    if (job) loadJobDetail(job)
-    refresh()
-  })
+function jobStatusTagType(status: string) {
+  if (status === 'OPEN') return 'success'
+  if (status === 'ON_HOLD') return 'warning'
+  if (status === 'CLOSED') return 'info'
+  return 'info'
+}
+
+function onAssignmentStatusChange(assignment: Assignment, target: AssignmentStatus) {
+  if (assignment.status === target) return
+  const terminal = TERMINAL_STATUSES.includes(target)
+  const restore = assignment.status === 'REJECTED' && target === 'PENDING_SCREEN'
+  if (terminal || restore) {
+    statusDialogAssignment.value = assignment
+    statusDialogTarget.value = target
+    statusDialogReason.value = ''
+    statusDialogNote.value = ''
+    statusDialogVisible.value = true
+    return
+  }
+  updateAssignmentFields(assignment, { status: target })
+}
+
+function confirmStatusChange() {
+  const assignment = statusDialogAssignment.value
+  const target = statusDialogTarget.value
+  if (!assignment || !target) return
+  if (isRestoreTransition.value) {
+    if (!statusDialogNote.value.trim()) {
+      MsgError('请填写恢复原因')
+      return
+    }
+    saving.value = true
+    HrApi.updateAssignment(assignment.id, { status: target, note: statusDialogNote.value.trim() })
+      .then(() => {
+        statusDialogVisible.value = false
+        MsgSuccess('候选人已恢复待筛选')
+        reloadAssignment(assignment)
+      })
+      .catch(() => {})
+      .finally(() => { saving.value = false })
+    return
+  }
+  if (!statusDialogReason.value) {
+    MsgError('请选择终止原因')
+    return
+  }
+  saving.value = true
+  HrApi.updateAssignment(assignment.id, { status: target, termination_reason: statusDialogReason.value })
+    .then(() => {
+      statusDialogVisible.value = false
+      MsgSuccess('状态已更新')
+      reloadAssignment(assignment)
+    })
+    .catch(() => {})
+    .finally(() => { saving.value = false })
+}
+
+function updateAssignmentFields(assignment: Assignment, data: Partial<Assignment>) {
+  HrApi.updateAssignment(assignment.id, data)
+    .then(() => {
+      MsgSuccess('指派已更新')
+      reloadAssignment(assignment)
+    })
+    .catch(() => {})
+}
+
+function reloadAssignment(assignment: Assignment) {
+  const job = jobs.value.find((item) => item.id === assignment.job_id)
+  if (job) loadJobDetail(job)
+  refresh()
 }
 
 function addMatchToJob(job: Job, match: JobMatchCandidate) {
@@ -334,7 +623,10 @@ function updateInterviewRecord(interview: Interview) {
     .catch(() => {})
 }
 
-onMounted(loadJobs)
+onMounted(() => {
+  loadMembers()
+  loadJobs()
+})
 </script>
 
 <style scoped>

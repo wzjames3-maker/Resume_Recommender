@@ -1,6 +1,24 @@
 export type CandidateStatus = 'ACTIVE' | 'ARCHIVED'
-export type JobStatus = 'OPEN' | 'CLOSED'
-export type AssignmentStatus = 'PENDING_SCREEN' | 'SCREEN_PASSED' | 'INTERVIEWING' | 'OFFER' | 'HIRED' | 'REJECTED' | 'CLOSED'
+export type JobStatus = 'DRAFT' | 'OPEN' | 'ON_HOLD' | 'CLOSED'
+export type JobCloseReason = 'FILLED' | 'CANCELLED' | 'DUPLICATE' | 'OTHER'
+export type AssignmentStatus =
+  | 'PENDING_SCREEN'
+  | 'SCREEN_PASSED'
+  | 'INTERVIEWING'
+  | 'OFFER'
+  | 'HIRED'
+  | 'REJECTED'
+  | 'WITHDRAWN'
+  | 'CLOSED'
+export type RelationType = 'APPLY' | 'SEEK' | 'REFERRAL' | 'HEADHUNTER'
+export type TerminationReason =
+  | 'NOT_FIT'
+  | 'SALARY'
+  | 'UNREACHABLE'
+  | 'CANDIDATE_WITHDRAW'
+  | 'JOB_CLOSED'
+  | 'MERGED'
+  | 'OTHER'
 export type InterviewStatus = 'PENDING' | 'PASSED' | 'FAILED' | 'NO_SHOW' | 'CANCELLED'
 
 export interface Interview {
@@ -40,6 +58,12 @@ export interface Assignment {
   job_id: string
   job_name?: string
   status: AssignmentStatus
+  relation_type: RelationType
+  channel: ResumeChannel
+  applied_at: string
+  owner_id: string | null
+  termination_reason: TerminationReason | null
+  is_reapply: boolean
   note: string
   create_time: string
   update_time: string
@@ -59,6 +83,8 @@ export interface Job {
   description: string
   skill_requirements: string[]
   status: JobStatus
+  close_reason: JobCloseReason | null
+  owner_id: string | null
   active_assignment_count: number
   create_time: string
   update_time: string
