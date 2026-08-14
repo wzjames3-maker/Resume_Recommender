@@ -212,21 +212,27 @@ class ResumeServiceTests(TestCase):
         handle.close()
         return handle.name, name, "txt"
 
-    def test_upload_creates_candidate_and_marks_success(self):
+    @patch("hr.serializers.recruitment.parse_resume_task.delay")
+    def test_upload_creates_pending_and_dispatches_task(self, mock_delay):
         path, name, ext = self._txt_file("姓名：李四\n电话：13912345678\n3年工作经验")
         result = self.service.upload_resumes([(path, name, ext)], "OTHER")
-        self.assertEqual(result[0]["status"], "SUCCESS")
-        self.assertIsNotNone(result[0]["candidate_id"])
+        self.assertEqual(result[0]["status"], "PENDING")
+        self.assertIsNone(result[0]["candidate_id"])
         self.assertEqual(result[0]["duplicate"], False)
+        self.assertEqual(mock_delay.call_count, 1)
+        resume = ResumeFile.objects.get(id=result[0]["resume_id"])
+        self.assertEqual(resume.status, "PENDING")
 
-    def test_duplicate_upload_reuses_candidate(self):
+    @patch("hr.serializers.recruitment.parse_resume_task.delay")
+    def test_duplicate_upload_reuses_candidate(self, mock_delay):
         path, name, ext = self._txt_file("姓名：王五\n邮箱：wangwu@example.com")
         first = self.service.upload_resumes([(path, name, ext)], "OTHER")[0]
         path2, _, _ = self._txt_file("姓名：王五\n邮箱：wangwu@example.com")
         second = self.service.upload_resumes([(path2, name, ext)], "OTHER")[0]
         self.assertEqual(second["duplicate"], True)
         self.assertEqual(second["candidate_id"], first["candidate_id"])
-        self.assertEqual(Candidate.objects.count(), 1)
+        self.assertEqual(Candidate.objects.count(), 0)
+        self.assertEqual(ResumeFile.objects.count(), 1)
 
     def test_reject_unsupported_extension_and_oversize(self):
         with self.assertRaisesRegex(AppApiException, "not supported"):
@@ -235,13 +241,36 @@ class ResumeServiceTests(TestCase):
         with self.assertRaisesRegex(AppApiException, "20"):
             self.service.upload_resumes([(path, name, ext)], "OTHER")
 
-    def test_duplicate_upload_keeps_first_success(self):
+    @patch("hr.serializers.recruitment.parse_resume_task.delay")
+    def test_duplicate_upload_keeps_first_record(self, mock_delay):
         path, name, ext = self._txt_file("姓名：赵六")
         first = self.service.upload_resumes([(path, name, ext)], "OTHER")[0]
+        self.assertEqual(first["status"], "PENDING")
         path2, _, _ = self._txt_file("姓名：赵六")
-        self.service.upload_resumes([(path2, name, ext)], "OTHER")
-        first_resume = ResumeFile.objects.get(id=first["resume_id"])
-        self.assertEqual(first_resume.status, "SUCCESS")
+        second = self.service.upload_resumes([(path2, name, ext)], "OTHER")[0]
+        self.assertEqual(second["duplicate"], True)
+        self.assertEqual(second["candidate_id"], first["candidate_id"])
+        self.assertEqual(ResumeFile.objects.count(), 1)
+        self.assertEqual(mock_delay.call_count, 1)
+
+    @patch("hr.serializers.recruitment.parse_resume_task.delay")
+    def test_upload_dispatch_already_queued_raises_500(self, mock_delay):
+        from celery_once import AlreadyQueued
+
+        mock_delay.side_effect = AlreadyQueued(5)
+        path, name, ext = self._txt_file("姓名：周七")
+        with self.assertRaisesRegex(AppApiException, "任务已存在"):
+            self.service.upload_resumes([(path, name, ext)], "OTHER")
+
+    @patch("hr.serializers.recruitment.parse_resume_task.delay")
+    def test_upload_dispatch_error_marks_failed(self, mock_delay):
+        mock_delay.side_effect = RuntimeError("broker down")
+        path, name, ext = self._txt_file("姓名：吴八")
+        result = self.service.upload_resumes([(path, name, ext)], "OTHER")
+        self.assertEqual(result[0]["status"], "FAILED")
+        self.assertTrue(result[0]["error_message"])
+        resume = ResumeFile.objects.get(id=result[0]["resume_id"])
+        self.assertEqual(resume.status, "FAILED")
 
 
 class AdvancedSearchTests(TestCase):

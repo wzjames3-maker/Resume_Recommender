@@ -5,6 +5,7 @@ import shutil
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Max, Q
 
+from celery_once import AlreadyQueued
 from common.exception.app_exception import AppApiException, AppUnauthorizedFailed, NotFound404
 from hr.models import (
     ACTIVE_ASSIGNMENT_STATUSES,
@@ -20,7 +21,7 @@ from hr.models import (
     ResumeFile,
     ResumeStatus,
 )
-from hr.services.resume_parser import extract_text_from_docx, extract_text_from_txt, parse_resume_text
+from hr.task.resume import parse_resume_task
 from maxkb.const import PROJECT_DIR
 
 _ALLOWED_TRANSITIONS = {
@@ -482,47 +483,31 @@ class RecruitmentService:
                 continue
             stored = os.path.join(self._resume_dir(), f"{sha256}.{extension}")
             shutil.move(file_path, stored)
+            resume = ResumeFile.objects.create(
+                workspace_id=self.workspace_id, file_name=file_name, extension=extension,
+                file_path=stored, file_size=size, sha256=sha256,
+                source_channel=source_channel, status=ResumeStatus.PENDING, user_id=self.user_id,
+            )
             try:
-                if extension == "docx":
-                    text = extract_text_from_docx(stored)
-                else:
-                    text = extract_text_from_txt(stored)
-                parsed = parse_resume_text(text)
-                candidate = Candidate.objects.create(
-                    workspace_id=self.workspace_id,
-                    user_id=self.user_id,
-                    name=parsed["name"] or file_name,
-                    email=parsed["email"] or None,
-                    phone=parsed["phone"],
-                    current_city=parsed["current_city"],
-                    target_city=parsed["target_city"],
-                    highest_degree=parsed["highest_degree"],
-                    years_experience=parsed["years_experience"],
-                    skills=parsed["skills"],
-                    source=source_channel,
-                    note=parsed["note"],
-                )
-                resume = ResumeFile.objects.create(
-                    workspace_id=self.workspace_id, file_name=file_name, extension=extension,
-                    file_path=stored, file_size=size, sha256=sha256,
-                    source_channel=source_channel, status=ResumeStatus.SUCCESS, candidate=candidate,
-                    user_id=self.user_id,
-                )
+                parse_resume_task.delay(str(resume.id))
+                status = ResumeStatus.PENDING
+                error_message = ""
+            except AlreadyQueued as exc:
+                raise AppApiException(500, "任务已存在，请稍后查询") from exc
             except Exception as exc:
-                resume = ResumeFile.objects.create(
-                    workspace_id=self.workspace_id, file_name=file_name, extension=extension,
-                    file_path=stored, file_size=size, sha256=sha256,
-                    source_channel=source_channel, status=ResumeStatus.FAILED,
-                    error_message=str(exc), user_id=self.user_id,
-                )
+                resume.status = ResumeStatus.FAILED
+                resume.error_message = str(exc)
+                resume.save(update_fields=["status", "error_message", "update_time"])
+                status = ResumeStatus.FAILED
+                error_message = str(exc)
             records.append({
                 "resume_id": str(resume.id),
                 "file_name": resume.file_name,
-                "status": resume.status,
+                "status": status,
                 "sha256": resume.sha256,
                 "duplicate": False,
-                "candidate_id": str(resume.candidate_id) if resume.candidate_id else None,
-                "error_message": resume.error_message,
+                "candidate_id": None,
+                "error_message": error_message,
             })
         return records
 
