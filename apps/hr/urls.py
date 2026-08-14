@@ -16,6 +16,8 @@ urlpatterns = [
     path("workspace/<str:workspace_id>/hr/jobs", views.JobAPI.as_view()),
     path("workspace/<str:workspace_id>/hr/jobs/<int:current_page>/<int:page_size>", views.JobAPI.Page.as_view()),
     path("workspace/<str:workspace_id>/hr/jobs/<str:job_id>", views.JobDetailAPI.as_view()),
+    path("workspace/<str:workspace_id>/hr/jobs/<str:job_id>/close", views.JobDetailAPI.Close.as_view()),
+    path("workspace/<str:workspace_id>/hr/jobs/<str:job_id>/reopen", views.JobDetailAPI.Reopen.as_view()),
     path("workspace/<str:workspace_id>/hr/jobs/<str:job_id>/assignments", views.JobAPI.Assignment.as_view()),
     path("workspace/<str:workspace_id>/hr/jobs/<str:job_id>/matches/<int:current_page>/<int:page_size>", views.JobMatchAPI.as_view()),
     path("workspace/<str:workspace_id>/hr/assignments/<str:assignment_id>", views.AssignmentAPI.as_view()),

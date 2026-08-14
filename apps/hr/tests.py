@@ -136,7 +136,9 @@ class RecruitmentServiceTests(TestCase):
 
     def test_terminal_assignment_allows_reassignment_through_service(self):
         assignment = self.service.create_assignment(self.job.id, self.candidate.id, {})
-        self.service.update_assignment(assignment["id"], {"status": AssignmentStatus.REJECTED})
+        self.service.update_assignment(
+            assignment["id"], {"status": AssignmentStatus.REJECTED, "termination_reason": "NOT_FIT"}
+        )
 
         replacement = self.service.create_assignment(self.job.id, self.candidate.id, {})
 
@@ -144,7 +146,9 @@ class RecruitmentServiceTests(TestCase):
 
     def test_archived_candidate_rejects_reactivating_assignment(self):
         assignment = self.service.create_assignment(self.job.id, self.candidate.id, {})
-        self.service.update_assignment(assignment["id"], {"status": AssignmentStatus.REJECTED})
+        self.service.update_assignment(
+            assignment["id"], {"status": AssignmentStatus.REJECTED, "termination_reason": "NOT_FIT"}
+        )
         self.service.archive_candidate(self.candidate.id)
 
         with self.assertRaisesRegex(AppApiException, "archived"):
@@ -152,7 +156,9 @@ class RecruitmentServiceTests(TestCase):
 
     def test_closed_job_rejects_reactivating_assignment(self):
         assignment = self.service.create_assignment(self.job.id, self.candidate.id, {})
-        self.service.update_assignment(assignment["id"], {"status": AssignmentStatus.REJECTED})
+        self.service.update_assignment(
+            assignment["id"], {"status": AssignmentStatus.REJECTED, "termination_reason": "NOT_FIT"}
+        )
         self.service.edit_job(self.job.id, {"status": "CLOSED"})
 
         with self.assertRaisesRegex(AppApiException, "closed"):
@@ -176,7 +182,7 @@ class ActiveAssignmentArchiveTests(TestCase):
         )
 
     def _transition(self, assignment_id, to_status):
-        return self.service.update_assignment(assignment_id, {"status": to_status})
+        return self.service.update_assignment(assignment_id, {"status": to_status, "termination_reason": "OTHER"})
 
     def _to_interviewing(self, candidate):
         assignment = self.service.create_assignment(self.job.id, candidate.id, {})
@@ -434,7 +440,7 @@ class InterviewStatusMachineTests(TestCase):
         self.assignment_id = self.service.create_assignment(self.job.id, self.candidate.id, {})["id"]
 
     def _transition(self, to_status):
-        return self.service.update_assignment(self.assignment_id, {"status": to_status})
+        return self.service.update_assignment(self.assignment_id, {"status": to_status, "termination_reason": "OTHER"})
 
     def test_full_offer_chain_is_legal(self):
         self._transition(AssignmentStatus.SCREEN_PASSED)
@@ -968,3 +974,390 @@ class CandidateMergeTests(TestCase):
         self.secondary.save(update_fields=["status"])
         self.service.merge_candidates(str(self.primary.id), {"secondary_id": str(self.secondary.id)})
         self.assertFalse(Candidate.objects.filter(id=self.secondary.id).exists())
+
+
+class StatusMachineMatrixTests(TestCase):
+    """A2: 扩展后的迁移矩阵每行允许/禁止流转各一例"""
+
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=True)
+        self.job = Job.objects.create(name="Engineer", workspace_id="workspace-a", headcount=1)
+
+    def _new_assignment(self):
+        candidate = Candidate.objects.create(name=f"C-{uuid.uuid7().hex[:6]}", workspace_id="workspace-a")
+        return self.service.create_assignment(self.job.id, candidate.id, {})["id"]
+
+    def test_matrix_allows_each_legal_transition(self):
+        cases = [
+            (["SCREEN_PASSED"], None),
+            (["SCREEN_PASSED", "INTERVIEWING"], None),
+            (["SCREEN_PASSED", "INTERVIEWING", "OFFER"], None),
+            (["SCREEN_PASSED", "INTERVIEWING", "OFFER", "HIRED"], None),
+            (["WITHDRAWN"], "CANDIDATE_WITHDRAW"),
+            (["REJECTED"], "NOT_FIT"),
+            (["CLOSED"], "JOB_CLOSED"),
+        ]
+        for steps, reason in cases:
+            with self.subTest(final=steps[-1]):
+                assignment_id = self._new_assignment()
+                for index, step in enumerate(steps):
+                    data = {"status": step}
+                    if index == len(steps) - 1 and reason:
+                        data["termination_reason"] = reason
+                    self.service.update_assignment(assignment_id, data)
+                assignment = CandidateAssignment.objects.get(id=assignment_id)
+                self.assertEqual(assignment.status, steps[-1])
+
+    def test_matrix_rejects_each_illegal_transition(self):
+        cases = [
+            (["INTERVIEWING"], "PENDING_SCREEN -> INTERVIEWING"),
+            (["SCREEN_PASSED", "OFFER"], "SCREEN_PASSED -> OFFER"),
+            (["SCREEN_PASSED", "INTERVIEWING", "HIRED"], "INTERVIEWING -> HIRED"),
+            (["SCREEN_PASSED", "INTERVIEWING", "OFFER", "INTERVIEWING"], "OFFER -> INTERVIEWING"),
+            (["REJECTED", "SCREEN_PASSED"], "REJECTED -> SCREEN_PASSED"),
+            (["WITHDRAWN", "PENDING_SCREEN"], "WITHDRAWN -> PENDING_SCREEN"),
+            (["CLOSED", "PENDING_SCREEN"], "CLOSED -> PENDING_SCREEN"),
+            (["SCREEN_PASSED", "INTERVIEWING", "OFFER", "HIRED", "REJECTED"], "HIRED -> REJECTED"),
+        ]
+        for steps, label in cases:
+            with self.subTest(label=label):
+                assignment_id = self._new_assignment()
+                for index, step in enumerate(steps):
+                    data = {"status": step}
+                    if step in (AssignmentStatus.REJECTED, AssignmentStatus.WITHDRAWN, AssignmentStatus.CLOSED):
+                        data["termination_reason"] = "OTHER"
+                    if index == len(steps) - 1:
+                        with self.assertRaisesRegex(AppApiException, "transition"):
+                            self.service.update_assignment(assignment_id, data)
+                    else:
+                        self.service.update_assignment(assignment_id, data)
+
+
+class TerminationReasonTests(TestCase):
+    """A2: 终态流转必填 termination_reason，非法枚举 400"""
+
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=True)
+        self.job = Job.objects.create(name="Engineer", workspace_id="workspace-a", headcount=1)
+
+    def _new_assignment(self):
+        candidate = Candidate.objects.create(name=f"C-{uuid.uuid7().hex[:6]}", workspace_id="workspace-a")
+        return self.service.create_assignment(self.job.id, candidate.id, {})["id"]
+
+    def test_terminal_transition_requires_termination_reason(self):
+        for status in (AssignmentStatus.REJECTED, AssignmentStatus.WITHDRAWN, AssignmentStatus.CLOSED):
+            with self.subTest(status=status):
+                assignment_id = self._new_assignment()
+                with self.assertRaisesRegex(AppApiException, "termination_reason"):
+                    self.service.update_assignment(assignment_id, {"status": status})
+
+    def test_terminal_transition_stores_termination_reason(self):
+        assignment_id = self._new_assignment()
+        result = self.service.update_assignment(
+            assignment_id, {"status": AssignmentStatus.REJECTED, "termination_reason": "SALARY"}
+        )
+        self.assertEqual(result["termination_reason"], "SALARY")
+
+    def test_invalid_termination_reason_rejected(self):
+        assignment_id = self._new_assignment()
+        with self.assertRaisesRegex(AppApiException, "termination_reason"):
+            self.service.update_assignment(
+                assignment_id, {"status": AssignmentStatus.REJECTED, "termination_reason": "NOPE"}
+            )
+
+
+class RestoreRejectedTests(TestCase):
+    """A2: REJECTED -> PENDING_SCREEN 仅管理员，note 记 [restore]，清空 termination_reason"""
+
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=True)
+        self.candidate = Candidate.objects.create(name="Alice", workspace_id="workspace-a")
+        self.job = Job.objects.create(name="Engineer", workspace_id="workspace-a", headcount=1)
+        self.assignment_id = self.service.create_assignment(self.job.id, self.candidate.id, {})["id"]
+        self.service.update_assignment(
+            self.assignment_id, {"status": AssignmentStatus.REJECTED, "termination_reason": "NOT_FIT"}
+        )
+
+    def test_member_cannot_restore(self):
+        member_service = RecruitmentService(
+            workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=False
+        )
+        with self.assertRaises(AppUnauthorizedFailed):
+            member_service.update_assignment(self.assignment_id, {"status": AssignmentStatus.PENDING_SCREEN, "note": "误拒绝"})
+
+    def test_restore_records_note_and_clears_termination_reason(self):
+        result = self.service.update_assignment(
+            self.assignment_id, {"status": AssignmentStatus.PENDING_SCREEN, "note": "误拒绝"}
+        )
+        self.assertEqual(result["status"], AssignmentStatus.PENDING_SCREEN)
+        assignment = CandidateAssignment.objects.get(id=self.assignment_id)
+        self.assertEqual(assignment.status, AssignmentStatus.PENDING_SCREEN)
+        self.assertEqual(assignment.note, "[restore] 误拒绝")
+        self.assertIsNone(assignment.termination_reason)
+
+    def test_restore_requires_reason(self):
+        with self.assertRaisesRegex(AppApiException, "restore reason"):
+            self.service.update_assignment(self.assignment_id, {"status": AssignmentStatus.PENDING_SCREEN})
+
+    def test_restore_rejected_when_another_active_assignment_exists(self):
+        self.service.create_assignment(self.job.id, self.candidate.id, {})
+        with self.assertRaisesRegex(AppApiException, "active assignment"):
+            self.service.update_assignment(self.assignment_id, {"status": AssignmentStatus.PENDING_SCREEN, "note": "误拒绝"})
+
+
+class ReapplyTests(TestCase):
+    """A2: 终态历史后新建关联 is_reapply=True，applied_at 可覆盖"""
+
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=True)
+        self.candidate = Candidate.objects.create(name="Alice", workspace_id="workspace-a")
+        self.job = Job.objects.create(name="Engineer", workspace_id="workspace-a", headcount=1)
+
+    def test_fresh_assignment_defaults_and_not_reapply(self):
+        result = self.service.create_assignment(self.job.id, self.candidate.id, {})
+        self.assertIs(result["is_reapply"], False)
+        self.assertEqual(result["relation_type"], "APPLY")
+        self.assertEqual(result["channel"], "OTHER")
+        self.assertEqual(result["owner_id"], str(self.user_id))
+        self.assertTrue(result["applied_at"])
+
+    def test_reapply_marked_after_rejected_history(self):
+        assignment = self.service.create_assignment(self.job.id, self.candidate.id, {})
+        self.service.update_assignment(
+            assignment["id"], {"status": AssignmentStatus.REJECTED, "termination_reason": "NOT_FIT"}
+        )
+        replacement = self.service.create_assignment(self.job.id, self.candidate.id, {})
+        self.assertIs(replacement["is_reapply"], True)
+        self.assertEqual(replacement["status"], AssignmentStatus.PENDING_SCREEN)
+
+    def test_reapply_applied_at_overridable(self):
+        assignment = self.service.create_assignment(self.job.id, self.candidate.id, {})
+        self.service.update_assignment(
+            assignment["id"], {"status": AssignmentStatus.WITHDRAWN, "termination_reason": "CANDIDATE_WITHDRAW"}
+        )
+        replacement = self.service.create_assignment(
+            self.job.id, self.candidate.id, {"applied_at": "2026-08-01T10:00:00Z"}
+        )
+        self.assertIs(replacement["is_reapply"], True)
+        self.assertTrue(replacement["applied_at"].isoformat().startswith("2026-08-01T10:00:00"))
+
+    def test_create_assignment_with_relation_fields(self):
+        result = self.service.create_assignment(
+            self.job.id, self.candidate.id,
+            {"relation_type": "REFERRAL", "channel": "HEADHUNTER", "owner_id": str(uuid.uuid7())},
+        )
+        self.assertEqual(result["relation_type"], "REFERRAL")
+        self.assertEqual(result["channel"], "HEADHUNTER")
+        self.assertNotEqual(result["owner_id"], str(self.user_id))
+
+
+class CloseJobTests(TestCase):
+    """A2: 关闭职位批量收尾在途关联、恢复职位清空 close_reason"""
+
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=True)
+        self.job = Job.objects.create(name="Engineer", workspace_id="workspace-a", headcount=5)
+        self.first = self.service.create_assignment(
+            self.job.id, Candidate.objects.create(name="A", workspace_id="workspace-a").id, {}
+        )["id"]
+        self.second = self.service.create_assignment(
+            self.job.id, Candidate.objects.create(name="B", workspace_id="workspace-a").id, {}
+        )["id"]
+        self.service.update_assignment(
+            self.second, {"status": AssignmentStatus.SCREEN_PASSED, "termination_reason": "OTHER"}
+        )
+        self.rejected = self.service.create_assignment(
+            self.job.id, Candidate.objects.create(name="C", workspace_id="workspace-a").id, {}
+        )["id"]
+        self.service.update_assignment(
+            self.rejected, {"status": AssignmentStatus.REJECTED, "termination_reason": "NOT_FIT"}
+        )
+
+    def test_close_requires_close_reason(self):
+        with self.assertRaisesRegex(AppApiException, "close_reason"):
+            self.service.close_job(self.job.id, "")
+
+    def test_close_rejects_invalid_close_reason(self):
+        with self.assertRaisesRegex(AppApiException, "close_reason"):
+            self.service.close_job(self.job.id, "NOPE")
+
+    def test_close_terminates_active_assignments(self):
+        result = self.service.close_job(self.job.id, "FILLED")
+        self.assertEqual(result["closed_count"], 2)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, "CLOSED")
+        self.assertEqual(self.job.close_reason, "FILLED")
+        for assignment_id in (self.first, self.second):
+            assignment = CandidateAssignment.objects.get(id=assignment_id)
+            self.assertEqual(assignment.status, AssignmentStatus.CLOSED)
+            self.assertEqual(assignment.termination_reason, "JOB_CLOSED")
+        rejected = CandidateAssignment.objects.get(id=self.rejected)
+        self.assertEqual(rejected.status, AssignmentStatus.REJECTED)
+
+    def test_reopen_clears_close_reason(self):
+        self.service.close_job(self.job.id, "CANCELLED")
+        result = self.service.reopen_job(self.job.id)
+        self.assertEqual(result["status"], "OPEN")
+        self.assertIsNone(result["close_reason"])
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, "OPEN")
+        self.assertIsNone(self.job.close_reason)
+
+    def test_member_cannot_close_or_reopen(self):
+        member_service = RecruitmentService(
+            workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=False
+        )
+        with self.assertRaises(AppUnauthorizedFailed):
+            member_service.close_job(self.job.id, "FILLED")
+        with self.assertRaises(AppUnauthorizedFailed):
+            member_service.reopen_job(self.job.id)
+
+    def test_close_cross_workspace_raises_404(self):
+        foreign = Job.objects.create(name="Foreign", workspace_id="workspace-b", headcount=1)
+        with self.assertRaises(NotFound404):
+            self.service.close_job(foreign.id, "FILLED")
+        with self.assertRaises(NotFound404):
+            self.service.reopen_job(foreign.id)
+
+    def test_reopen_rejects_open_job(self):
+        with self.assertRaisesRegex(AppApiException, "on hold or closed"):
+            self.service.reopen_job(self.job.id)
+
+
+class JobPositionStatusTests(TestCase):
+    """A2: DRAFT/ON_HOLD 不能建新关联；ON_HOLD 下不能流转到 INTERVIEWING"""
+
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=True)
+        self.candidate = Candidate.objects.create(name="Alice", workspace_id="workspace-a")
+        self.job = Job.objects.create(name="Engineer", workspace_id="workspace-a", headcount=1)
+
+    def test_draft_job_rejects_new_assignment(self):
+        self.job.status = "DRAFT"
+        self.job.save(update_fields=["status"])
+        with self.assertRaisesRegex(AppApiException, "closed"):
+            self.service.create_assignment(self.job.id, self.candidate.id, {})
+
+    def test_on_hold_job_rejects_new_assignment(self):
+        self.job.status = "ON_HOLD"
+        self.job.save(update_fields=["status"])
+        with self.assertRaisesRegex(AppApiException, "closed"):
+            self.service.create_assignment(self.job.id, self.candidate.id, {})
+
+    def test_on_hold_allows_terminal_but_not_interviewing(self):
+        assignment_id = self.service.create_assignment(self.job.id, self.candidate.id, {})["id"]
+        self.job.status = "ON_HOLD"
+        self.job.save(update_fields=["status"])
+        self.service.update_assignment(assignment_id, {"status": AssignmentStatus.SCREEN_PASSED})
+        with self.assertRaisesRegex(AppApiException, "closed"):
+            self.service.update_assignment(assignment_id, {"status": AssignmentStatus.INTERVIEWING})
+        self.service.update_assignment(
+            assignment_id, {"status": AssignmentStatus.REJECTED, "termination_reason": "NOT_FIT"}
+        )
+        self.assertEqual(
+            CandidateAssignment.objects.get(id=assignment_id).status, AssignmentStatus.REJECTED
+        )
+
+
+class OwnerFieldTests(TestCase):
+    """A2: 负责人默认当前用户，可按 owner_id 筛选"""
+
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.other_id = uuid.uuid7()
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=True)
+
+    def test_create_defaults_owner_to_current_user(self):
+        job = self.service.create_job({"name": "Engineer", "headcount": 1})
+        self.assertEqual(job["owner_id"], str(self.user_id))
+        assignment = self.service.create_assignment(
+            job["id"], Candidate.objects.create(name="Alice", workspace_id="workspace-a").id, {}
+        )
+        self.assertEqual(assignment["owner_id"], str(self.user_id))
+
+    def test_explicit_owner_on_create(self):
+        job = self.service.create_job({"name": "Engineer", "headcount": 1, "owner_id": str(self.other_id)})
+        self.assertEqual(job["owner_id"], str(self.other_id))
+        assignment = self.service.create_assignment(
+            job["id"], Candidate.objects.create(name="Alice", workspace_id="workspace-a").id,
+            {"owner_id": str(self.other_id)},
+        )
+        self.assertEqual(assignment["owner_id"], str(self.other_id))
+
+    def test_edit_job_updates_owner_id(self):
+        job = self.service.create_job({"name": "Engineer", "headcount": 1})
+        result = self.service.edit_job(job["id"], {"owner_id": str(self.other_id)})
+        self.assertEqual(result["owner_id"], str(self.other_id))
+
+    def test_update_assignment_updates_owner_id(self):
+        job = self.service.create_job({"name": "Engineer", "headcount": 1})
+        assignment = self.service.create_assignment(
+            job["id"], Candidate.objects.create(name="Alice", workspace_id="workspace-a").id, {}
+        )
+        result = self.service.update_assignment(assignment["id"], {"owner_id": str(self.other_id)})
+        self.assertEqual(result["owner_id"], str(self.other_id))
+
+    def test_page_jobs_filters_by_owner_id(self):
+        self.service.create_job({"name": "Mine", "headcount": 1})
+        self.service.create_job({"name": "Theirs", "headcount": 1, "owner_id": str(self.other_id)})
+        result = self.service.page_jobs(1, 20, {"owner_id": str(self.other_id)})
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(result["records"][0]["name"], "Theirs")
+
+    def test_page_candidates_filters_by_owner_id(self):
+        alice = Candidate.objects.create(name="Alice", workspace_id="workspace-a")
+        bob = Candidate.objects.create(name="Bob", workspace_id="workspace-a")
+        job = self.service.create_job({"name": "Engineer", "headcount": 1})
+        self.service.create_assignment(job["id"], alice.id, {})
+        self.service.create_assignment(job["id"], bob.id, {"owner_id": str(self.other_id)})
+        result = self.service.page_candidates(1, 20, {"owner_id": str(self.other_id)})
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(result["records"][0]["name"], "Bob")
+
+
+class EnumValidationTests(TestCase):
+    """A2: relation_type / channel 非法枚举 400"""
+
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=True)
+        self.candidate = Candidate.objects.create(name="Alice", workspace_id="workspace-a")
+        self.job = Job.objects.create(name="Engineer", workspace_id="workspace-a", headcount=1)
+
+    def test_invalid_relation_type_rejected(self):
+        with self.assertRaisesRegex(AppApiException, "relation_type"):
+            self.service.create_assignment(self.job.id, self.candidate.id, {"relation_type": "NOPE"})
+
+    def test_invalid_channel_rejected(self):
+        with self.assertRaisesRegex(AppApiException, "channel"):
+            self.service.create_assignment(self.job.id, self.candidate.id, {"channel": "NOPE"})
+
+    def test_invalid_owner_id_rejected(self):
+        with self.assertRaisesRegex(AppApiException, "owner_id"):
+            self.service.create_assignment(self.job.id, self.candidate.id, {"owner_id": "garbage"})
+
+    def test_invalid_close_reason_on_edit_job_rejected(self):
+        job = self.service.create_job({"name": "Engineer", "headcount": 1})
+        with self.assertRaisesRegex(AppApiException, "close_reason"):
+            self.service.edit_job(job["id"], {"close_reason": "NOPE"})
+
+
+class CloseReopenRouteTests(TestCase):
+    """A2: close/reopen 路由注册且受权限保护"""
+
+    def test_close_reopen_routes_are_registered_and_protected(self):
+        from django.urls import resolve
+        from hr.views.recruitment import JobDetailAPI
+
+        for suffix in ("close", "reopen"):
+            path = f"/admin/api/workspace/workspace-a/hr/jobs/{uuid.uuid7()}/{suffix}"
+            resolved = resolve(path)
+            self.assertIs(resolved.func.cls, JobDetailAPI.Close if suffix == "close" else JobDetailAPI.Reopen)
+            response = self.client.put(path, data={}, content_type="application/json")
+            self.assertIn(response.status_code, (401, 403), f"{path} 未注册或未受保护: {response.status_code}")

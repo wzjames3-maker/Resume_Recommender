@@ -1,10 +1,12 @@
 import hashlib
 import os
 import shutil
+from datetime import datetime
 
 import uuid_utils.compat as uuid
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Max, Q
+from django.utils import timezone
 
 from celery_once import AlreadyQueued
 from common.exception.app_exception import AppApiException, AppUnauthorizedFailed, NotFound404
@@ -17,35 +19,57 @@ from hr.models import (
     Interview,
     InterviewStatus,
     Job,
+    JobCloseReason,
     JobStatus,
+    RelationType,
     ResumeChannel,
     ResumeFile,
     ResumeStatus,
+    TerminationReason,
 )
 from hr.services.resume_parser import extract_text_from_docx, extract_text_from_txt
 from hr.task.resume import parse_resume_task
 from maxkb.const import PROJECT_DIR
 
+TERMINATION_REASON_REQUIRED_STATUSES = [
+    AssignmentStatus.REJECTED,
+    AssignmentStatus.WITHDRAWN,
+    AssignmentStatus.CLOSED,
+]
+
+JOB_OPEN_REQUIRED_TARGETS = [
+    AssignmentStatus.INTERVIEWING,
+    AssignmentStatus.OFFER,
+    AssignmentStatus.HIRED,
+]
+
 _ALLOWED_TRANSITIONS = {
     AssignmentStatus.PENDING_SCREEN: {
         AssignmentStatus.SCREEN_PASSED,
         AssignmentStatus.REJECTED,
+        AssignmentStatus.WITHDRAWN,
         AssignmentStatus.CLOSED,
     },
     AssignmentStatus.SCREEN_PASSED: {
         AssignmentStatus.INTERVIEWING,
         AssignmentStatus.REJECTED,
+        AssignmentStatus.WITHDRAWN,
         AssignmentStatus.CLOSED,
     },
     AssignmentStatus.INTERVIEWING: {
         AssignmentStatus.OFFER,
         AssignmentStatus.REJECTED,
+        AssignmentStatus.WITHDRAWN,
         AssignmentStatus.CLOSED,
     },
     AssignmentStatus.OFFER: {
         AssignmentStatus.HIRED,
         AssignmentStatus.REJECTED,
+        AssignmentStatus.WITHDRAWN,
         AssignmentStatus.CLOSED,
+    },
+    AssignmentStatus.REJECTED: {
+        AssignmentStatus.PENDING_SCREEN,
     },
 }
 
@@ -111,6 +135,60 @@ class RecruitmentService:
         return [skill.strip() for skill in value]
 
     @staticmethod
+    def _owner_id(data):
+        value = data.get("owner_id")
+        if value in (None, ""):
+            return None
+        try:
+            return uuid.UUID(str(value))
+        except (ValueError, TypeError) as exc:
+            raise AppApiException(400, "owner_id is invalid") from exc
+
+    @staticmethod
+    def _relation_type(data):
+        value = data.get("relation_type", RelationType.APPLY)
+        if value not in RelationType.values:
+            raise AppApiException(400, "relation_type is invalid")
+        return value
+
+    @staticmethod
+    def _channel(data):
+        value = data.get("channel", ResumeChannel.OTHER)
+        if value not in ResumeChannel.values:
+            raise AppApiException(400, "channel is invalid")
+        return value
+
+    @staticmethod
+    def _applied_at(data):
+        value = data.get("applied_at")
+        if value in (None, ""):
+            return None
+        if isinstance(value, datetime):
+            return value
+        try:
+            return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise AppApiException(400, "applied_at is invalid") from exc
+
+    @staticmethod
+    def _close_reason(data):
+        value = data.get("close_reason")
+        if not value:
+            raise AppApiException(400, "close_reason is required")
+        if value not in JobCloseReason.values:
+            raise AppApiException(400, "close_reason is invalid")
+        return value
+
+    @staticmethod
+    def _termination_reason(data):
+        value = data.get("termination_reason")
+        if not value:
+            raise AppApiException(400, "termination_reason is required")
+        if value not in TerminationReason.values:
+            raise AppApiException(400, "termination_reason is invalid")
+        return value
+
+    @staticmethod
     def _candidate_output(candidate):
         return {
             "id": str(candidate.id),
@@ -141,6 +219,8 @@ class RecruitmentService:
             "description": job.description,
             "skill_requirements": job.skill_requirements,
             "status": job.status,
+            "close_reason": job.close_reason,
+            "owner_id": str(job.owner_id) if job.owner_id else None,
             "active_assignment_count": getattr(job, "active_assignment_count", 0),
             "create_time": job.create_time,
             "update_time": job.update_time,
@@ -153,6 +233,12 @@ class RecruitmentService:
             "candidate_id": str(assignment.candidate_id),
             "job_id": str(assignment.job_id),
             "status": assignment.status,
+            "relation_type": assignment.relation_type,
+            "channel": assignment.channel,
+            "applied_at": assignment.applied_at,
+            "owner_id": str(assignment.owner_id) if assignment.owner_id else None,
+            "termination_reason": assignment.termination_reason,
+            "is_reapply": assignment.is_reapply,
             "note": assignment.note,
             "create_time": assignment.create_time,
             "update_time": assignment.update_time,
@@ -223,6 +309,13 @@ class RecruitmentService:
             queryset = queryset.filter(years_experience__lte=years_max)
         if source:
             queryset = queryset.filter(source=source)
+        owner_id = query.get("owner_id")
+        if owner_id:
+            queryset = queryset.filter(
+                id__in=CandidateAssignment.objects.filter(
+                    workspace_id=self.workspace_id, owner_id=owner_id
+                ).values("candidate_id")
+            )
         total = queryset.count()
         start = (current_page - 1) * page_size
         candidates = queryset.order_by("-update_time")[start:start + page_size]
@@ -309,6 +402,7 @@ class RecruitmentService:
         job = Job.objects.create(
             workspace_id=self.workspace_id,
             user_id=self.user_id,
+            owner_id=self._owner_id(data) or self.user_id,
             name=self._required_string(data, "name", 128),
             department=self._optional_string(data, "department", 128),
             city=self._optional_string(data, "city", 64),
@@ -323,12 +417,15 @@ class RecruitmentService:
         queryset = Job.objects.filter(workspace_id=self.workspace_id)
         name = query.get("name")
         status = query.get("status")
+        owner_id = query.get("owner_id")
         if name:
             queryset = queryset.filter(name__icontains=name)
         if status:
             if status not in JobStatus.values:
                 raise AppApiException(400, "status is invalid")
             queryset = queryset.filter(status=status)
+        if owner_id:
+            queryset = queryset.filter(owner_id=owner_id)
         queryset = queryset.annotate(
             active_assignment_count=Count(
                 "candidateassignment",
@@ -382,6 +479,15 @@ class RecruitmentService:
                 raise AppApiException(400, "status is invalid")
             job.status = data["status"]
             update_fields.append("status")
+        if "owner_id" in data:
+            job.owner_id = self._owner_id(data)
+            update_fields.append("owner_id")
+        if "close_reason" in data:
+            value = data["close_reason"] or None
+            if value is not None and value not in JobCloseReason.values:
+                raise AppApiException(400, "close_reason is invalid")
+            job.close_reason = value
+            update_fields.append("close_reason")
         if update_fields:
             job.save(update_fields=[*update_fields, "update_time"])
         return self._job_output(job)
@@ -399,18 +505,62 @@ class RecruitmentService:
             status=AssignmentStatus.HIRED,
         ).exists():
             raise AppApiException(400, "Candidate is already hired")
+        is_reapply = CandidateAssignment.objects.filter(
+            workspace_id=self.workspace_id,
+            candidate=candidate,
+            job=job,
+            status__in=TERMINATION_REASON_REQUIRED_STATUSES,
+        ).exists()
         try:
             with transaction.atomic():
                 assignment = CandidateAssignment.objects.create(
                     workspace_id=self.workspace_id,
                     user_id=self.user_id,
+                    owner_id=self._owner_id(data) or self.user_id,
                     candidate=candidate,
                     job=job,
+                    relation_type=self._relation_type(data),
+                    channel=self._channel(data),
                     note=self._optional_string(data, "note", 4096),
+                    is_reapply=is_reapply,
                 )
+                applied_at = self._applied_at(data)
+                if applied_at is not None:
+                    assignment.applied_at = applied_at
+                    assignment.save(update_fields=["applied_at"])
         except IntegrityError as exc:
             raise AppApiException(400, "An active assignment already exists") from exc
         return self._assignment_output(assignment)
+
+    def close_job(self, job_id, close_reason):
+        self._require_manage()
+        job = self._job(job_id)
+        reason = self._close_reason({"close_reason": close_reason})
+        with transaction.atomic():
+            job = Job.objects.select_for_update().get(id=job.id)
+            job.status = JobStatus.CLOSED
+            job.close_reason = reason
+            job.save(update_fields=["status", "close_reason", "update_time"])
+            closed_count = CandidateAssignment.objects.filter(
+                workspace_id=self.workspace_id,
+                job=job,
+                status__in=ACTIVE_ASSIGNMENT_STATUSES,
+            ).update(
+                status=AssignmentStatus.CLOSED,
+                termination_reason=TerminationReason.JOB_CLOSED,
+                update_time=timezone.now(),
+            )
+        return {"closed_count": closed_count}
+
+    def reopen_job(self, job_id):
+        self._require_manage()
+        job = self._job(job_id)
+        if job.status not in (JobStatus.ON_HOLD, JobStatus.CLOSED):
+            raise AppApiException(400, "Job is not on hold or closed")
+        job.status = JobStatus.OPEN
+        job.close_reason = None
+        job.save(update_fields=["status", "close_reason", "update_time"])
+        return self._job_output(job)
 
     def update_assignment(self, assignment_id, data):
         try:
@@ -430,16 +580,40 @@ class RecruitmentService:
                     allowed = _ALLOWED_TRANSITIONS.get(current_status)
                     if allowed is None or target_status not in allowed:
                         raise AppApiException(400, f"Illegal status transition from {current_status} to {target_status}")
-                    if target_status in ACTIVE_ASSIGNMENT_STATUSES:
-                        candidate = Candidate.objects.select_for_update().get(id=assignment.candidate_id)
-                        job = Job.objects.select_for_update().get(id=assignment.job_id)
-                        if candidate.status != CandidateStatus.ACTIVE:
-                            raise AppApiException(400, "Candidate is archived")
-                        if job.status != JobStatus.OPEN:
-                            raise AppApiException(400, "Job is closed")
-                    assignment.status = target_status
-                    update_fields.append("status")
-                if "note" in data:
+                    if current_status == AssignmentStatus.REJECTED and target_status == AssignmentStatus.PENDING_SCREEN:
+                        self._require_manage()
+                        reason = data.get("note")
+                        if not isinstance(reason, str) or not reason.strip():
+                            raise AppApiException(400, "restore reason is required")
+                        if CandidateAssignment.objects.filter(
+                            workspace_id=self.workspace_id,
+                            candidate=assignment.candidate,
+                            job=assignment.job,
+                            status__in=ACTIVE_ASSIGNMENT_STATUSES,
+                        ).exclude(id=assignment.id).exists():
+                            raise AppApiException(400, "An active assignment already exists")
+                        assignment.status = target_status
+                        assignment.termination_reason = None
+                        assignment.note = f"[restore] {reason.strip()}"
+                        update_fields.extend(["status", "termination_reason", "note"])
+                    else:
+                        if target_status in JOB_OPEN_REQUIRED_TARGETS:
+                            job = Job.objects.select_for_update().get(id=assignment.job_id)
+                            if job.status != JobStatus.OPEN:
+                                raise AppApiException(400, "Job is closed")
+                        if target_status in ACTIVE_ASSIGNMENT_STATUSES:
+                            candidate = Candidate.objects.select_for_update().get(id=assignment.candidate_id)
+                            if candidate.status != CandidateStatus.ACTIVE:
+                                raise AppApiException(400, "Candidate is archived")
+                        if target_status in TERMINATION_REASON_REQUIRED_STATUSES:
+                            assignment.termination_reason = self._termination_reason(data)
+                            update_fields.append("termination_reason")
+                        assignment.status = target_status
+                        update_fields.append("status")
+                if "owner_id" in data:
+                    assignment.owner_id = self._owner_id(data)
+                    update_fields.append("owner_id")
+                if "note" in data and "status" not in data:
                     assignment.note = self._optional_string(data, "note", 4096)
                     update_fields.append("note")
                 if not update_fields:

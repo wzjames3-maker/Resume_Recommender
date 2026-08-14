@@ -1,6 +1,7 @@
 import uuid_utils.compat as uuid
 from django.db import models
 from django.db.models import Q
+from django.utils import timezone
 
 
 class CandidateStatus(models.TextChoices):
@@ -9,8 +10,17 @@ class CandidateStatus(models.TextChoices):
 
 
 class JobStatus(models.TextChoices):
+    DRAFT = "DRAFT", "Draft"
     OPEN = "OPEN", "Open"
+    ON_HOLD = "ON_HOLD", "On hold"
     CLOSED = "CLOSED", "Closed"
+
+
+class JobCloseReason(models.TextChoices):
+    FILLED = "FILLED", "Filled"
+    CANCELLED = "CANCELLED", "Cancelled"
+    DUPLICATE = "DUPLICATE", "Duplicate"
+    OTHER = "OTHER", "Other"
 
 
 class AssignmentStatus(models.TextChoices):
@@ -20,7 +30,25 @@ class AssignmentStatus(models.TextChoices):
     OFFER = "OFFER", "Offer"
     HIRED = "HIRED", "Hired"
     REJECTED = "REJECTED", "Rejected"
+    WITHDRAWN = "WITHDRAWN", "Withdrawn"
     CLOSED = "CLOSED", "Closed"
+
+
+class TerminationReason(models.TextChoices):
+    NOT_FIT = "NOT_FIT", "Not fit"
+    SALARY = "SALARY", "Salary"
+    UNREACHABLE = "UNREACHABLE", "Unreachable"
+    CANDIDATE_WITHDRAW = "CANDIDATE_WITHDRAW", "Candidate withdraw"
+    JOB_CLOSED = "JOB_CLOSED", "Job closed"
+    MERGED = "MERGED", "Merged"
+    OTHER = "OTHER", "Other"
+
+
+class RelationType(models.TextChoices):
+    APPLY = "APPLY", "Apply"
+    SEEK = "SEEK", "Seek"
+    REFERRAL = "REFERRAL", "Referral"
+    HEADHUNTER = "HEADHUNTER", "Headhunter"
 
 
 ACTIVE_ASSIGNMENT_STATUSES = [
@@ -29,6 +57,21 @@ ACTIVE_ASSIGNMENT_STATUSES = [
     AssignmentStatus.INTERVIEWING,
     AssignmentStatus.OFFER,
 ]
+
+TERMINAL_ASSIGNMENT_STATUSES = [
+    AssignmentStatus.REJECTED,
+    AssignmentStatus.WITHDRAWN,
+    AssignmentStatus.CLOSED,
+    AssignmentStatus.HIRED,
+]
+
+
+class ResumeChannel(models.TextChoices):
+    REFERRAL = "REFERRAL", "Referral"
+    JOB_SITE = "JOB_SITE", "Job site"
+    HEADHUNTER = "HEADHUNTER", "Headhunter"
+    CAMPUS = "CAMPUS", "Campus"
+    OTHER = "OTHER", "Other"
 
 
 class Candidate(models.Model):
@@ -64,6 +107,8 @@ class Job(models.Model):
     description = models.TextField(blank=True, default="")
     skill_requirements = models.JSONField(default=list)
     status = models.CharField(max_length=16, choices=JobStatus.choices, default=JobStatus.OPEN)
+    close_reason = models.CharField(max_length=20, choices=JobCloseReason.choices, null=True, blank=True)
+    owner_id = models.UUIDField(null=True, blank=True)
     user_id = models.UUIDField(null=True, blank=True)
     create_time = models.DateTimeField(auto_now_add=True)
     update_time = models.DateTimeField(auto_now=True)
@@ -85,7 +130,13 @@ class CandidateAssignment(models.Model):
         choices=AssignmentStatus.choices,
         default=AssignmentStatus.PENDING_SCREEN,
     )
+    relation_type = models.CharField(max_length=16, choices=RelationType.choices, default=RelationType.APPLY)
+    channel = models.CharField(max_length=20, choices=ResumeChannel.choices, default=ResumeChannel.OTHER)
+    applied_at = models.DateTimeField(default=timezone.now)
+    termination_reason = models.CharField(max_length=20, choices=TerminationReason.choices, null=True, blank=True)
+    is_reapply = models.BooleanField(default=False)
     note = models.TextField(blank=True, default="")
+    owner_id = models.UUIDField(null=True, blank=True)
     user_id = models.UUIDField(null=True, blank=True)
     create_time = models.DateTimeField(auto_now_add=True)
     update_time = models.DateTimeField(auto_now=True)
@@ -130,14 +181,6 @@ class ResumeStatus(models.TextChoices):
     PENDING = "PENDING", "Pending"
     SUCCESS = "SUCCESS", "Success"
     FAILED = "FAILED", "Failed"
-
-
-class ResumeChannel(models.TextChoices):
-    REFERRAL = "REFERRAL", "Referral"
-    JOB_SITE = "JOB_SITE", "Job site"
-    HEADHUNTER = "HEADHUNTER", "Headhunter"
-    CAMPUS = "CAMPUS", "Campus"
-    OTHER = "OTHER", "Other"
 
 
 class ResumeFile(models.Model):

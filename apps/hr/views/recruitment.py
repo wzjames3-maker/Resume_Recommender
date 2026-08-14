@@ -116,6 +116,22 @@ class JobDetailAPI(APIView):
     def put(self, request, workspace_id, job_id):
         return result.success(_service(request, workspace_id).edit_job(job_id, request.data))
 
+    class Close(APIView):
+        authentication_classes = [TokenAuth]
+
+        @manage_required
+        def put(self, request, workspace_id, job_id):
+            return result.success(
+                _service(request, workspace_id).close_job(job_id, request.data.get("close_reason"))
+            )
+
+    class Reopen(APIView):
+        authentication_classes = [TokenAuth]
+
+        @manage_required
+        def put(self, request, workspace_id, job_id):
+            return result.success(_service(request, workspace_id).reopen_job(job_id))
+
 
 class AssignmentAPI(APIView):
     authentication_classes = [TokenAuth]

@@ -8,10 +8,13 @@ from .recruitment import (
     Interview,
     InterviewStatus,
     Job,
+    JobCloseReason,
     JobStatus,
+    RelationType,
     ResumeChannel,
     ResumeFile,
     ResumeStatus,
+    TerminationReason,
 )
 
 __all__ = [
@@ -24,8 +27,11 @@ __all__ = [
     "Interview",
     "InterviewStatus",
     "Job",
+    "JobCloseReason",
     "JobStatus",
+    "RelationType",
     "ResumeChannel",
     "ResumeFile",
     "ResumeStatus",
+    "TerminationReason",
 ]
