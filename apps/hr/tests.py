@@ -691,8 +691,19 @@ class ResumeBatchStatusTests(TestCase):
         result = self.service.batch_resume_status([str(foreign.id)])
         self.assertEqual(result, [])
 
+    def test_batch_status_rejects_invalid_id_format(self):
+        with self.assertRaisesRegex(AppApiException, "ids is invalid"):
+            self.service.batch_resume_status(["garbage"])
+
 
 class ResumeBatchStatusRouteTests(TestCase):
     def test_route_is_registered_and_protected(self):
         response = self.client.get("/admin/api/workspace/workspace-a/hr/resumes/batch-status?ids=a")
         self.assertIn(response.status_code, (401, 403))
+
+    def test_batch_status_route_not_swallowed_by_resume_detail(self):
+        from django.urls import resolve
+        from hr.views.recruitment import ResumeBatchStatusAPI
+
+        resolved = resolve("/admin/api/workspace/workspace-a/hr/resumes/batch-status")
+        self.assertIs(resolved.func.cls, ResumeBatchStatusAPI)

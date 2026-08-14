@@ -93,7 +93,7 @@ def parse_resume_task(resume_id):
 - duplicate：返回 duplicate 记录，不建新 ResumeFile、不派发任务。
 - 格式/大小校验 400（同现状，回归）。
 - `delay` 抛 `AlreadyQueued` → 500「任务已存在」。
-- `delay` 抛其他异常 → 返回 PENDING 记录且 ResumeFile 置 FAILED。
+- `delay` 抛其他异常 → 返回 FAILED 记录且 ResumeFile 置 FAILED。
 
 ### 5.3 状态查询（`ResumeBatchStatusTests`）
 

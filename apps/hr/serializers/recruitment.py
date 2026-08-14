@@ -2,6 +2,7 @@ import hashlib
 import os
 import shutil
 
+import uuid_utils.compat as uuid
 from django.db import IntegrityError, transaction
 from django.db.models import Count, Max, Q
 
@@ -525,7 +526,11 @@ class RecruitmentService:
         return True
 
     def batch_resume_status(self, resume_ids):
-        resumes = ResumeFile.objects.filter(workspace_id=self.workspace_id, id__in=resume_ids)
+        try:
+            cleaned_ids = [uuid.UUID(item) for item in resume_ids]
+        except (ValueError, TypeError) as exc:
+            raise AppApiException(400, "ids is invalid") from exc
+        resumes = ResumeFile.objects.filter(workspace_id=self.workspace_id, id__in=cleaned_ids)
         return [
             {
                 "resume_id": str(resume.id),
