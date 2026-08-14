@@ -1,10 +1,11 @@
 import type { Result } from '@/request/Result'
-import { del, get, post, put } from '@/request'
+import { exportFile, del, get, post, put } from '@/request'
 import type {
   AiConditions,
   Assignment,
   Candidate,
   CandidateDetail,
+  DuplicateCheckCandidate,
   HrConfig,
   Interview,
   Job,
@@ -95,13 +96,27 @@ const extractSkills = (description: string) =>
 const getResumeBatchStatus = (ids: string[]) =>
   get(`${prefix.value}/resumes/batch-status`, { ids: ids.join(',') }) as Promise<Result<ResumeBatchStatus[]>>
 
+const getResumeContent = (resumeId: string) =>
+  get(`${prefix.value}/resumes/${resumeId}/content`) as Promise<Result<{ content: string }>>
+
+const downloadResume = (resumeId: string, fileName: string) =>
+  exportFile(fileName, `${prefix.value}/resumes/${resumeId}/download`, {}, undefined)
+
+const checkDuplicate = (data: Record<string, unknown>) =>
+  post(`${prefix.value}/candidates/check-duplicate`, data) as Promise<Result<{ candidates: DuplicateCheckCandidate[] }>>
+
+const mergeCandidates = (primaryId: string, secondaryId: string) =>
+  post(`${prefix.value}/candidates/${primaryId}/merge`, { secondary_id: secondaryId }) as Promise<Result<CandidateDetail>>
+
 export default {
   archiveCandidate,
+  checkDuplicate,
   createAssignment,
   createCandidate,
   createInterview,
   createJob,
   deleteResume,
+  downloadResume,
   extractSkills,
   getAiConfig,
   getCandidate,
@@ -112,6 +127,8 @@ export default {
   getJobMatches,
   getJobs,
   getResumeBatchStatus,
+  getResumeContent,
+  mergeCandidates,
   parseSearch,
   putAiConfig,
   updateAssignment,

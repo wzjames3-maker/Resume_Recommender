@@ -30,6 +30,7 @@ export interface Candidate {
   status: CandidateStatus
   create_time: string
   update_time: string
+  duplicate_ids?: string[]
 }
 
 export interface Assignment {
@@ -134,4 +135,12 @@ export interface AiConditions {
   years_max: number | null
   highest_degree: string | null
   status: string | null
+}
+
+export interface DuplicateCheckCandidate {
+  id: string
+  name: string
+  phone: string
+  email: string | null
+  current_city: string
 }
