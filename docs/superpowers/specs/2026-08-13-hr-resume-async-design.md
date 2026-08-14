@@ -89,7 +89,7 @@ def parse_resume_task(resume_id):
 
 ### 5.2 上传接口（`ResumeUploadAsyncTests`）
 
-- 新文件：返回 `status=PENDING`，`ResumeFile` 落库 PENDING，`delay` 被调用（mock `hr.views.recruitment.parse_resume_task.delay`）。
+- 新文件：返回 `status=PENDING`，`ResumeFile` 落库 PENDING，`delay` 被调用（mock `hr.serializers.recruitment.parse_resume_task.delay`，派发在服务层 `upload_resumes` 内）。
 - duplicate：返回 duplicate 记录，不建新 ResumeFile、不派发任务。
 - 格式/大小校验 400（同现状，回归）。
 - `delay` 抛 `AlreadyQueued` → 500「任务已存在」。
