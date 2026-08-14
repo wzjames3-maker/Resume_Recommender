@@ -7,6 +7,21 @@ from django.utils import timezone
 class CandidateStatus(models.TextChoices):
     ACTIVE = "ACTIVE", "Active"
     ARCHIVED = "ARCHIVED", "Archived"
+    DELETED = "DELETED", "Deleted"
+
+
+class ConsentStatus(models.TextChoices):
+    UNKNOWN = "UNKNOWN", "Unknown"
+    NOTIFIED = "NOTIFIED", "Notified"
+    CONSENTED = "CONSENTED", "Consented"
+    NOT_REQUIRED = "NOT_REQUIRED", "Not required"
+
+
+class ContactPreference(models.TextChoices):
+    EMAIL = "EMAIL", "Email"
+    PHONE = "PHONE", "Phone"
+    NO_CONTACT = "NO_CONTACT", "No contact"
+    UNSPECIFIED = "UNSPECIFIED", "Unspecified"
 
 
 class JobStatus(models.TextChoices):
@@ -86,6 +101,14 @@ class Candidate(models.Model):
     years_experience = models.PositiveSmallIntegerField(null=True, blank=True)
     skills = models.JSONField(default=list)
     source = models.CharField(max_length=64, blank=True, default="")
+    source_type = models.CharField(max_length=20, choices=ResumeChannel.choices, default=ResumeChannel.OTHER)
+    source_detail = models.CharField(max_length=128, blank=True, default="")
+    collected_at = models.DateTimeField(null=True, blank=True)
+    consent_status = models.CharField(max_length=16, choices=ConsentStatus.choices, default=ConsentStatus.UNKNOWN)
+    consent_version = models.CharField(max_length=32, blank=True, default="")
+    contact_preference = models.CharField(
+        max_length=16, choices=ContactPreference.choices, default=ContactPreference.UNSPECIFIED
+    )
     note = models.TextField(blank=True, default="")
     status = models.CharField(max_length=16, choices=CandidateStatus.choices, default=CandidateStatus.ACTIVE)
     user_id = models.UUIDField(null=True, blank=True)

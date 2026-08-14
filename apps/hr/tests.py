@@ -1,10 +1,12 @@
 import os
 import tempfile
+from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
 
 from django.db import IntegrityError, transaction
 from django.test import TestCase
+from django.utils import timezone
 from rest_framework.test import APIClient
 import uuid_utils.compat as uuid
 
@@ -22,9 +24,9 @@ from hr.models import (
     ResumeStatus,
 )
 from hr.services.audit import write_audit_log
-from hr.task.resume import parse_resume_task
+from hr.task.resume import cleanup_orphan_resumes, parse_resume_task
 from hr.serializers.ai import AiService
-from hr.serializers.recruitment import RecruitmentService
+from hr.serializers.recruitment import CANDIDATE_EXPORT_FIELDS, RecruitmentService
 from hr.services.ai_parser import extract_skills, parse_search_conditions
 from hr.services.resume_parser import parse_resume_text
 from users.models import User
@@ -1805,3 +1807,300 @@ class HrAuditLogApiTests(_HrApiBase):
         write_audit_log("workspace-b", self.actor, "CREATE", "CANDIDATE", "cand-b")
         response = self._client(self.admin).get("/admin/api/workspace/workspace-a/hr/audit-logs")
         self.assertEqual(response.json()["data"]["total"], 3)
+
+
+class CandidateComplianceMetadataTests(TestCase):
+    """A4: 合规元数据字段创建/编辑与非法枚举校验"""
+
+    def setUp(self):
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=uuid.uuid7(), hr_role="ADMIN")
+
+    def test_create_saves_compliance_fields(self):
+        result = self.service.create_candidate({
+            "name": "Alice",
+            "source_type": "REFERRAL",
+            "source_detail": "内推人张三",
+            "collected_at": "2026-08-01T10:00:00Z",
+            "consent_status": "CONSENTED",
+            "consent_version": "v1.0",
+            "contact_preference": "EMAIL",
+        })
+        self.assertEqual(result["source_type"], "REFERRAL")
+        self.assertEqual(result["source_detail"], "内推人张三")
+        self.assertEqual(result["consent_status"], "CONSENTED")
+        self.assertEqual(result["consent_version"], "v1.0")
+        self.assertEqual(result["contact_preference"], "EMAIL")
+        candidate = Candidate.objects.get(id=result["id"])
+        self.assertTrue(candidate.collected_at.isoformat().startswith("2026-08-01T10:00:00"))
+
+    def test_create_defaults(self):
+        result = self.service.create_candidate({"name": "Bob"})
+        self.assertEqual(result["source_type"], "OTHER")
+        self.assertEqual(result["consent_status"], "UNKNOWN")
+        self.assertEqual(result["contact_preference"], "UNSPECIFIED")
+        self.assertEqual(result["source_detail"], "")
+        self.assertEqual(result["consent_version"], "")
+        self.assertIsNone(result["collected_at"])
+
+    def test_edit_updates_compliance_fields(self):
+        created = self.service.create_candidate({"name": "Alice"})
+        result = self.service.edit_candidate(created["id"], {
+            "source_type": "HEADHUNTER",
+            "source_detail": "猎头公司",
+            "collected_at": "2026-08-02T09:00:00Z",
+            "consent_status": "NOTIFIED",
+            "consent_version": "v2",
+            "contact_preference": "NO_CONTACT",
+        })
+        self.assertEqual(result["source_type"], "HEADHUNTER")
+        self.assertEqual(result["source_detail"], "猎头公司")
+        self.assertEqual(result["consent_status"], "NOTIFIED")
+        self.assertEqual(result["consent_version"], "v2")
+        self.assertEqual(result["contact_preference"], "NO_CONTACT")
+
+    def test_invalid_enums_rejected(self):
+        with self.assertRaisesRegex(AppApiException, "source_type"):
+            self.service.create_candidate({"name": "Alice", "source_type": "NOPE"})
+        with self.assertRaisesRegex(AppApiException, "consent_status"):
+            self.service.create_candidate({"name": "Alice", "consent_status": "NOPE"})
+        with self.assertRaisesRegex(AppApiException, "contact_preference"):
+            self.service.create_candidate({"name": "Alice", "contact_preference": "NOPE"})
+
+    def test_invalid_collected_at_rejected(self):
+        with self.assertRaisesRegex(AppApiException, "collected_at"):
+            self.service.create_candidate({"name": "Alice", "collected_at": "not-a-date"})
+
+
+class CandidateDeleteTests(TestCase):
+    """A4: 删除/匿名化：进行中与已入职拒绝，PII 清空，简历联动清理，审计写入"""
+
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, hr_role="ADMIN")
+        self.candidate = Candidate.objects.create(
+            name="Alice", workspace_id="workspace-a", email="alice@example.com", phone="13812345678",
+            current_city="上海", target_city="北京", highest_degree="本科", years_experience=5,
+            skills=["Python"], source="JOB_SITE", note="备注",
+        )
+        self.job = Job.objects.create(name="Engineer", workspace_id="workspace-a", headcount=1)
+
+    def test_delete_rejects_active_assignment(self):
+        self.service.create_assignment(self.job.id, self.candidate.id, {})
+        with self.assertRaisesRegex(AppApiException, "active assignment"):
+            self.service.delete_candidate(self.candidate.id)
+
+    def test_delete_rejects_hired_assignment(self):
+        assignment_id = self.service.create_assignment(self.job.id, self.candidate.id, {})["id"]
+        self.service.update_assignment(assignment_id, {"status": "SCREEN_PASSED"})
+        self.service.update_assignment(assignment_id, {"status": "INTERVIEWING"})
+        self.service.update_assignment(assignment_id, {"status": "OFFER"})
+        self.service.update_assignment(assignment_id, {"status": "HIRED"})
+        with self.assertRaisesRegex(AppApiException, "hired"):
+            self.service.delete_candidate(self.candidate.id)
+
+    def test_delete_anonymizes_pii(self):
+        result = self.service.delete_candidate(self.candidate.id)
+        self.assertEqual(result["status"], "DELETED")
+        candidate = Candidate.objects.get(id=self.candidate.id)
+        self.assertEqual(candidate.name, "已删除候选人")
+        self.assertIsNone(candidate.email)
+        self.assertEqual(candidate.phone, "")
+        self.assertEqual(candidate.current_city, "")
+        self.assertEqual(candidate.target_city, "")
+        self.assertEqual(candidate.highest_degree, "")
+        self.assertIsNone(candidate.years_experience)
+        self.assertEqual(candidate.skills, [])
+        self.assertEqual(candidate.source, "")
+        self.assertEqual(candidate.note, "")
+
+    def test_delete_writes_delete_audit(self):
+        self.service.delete_candidate(self.candidate.id)
+        self.assertTrue(
+            HrAuditLog.objects.filter(
+                workspace_id="workspace-a", user_id=self.user_id, action="DELETE",
+                object_type="CANDIDATE", object_id=str(self.candidate.id),
+            ).exists()
+        )
+
+    def test_delete_removes_resume_file_and_record_with_audit(self):
+        handle = tempfile.NamedTemporaryFile(suffix=".txt", delete=False)
+        handle.write(b"resume")
+        handle.close()
+        resume = ResumeFile.objects.create(
+            workspace_id="workspace-a", file_name="r.txt", extension="txt",
+            file_path=handle.name, file_size=1, sha256="sha-" + uuid.uuid7().hex,
+            candidate=self.candidate, user_id=self.user_id,
+        )
+        self.service.delete_candidate(self.candidate.id)
+        self.assertFalse(ResumeFile.objects.filter(id=resume.id).exists())
+        self.assertFalse(os.path.exists(handle.name))
+        self.assertTrue(
+            HrAuditLog.objects.filter(
+                workspace_id="workspace-a", action="RESUME_DELETE",
+                object_type="RESUME", object_id=str(resume.id),
+            ).exists()
+        )
+
+    def test_default_list_hides_deleted(self):
+        self.service.delete_candidate(self.candidate.id)
+        result = self.service.page_candidates(1, 20, {})
+        self.assertEqual(result["total"], 0)
+
+    def test_explicit_status_filter_shows_deleted(self):
+        self.service.delete_candidate(self.candidate.id)
+        result = self.service.page_candidates(1, 20, {"status": "DELETED"})
+        self.assertEqual(result["total"], 1)
+
+    def test_deleted_detail_only_admin_visible(self):
+        self.service.delete_candidate(self.candidate.id)
+        viewer = RecruitmentService(workspace_id="workspace-a", user_id=uuid.uuid7(), hr_role="VIEWER")
+        with self.assertRaises(NotFound404):
+            viewer.get_candidate(self.candidate.id)
+        detail = self.service.get_candidate(self.candidate.id)
+        self.assertEqual(detail["status"], "DELETED")
+
+    def test_terminal_assignment_kept_as_anonymous_reference(self):
+        assignment_id = self.service.create_assignment(self.job.id, self.candidate.id, {})["id"]
+        self.service.update_assignment(assignment_id, {"status": "REJECTED", "termination_reason": "NOT_FIT"})
+        self.service.delete_candidate(self.candidate.id)
+        assignment = CandidateAssignment.objects.get(id=assignment_id)
+        self.assertEqual(assignment.candidate_id, self.candidate.id)
+        self.assertEqual(Candidate.objects.get(id=self.candidate.id).name, "已删除候选人")
+
+    def test_member_cannot_delete(self):
+        member = RecruitmentService(workspace_id="workspace-a", user_id=uuid.uuid7(), hr_role="OPERATOR")
+        with self.assertRaises(AppUnauthorizedFailed):
+            member.delete_candidate(self.candidate.id)
+
+
+class CleanupOrphanResumeTaskTests(TestCase):
+    """A4: TTL 清理未关联简历（31 天前清理、30 天内保留、已关联不清理）"""
+
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+
+    def _resume(self, days_old, linked=False):
+        handle = tempfile.NamedTemporaryFile(suffix=".txt", delete=False)
+        handle.write(b"resume")
+        handle.close()
+        candidate = None
+        if linked:
+            candidate = Candidate.objects.create(name="Alice", workspace_id="workspace-a")
+        resume = ResumeFile.objects.create(
+            workspace_id="workspace-a", file_name="r.txt", extension="txt",
+            file_path=handle.name, file_size=1, sha256="sha-" + uuid.uuid7().hex,
+            status=ResumeStatus.SUCCESS, user_id=self.user_id, candidate=candidate,
+        )
+        ResumeFile.objects.filter(id=resume.id).update(
+            create_time=timezone.now() - timedelta(days=days_old)
+        )
+        return resume
+
+    def test_cleans_orphan_older_than_30_days(self):
+        resume = self._resume(days_old=31)
+        cleanup_orphan_resumes.run()
+        self.assertFalse(ResumeFile.objects.filter(id=resume.id).exists())
+        self.assertFalse(os.path.exists(resume.file_path))
+        self.assertTrue(
+            HrAuditLog.objects.filter(
+                workspace_id="workspace-a", action="RESUME_DELETE",
+                object_type="RESUME", object_id=str(resume.id), detail__contains="TTL",
+            ).exists()
+        )
+
+    def test_keeps_orphan_within_30_days(self):
+        resume = self._resume(days_old=29)
+        cleanup_orphan_resumes.run()
+        self.assertTrue(ResumeFile.objects.filter(id=resume.id).exists())
+        self.assertTrue(os.path.exists(resume.file_path))
+
+    def test_keeps_linked_resume(self):
+        resume = self._resume(days_old=40, linked=True)
+        cleanup_orphan_resumes.run()
+        self.assertTrue(ResumeFile.objects.filter(id=resume.id).exists())
+        self.assertTrue(os.path.exists(resume.file_path))
+
+
+class CandidateExportTests(TestCase):
+    """A4: 受控导出白名单字段与 EXPORT 审计"""
+
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, hr_role="ADMIN")
+        self.candidate = Candidate.objects.create(
+            name="Alice", workspace_id="workspace-a", phone="13812345678", email="alice@example.com",
+            current_city="上海", target_city="北京", years_experience=5, skills=["Python"],
+            source_type="REFERRAL", source_detail="内推", consent_status="CONSENTED",
+            contact_preference="EMAIL",
+        )
+
+    def test_export_returns_whitelist_fields(self):
+        records = self.service.export_candidates({})
+        self.assertEqual(len(records), 1)
+        row = records[0]
+        self.assertEqual(row["name"], "Alice")
+        self.assertEqual(row["source_type"], "REFERRAL")
+        self.assertEqual(row["contact_preference"], "EMAIL")
+        self.assertNotIn("phone", row)
+        self.assertNotIn("email", row)
+        self.assertNotIn("note", row)
+        self.assertEqual(set(row.keys()), set(CANDIDATE_EXPORT_FIELDS))
+
+    def test_export_writes_audit(self):
+        self.service.export_candidates({})
+        self.assertTrue(
+            HrAuditLog.objects.filter(
+                workspace_id="workspace-a", user_id=self.user_id, action="EXPORT", object_type="CANDIDATE"
+            ).exists()
+        )
+
+    def test_export_respects_filters(self):
+        Candidate.objects.create(name="Bob", workspace_id="workspace-a", status="ARCHIVED")
+        records = self.service.export_candidates({"status": "ACTIVE"})
+        self.assertEqual(len(records), 1)
+        self.assertEqual(records[0]["name"], "Alice")
+
+    def test_member_cannot_export(self):
+        member = RecruitmentService(workspace_id="workspace-a", user_id=uuid.uuid7(), hr_role="OPERATOR")
+        with self.assertRaises(AppUnauthorizedFailed):
+            member.export_candidates({})
+
+
+class CandidateLifecycleRouteTests(_HrApiBase):
+    """A4: 删除与导出路由注册、权限与 CSV 响应"""
+
+    def setUp(self):
+        self.admin = self._user("life-admin", "Lifecycle Admin")
+        self.operator = self._user("life-op", "Lifecycle Op")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.admin.id, role="ADMIN")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.operator.id, role="OPERATOR")
+        self.candidate = Candidate.objects.create(
+            name="Alice", workspace_id="workspace-a", phone="13812345678", email="alice@example.com",
+            current_city="上海", skills=["Python"], source_type="JOB_SITE",
+        )
+
+    def test_delete_route_registered_and_admin_only(self):
+        path = f"/admin/api/workspace/workspace-a/hr/candidates/{self.candidate.id}/delete"
+        response = self._client(self.operator).put(path, data={}, content_type="application/json")
+        self.assertEqual(response.status_code, 403)
+        response = self._client(self.admin).put(path, data={}, content_type="application/json")
+        self.assertEqual(response.status_code, 200)
+        self.candidate.refresh_from_db()
+        self.assertEqual(self.candidate.status, "DELETED")
+        self.assertEqual(self.candidate.name, "已删除候选人")
+
+    def test_export_route_returns_csv_and_admin_only(self):
+        path = "/admin/api/workspace/workspace-a/hr/export/candidates"
+        response = self._client(self.operator).post(path, data={}, content_type="application/json")
+        self.assertEqual(response.status_code, 403)
+        response = self._client(self.admin).post(
+            path, data={"filters": {}}, content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("text/csv", response["Content-Type"])
+        body = b"".join(response.streaming_content).decode("utf-8")
+        self.assertIn("name", body)
+        self.assertIn("Alice", body)
+        self.assertIn("source_type", body)
+        self.assertNotIn("13812345678", body)
+        self.assertNotIn("alice@example.com", body)

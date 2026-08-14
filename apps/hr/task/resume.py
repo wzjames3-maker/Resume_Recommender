@@ -1,10 +1,35 @@
 # coding=utf-8
+import os
+from datetime import timedelta
+
+import uuid_utils.compat as uuid
 from celery_once import QueueOnce
 from django.db import transaction
+from django.utils import timezone
 
 from hr.models import Candidate, ResumeFile, ResumeStatus
+from hr.services.audit import write_audit_log
 from hr.services.resume_parser import extract_text_from_docx, extract_text_from_txt, parse_resume_text
 from ops import celery_app
+
+_SYSTEM_USER_ID = uuid.UUID(int=0)
+
+
+@celery_app.task
+def cleanup_orphan_resumes():
+    cutoff = timezone.now() - timedelta(days=30)
+    resumes = ResumeFile.objects.filter(candidate__isnull=True, create_time__lt=cutoff)
+    for resume in resumes:
+        if resume.file_path and os.path.exists(resume.file_path):
+            try:
+                os.remove(resume.file_path)
+            except OSError:
+                pass
+        write_audit_log(
+            resume.workspace_id, resume.user_id or _SYSTEM_USER_ID, "RESUME_DELETE", "RESUME", resume.id,
+            detail="TTL cleanup: orphan resume older than 30 days",
+        )
+        resume.delete()
 
 
 @celery_app.task(base=QueueOnce, once={"keys": ["resume_id"]}, name="celery:hr_parse_resume")

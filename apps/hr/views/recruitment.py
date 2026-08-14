@@ -1,15 +1,17 @@
+import csv
+import io
 import os
 import tempfile
 
 import uuid_utils.compat as uuid
-from django.http import FileResponse
+from django.http import FileResponse, StreamingHttpResponse
 from rest_framework.parsers import MultiPartParser
 from rest_framework.views import APIView
 
 from common import result
 from common.auth import TokenAuth
 from common.exception.app_exception import AppApiException
-from hr.serializers.recruitment import RecruitmentService
+from hr.serializers.recruitment import CANDIDATE_EXPORT_FIELDS, RecruitmentService
 from hr.views.permissions import hr_access_required, hr_admin_required
 
 
@@ -19,6 +21,23 @@ def _service(request, workspace_id):
         user_id=request.user.id,
         hr_role=getattr(request, "hr_role", None),
     )
+
+
+def _csv_response(records, fields):
+    def generate():
+        output = io.StringIO()
+        writer = csv.DictWriter(output, fieldnames=fields, extrasaction="ignore")
+        writer.writeheader()
+        yield output.getvalue()
+        for record in records:
+            output.seek(0)
+            output.truncate(0)
+            writer.writerow({field: record.get(field, "") for field in fields})
+            yield output.getvalue()
+
+    response = StreamingHttpResponse(generate(), content_type="text/csv; charset=utf-8")
+    response["Content-Disposition"] = 'attachment; filename="candidates.csv"'
+    return response
 
 
 class CandidateAPI(APIView):
@@ -56,6 +75,13 @@ class CandidateDetailAPI(APIView):
         def put(self, request, workspace_id, candidate_id):
             return result.success(_service(request, workspace_id).archive_candidate(candidate_id))
 
+    class Delete(APIView):
+        authentication_classes = [TokenAuth]
+
+        @hr_admin_required
+        def put(self, request, workspace_id, candidate_id):
+            return result.success(_service(request, workspace_id).delete_candidate(candidate_id))
+
     class Merge(APIView):
         authentication_classes = [TokenAuth]
 
@@ -70,6 +96,15 @@ class CandidateCheckDuplicateAPI(APIView):
     @hr_access_required
     def post(self, request, workspace_id):
         return result.success(_service(request, workspace_id).check_duplicate(request.data))
+
+
+class CandidateExportAPI(APIView):
+    authentication_classes = [TokenAuth]
+
+    @hr_admin_required
+    def post(self, request, workspace_id):
+        records = _service(request, workspace_id).export_candidates(request.data.get("filters") or {})
+        return _csv_response(records, CANDIDATE_EXPORT_FIELDS)
 
 
 class JobAPI(APIView):

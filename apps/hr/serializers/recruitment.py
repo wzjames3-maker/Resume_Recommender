@@ -16,6 +16,8 @@ from hr.models import (
     Candidate,
     CandidateAssignment,
     CandidateStatus,
+    ConsentStatus,
+    ContactPreference,
     Interview,
     InterviewStatus,
     Job,
@@ -36,6 +38,22 @@ TERMINATION_REASON_REQUIRED_STATUSES = [
     AssignmentStatus.REJECTED,
     AssignmentStatus.WITHDRAWN,
     AssignmentStatus.CLOSED,
+]
+
+CANDIDATE_EXPORT_FIELDS = [
+    "name",
+    "status",
+    "current_city",
+    "target_city",
+    "highest_degree",
+    "years_experience",
+    "skills",
+    "source_type",
+    "source_detail",
+    "collected_at",
+    "consent_status",
+    "contact_preference",
+    "create_time",
 ]
 
 JOB_OPEN_REQUIRED_TARGETS = [
@@ -185,6 +203,39 @@ class RecruitmentService:
         return value
 
     @staticmethod
+    def _source_type(data):
+        value = data.get("source_type", ResumeChannel.OTHER)
+        if value not in ResumeChannel.values:
+            raise AppApiException(400, "source_type is invalid")
+        return value
+
+    @staticmethod
+    def _collected_at(data):
+        value = data.get("collected_at")
+        if value in (None, ""):
+            return None
+        if isinstance(value, datetime):
+            return value
+        try:
+            return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise AppApiException(400, "collected_at is invalid") from exc
+
+    @staticmethod
+    def _consent_status(data):
+        value = data.get("consent_status", ConsentStatus.UNKNOWN)
+        if value not in ConsentStatus.values:
+            raise AppApiException(400, "consent_status is invalid")
+        return value
+
+    @staticmethod
+    def _contact_preference(data):
+        value = data.get("contact_preference", ContactPreference.UNSPECIFIED)
+        if value not in ContactPreference.values:
+            raise AppApiException(400, "contact_preference is invalid")
+        return value
+
+    @staticmethod
     def _applied_at(data):
         value = data.get("applied_at")
         if value in (None, ""):
@@ -227,6 +278,12 @@ class RecruitmentService:
             "years_experience": candidate.years_experience,
             "skills": candidate.skills,
             "source": candidate.source,
+            "source_type": candidate.source_type,
+            "source_detail": candidate.source_detail,
+            "collected_at": candidate.collected_at,
+            "consent_status": candidate.consent_status,
+            "consent_version": candidate.consent_version,
+            "contact_preference": candidate.contact_preference,
             "note": candidate.note,
             "status": candidate.status,
             "create_time": candidate.create_time,
@@ -284,6 +341,12 @@ class RecruitmentService:
             years_experience=self._years_experience(data),
             skills=self._skills(data),
             source=self._optional_string(data, "source", 64),
+            source_type=self._source_type(data),
+            source_detail=self._optional_string(data, "source_detail", 128),
+            collected_at=self._collected_at(data),
+            consent_status=self._consent_status(data),
+            consent_version=self._optional_string(data, "consent_version", 32),
+            contact_preference=self._contact_preference(data),
             note=self._optional_string(data, "note", 4096),
         )
         write_audit_log(self.workspace_id, self.user_id, "CREATE", "CANDIDATE", candidate.id)
@@ -298,7 +361,7 @@ class RecruitmentService:
             raise AppApiException(400, "years_experience is invalid")
         return value
 
-    def page_candidates(self, current_page, page_size, query):
+    def _filter_candidates(self, query):
         queryset = Candidate.objects.filter(workspace_id=self.workspace_id)
         name = query.get("name")
         city = query.get("city")
@@ -316,6 +379,8 @@ class RecruitmentService:
             if status not in CandidateStatus.values:
                 raise AppApiException(400, "status is invalid")
             queryset = queryset.filter(status=status)
+        else:
+            queryset = queryset.exclude(status=CandidateStatus.DELETED)
         if skills:
             for skill in skills.split(","):
                 skill = skill.strip()
@@ -345,6 +410,10 @@ class RecruitmentService:
                     workspace_id=self.workspace_id, owner_id=owner_id
                 ).values("candidate_id")
             )
+        return queryset
+
+    def page_candidates(self, current_page, page_size, query):
+        queryset = self._filter_candidates(query)
         total = queryset.count()
         start = (current_page - 1) * page_size
         candidates = queryset.order_by("-update_time")[start:start + page_size]
@@ -369,6 +438,8 @@ class RecruitmentService:
 
     def get_candidate(self, candidate_id):
         candidate = self._candidate(candidate_id)
+        if candidate.status == CandidateStatus.DELETED and self.hr_role != "ADMIN":
+            raise NotFound404(404, "Resource not found")
         assignments = CandidateAssignment.objects.filter(
             workspace_id=self.workspace_id,
             candidate=candidate,
@@ -391,6 +462,8 @@ class RecruitmentService:
             "target_city": (self._optional_string, 64),
             "highest_degree": (self._optional_string, 32),
             "source": (self._optional_string, 64),
+            "source_detail": (self._optional_string, 128),
+            "consent_version": (self._optional_string, 32),
             "note": (self._optional_string, 4096),
         }
         update_fields = []
@@ -407,6 +480,18 @@ class RecruitmentService:
         if "skills" in data:
             candidate.skills = self._skills(data)
             update_fields.append("skills")
+        if "source_type" in data:
+            candidate.source_type = self._source_type(data)
+            update_fields.append("source_type")
+        if "collected_at" in data:
+            candidate.collected_at = self._collected_at(data)
+            update_fields.append("collected_at")
+        if "consent_status" in data:
+            candidate.consent_status = self._consent_status(data)
+            update_fields.append("consent_status")
+        if "contact_preference" in data:
+            candidate.contact_preference = self._contact_preference(data)
+            update_fields.append("contact_preference")
         if update_fields:
             candidate.save(update_fields=[*update_fields, "update_time"])
         write_audit_log(self.workspace_id, self.user_id, "UPDATE", "CANDIDATE", candidate.id)
@@ -425,6 +510,76 @@ class RecruitmentService:
         candidate.save(update_fields=["status", "update_time"])
         write_audit_log(self.workspace_id, self.user_id, "ARCHIVE", "CANDIDATE", candidate.id)
         return self._candidate_output(candidate)
+
+    def delete_candidate(self, candidate_id):
+        self._require_manage()
+        candidate = self._candidate(candidate_id)
+        if CandidateAssignment.objects.filter(
+            workspace_id=self.workspace_id,
+            candidate=candidate,
+            status__in=ACTIVE_ASSIGNMENT_STATUSES,
+        ).exists():
+            raise AppApiException(400, "Candidate has an active assignment")
+        if CandidateAssignment.objects.filter(
+            workspace_id=self.workspace_id,
+            candidate=candidate,
+            status=AssignmentStatus.HIRED,
+        ).exists():
+            raise AppApiException(400, "Candidate is hired, cannot delete")
+        for resume in ResumeFile.objects.filter(workspace_id=self.workspace_id, candidate=candidate):
+            if resume.file_path and os.path.exists(resume.file_path):
+                try:
+                    os.remove(resume.file_path)
+                except OSError:
+                    pass
+            write_audit_log(
+                self.workspace_id, resume.user_id or self.user_id, "RESUME_DELETE", "RESUME", resume.id
+            )
+            resume.delete()
+        candidate.name = "已删除候选人"
+        candidate.email = None
+        candidate.phone = ""
+        candidate.current_city = ""
+        candidate.target_city = ""
+        candidate.highest_degree = ""
+        candidate.years_experience = None
+        candidate.skills = []
+        candidate.source = ""
+        candidate.note = ""
+        candidate.status = CandidateStatus.DELETED
+        candidate.save()
+        write_audit_log(self.workspace_id, self.user_id, "DELETE", "CANDIDATE", candidate.id)
+        return self._candidate_output(candidate)
+
+    @staticmethod
+    def _candidate_export_row(candidate):
+        return {
+            "name": candidate.name,
+            "status": candidate.status,
+            "current_city": candidate.current_city,
+            "target_city": candidate.target_city,
+            "highest_degree": candidate.highest_degree,
+            "years_experience": candidate.years_experience if candidate.years_experience is not None else "",
+            "skills": "、".join(candidate.skills),
+            "source_type": candidate.source_type,
+            "source_detail": candidate.source_detail,
+            "collected_at": candidate.collected_at.isoformat() if candidate.collected_at else "",
+            "consent_status": candidate.consent_status,
+            "contact_preference": candidate.contact_preference,
+            "create_time": candidate.create_time.isoformat(),
+        }
+
+    def export_candidates(self, filters):
+        self._require_manage()
+        records = [
+            self._candidate_export_row(candidate)
+            for candidate in self._filter_candidates(filters)
+        ]
+        write_audit_log(
+            self.workspace_id, self.user_id, "EXPORT", "CANDIDATE",
+            detail=f"exported {len(records)} records by user {self.user_id}",
+        )
+        return records
 
     def create_job(self, data):
         self._require_manage()
