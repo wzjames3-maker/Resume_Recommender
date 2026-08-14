@@ -8,6 +8,7 @@ urlpatterns = [
     path("workspace/<str:workspace_id>/hr/candidates", views.CandidateAPI.as_view()),
     path("workspace/<str:workspace_id>/hr/candidates/resumes", views.ResumeAPI.as_view()),
     path("workspace/<str:workspace_id>/hr/candidates/<int:current_page>/<int:page_size>", views.CandidateAPI.Page.as_view()),
+    path("workspace/<str:workspace_id>/hr/candidates/check-duplicate", views.CandidateCheckDuplicateAPI.as_view()),
     path("workspace/<str:workspace_id>/hr/candidates/<str:candidate_id>", views.CandidateDetailAPI.as_view()),
     path("workspace/<str:workspace_id>/hr/candidates/<str:candidate_id>/archive", views.CandidateDetailAPI.Archive.as_view()),
     path("workspace/<str:workspace_id>/hr/candidates/<str:candidate_id>/resumes", views.ResumeListAPI.as_view()),

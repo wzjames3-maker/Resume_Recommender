@@ -225,8 +225,25 @@ class RecruitmentService:
             queryset = queryset.filter(source=source)
         total = queryset.count()
         start = (current_page - 1) * page_size
-        records = queryset.order_by("-update_time")[start:start + page_size]
-        return {"total": total, "records": [self._candidate_output(candidate) for candidate in records]}
+        candidates = queryset.order_by("-update_time")[start:start + page_size]
+        records = [self._candidate_output(candidate) for candidate in candidates]
+        self._attach_duplicate_ids(records, candidates)
+        return {"total": total, "records": records}
+
+    def _attach_duplicate_ids(self, records, candidates):
+        for record, candidate in zip(records, candidates):
+            dupes = set()
+            if candidate.phone:
+                dupes.update(
+                    Candidate.objects.filter(workspace_id=self.workspace_id, phone=candidate.phone)
+                    .exclude(id=candidate.id).values_list("id", flat=True)
+                )
+            if candidate.email:
+                dupes.update(
+                    Candidate.objects.filter(workspace_id=self.workspace_id, email__iexact=candidate.email)
+                    .exclude(id=candidate.id).values_list("id", flat=True)
+                )
+            record["duplicate_ids"] = [str(item) for item in dupes]
 
     def get_candidate(self, candidate_id):
         candidate = self._candidate(candidate_id)
@@ -554,6 +571,34 @@ class RecruitmentService:
         except Exception as exc:
             raise AppApiException(400, "简历内容提取失败") from exc
         return {"content": text}
+
+    def check_duplicate(self, data):
+        phone = data.get("phone")
+        email = data.get("email")
+        exclude_id = data.get("exclude_id")
+        if (not isinstance(phone, str) or not phone.strip()) and (not isinstance(email, str) or not email.strip()):
+            return {"candidates": []}
+        queryset = Candidate.objects.filter(workspace_id=self.workspace_id)
+        if exclude_id:
+            queryset = queryset.exclude(id=exclude_id)
+        matches = []
+        seen = set()
+        if isinstance(phone, str) and phone.strip():
+            for row in queryset.filter(phone=phone.strip()):
+                if row.id not in seen:
+                    seen.add(row.id)
+                    matches.append(row)
+        if isinstance(email, str) and email.strip():
+            for row in queryset.filter(email__iexact=email.strip()):
+                if row.id not in seen:
+                    seen.add(row.id)
+                    matches.append(row)
+        return {
+            "candidates": [
+                {"id": str(row.id), "name": row.name, "phone": row.phone, "email": row.email, "current_city": row.current_city}
+                for row in matches[:20]
+            ]
+        }
 
     def batch_resume_status(self, resume_ids):
         try:

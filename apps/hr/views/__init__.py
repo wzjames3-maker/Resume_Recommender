@@ -1,6 +1,7 @@
 from .recruitment import (
     AssignmentAPI,
     CandidateAPI,
+    CandidateCheckDuplicateAPI,
     CandidateDetailAPI,
     InterviewAPI,
     InterviewDetailAPI,
@@ -17,6 +18,7 @@ from .ai import HrAIConfigAPI, HrSearchParseAPI, HrSkillExtractAPI
 __all__ = [
     "AssignmentAPI",
     "CandidateAPI",
+    "CandidateCheckDuplicateAPI",
     "CandidateDetailAPI",
     "InterviewAPI",
     "InterviewDetailAPI",

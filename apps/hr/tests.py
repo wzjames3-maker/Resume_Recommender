@@ -763,3 +763,51 @@ class ResumeDownloadTests(TestCase):
         self.resume.save(update_fields=["file_path"])
         with self.assertRaises(NotFound404):
             self.service.resume_content(str(self.resume.id))
+
+class DuplicateDetectionTests(TestCase):
+    def setUp(self):
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=uuid.uuid7(), is_workspace_manage=True)
+        self.alice = Candidate.objects.create(
+            name="Alice", workspace_id="workspace-a", phone="13800000001", email="alice@example.com",
+        )
+        self.bob = Candidate.objects.create(
+            name="Bob", workspace_id="workspace-a", phone="13800000001", email="bob@example.com",
+        )
+        self.carol = Candidate.objects.create(
+            name="Carol", workspace_id="workspace-a", phone="13800000002", email="ALICE@example.com",
+        )
+        self.foreign = Candidate.objects.create(
+            name="Dave", workspace_id="workspace-b", phone="13800000001", email="dave@example.com",
+        )
+
+    def test_page_marks_same_phone_and_email_as_duplicates(self):
+        result = self.service.page_candidates(1, 20, {})
+        by_id = {item["id"]: item for item in result["records"]}
+        self.assertIn(str(self.bob.id), by_id[str(self.alice.id)]["duplicate_ids"])
+        self.assertIn(str(self.alice.id), by_id[str(self.bob.id)]["duplicate_ids"])
+        self.assertIn(str(self.carol.id), by_id[str(self.alice.id)]["duplicate_ids"])
+
+    def test_page_does_not_mark_foreign_workspace(self):
+        result = self.service.page_candidates(1, 20, {})
+        by_id = {item["id"]: item for item in result["records"]}
+        self.assertNotIn(str(self.foreign.id), by_id[str(self.alice.id)]["duplicate_ids"])
+        self.assertIn(str(self.alice.id), by_id[str(self.carol.id)]["duplicate_ids"])
+
+    def test_check_duplicate_by_phone_and_email(self):
+        result = self.service.check_duplicate({"phone": "13800000001"})
+        ids = {item["id"] for item in result["candidates"]}
+        self.assertIn(str(self.alice.id), ids)
+        self.assertIn(str(self.bob.id), ids)
+        result = self.service.check_duplicate({"email": "ALICE@example.com"})
+        ids = {item["id"] for item in result["candidates"]}
+        self.assertIn(str(self.alice.id), ids)
+        self.assertIn(str(self.carol.id), ids)
+
+    def test_check_duplicate_excludes_self(self):
+        result = self.service.check_duplicate({"email": "alice@example.com", "exclude_id": str(self.alice.id)})
+        self.assertEqual(len(result["candidates"]), 1)
+        self.assertEqual(result["candidates"][0]["id"], str(self.carol.id))
+
+    def test_check_duplicate_empty_returns_empty(self):
+        result = self.service.check_duplicate({})
+        self.assertEqual(result["candidates"], [])

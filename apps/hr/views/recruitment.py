@@ -66,6 +66,14 @@ class CandidateDetailAPI(APIView):
             return result.success(_service(request, workspace_id).archive_candidate(candidate_id))
 
 
+class CandidateCheckDuplicateAPI(APIView):
+    authentication_classes = [TokenAuth]
+
+    @member_required
+    def post(self, request, workspace_id):
+        return result.success(_service(request, workspace_id).check_duplicate(request.data))
+
+
 class JobAPI(APIView):
     authentication_classes = [TokenAuth]
 
