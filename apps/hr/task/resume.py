@@ -20,14 +20,18 @@ def cleanup_orphan_resumes():
     cutoff = timezone.now() - timedelta(days=30)
     resumes = ResumeFile.objects.filter(candidate__isnull=True, create_time__lt=cutoff)
     for resume in resumes:
+        file_delete_failed = False
         if resume.file_path and os.path.exists(resume.file_path):
             try:
                 os.remove(resume.file_path)
             except OSError:
-                pass
+                file_delete_failed = True
+        detail = "TTL cleanup: orphan resume older than 30 days"
+        if file_delete_failed:
+            detail += "; resume file removal failed"
         write_audit_log(
             resume.workspace_id, resume.user_id or _SYSTEM_USER_ID, "RESUME_DELETE", "RESUME", resume.id,
-            detail="TTL cleanup: orphan resume older than 30 days",
+            result="FAILED" if file_delete_failed else "SUCCESS", detail=detail,
         )
         resume.delete()
 

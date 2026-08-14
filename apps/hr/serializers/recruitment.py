@@ -378,7 +378,10 @@ class RecruitmentService:
         if status:
             if status not in CandidateStatus.values:
                 raise AppApiException(400, "status is invalid")
-            queryset = queryset.filter(status=status)
+            if status == CandidateStatus.DELETED and self.hr_role != "ADMIN":
+                queryset = queryset.none()
+            else:
+                queryset = queryset.filter(status=status)
         else:
             queryset = queryset.exclude(status=CandidateStatus.DELETED)
         if skills:
@@ -455,6 +458,8 @@ class RecruitmentService:
     def edit_candidate(self, candidate_id, data):
         self._require_manage()
         candidate = self._candidate(candidate_id)
+        if candidate.status == CandidateStatus.DELETED:
+            raise AppApiException(400, "deleted candidate cannot be edited")
         fields = {
             "name": (self._required_string, 128),
             "phone": (self._optional_string, 20),
@@ -500,6 +505,8 @@ class RecruitmentService:
     def archive_candidate(self, candidate_id):
         self._require_manage()
         candidate = self._candidate(candidate_id)
+        if candidate.status == CandidateStatus.DELETED:
+            raise AppApiException(400, "deleted candidate cannot be archived")
         if CandidateAssignment.objects.filter(
             workspace_id=self.workspace_id,
             candidate=candidate,
@@ -527,13 +534,16 @@ class RecruitmentService:
         ).exists():
             raise AppApiException(400, "Candidate is hired, cannot delete")
         for resume in ResumeFile.objects.filter(workspace_id=self.workspace_id, candidate=candidate):
+            file_delete_failed = False
             if resume.file_path and os.path.exists(resume.file_path):
                 try:
                     os.remove(resume.file_path)
                 except OSError:
-                    pass
+                    file_delete_failed = True
             write_audit_log(
-                self.workspace_id, resume.user_id or self.user_id, "RESUME_DELETE", "RESUME", resume.id
+                self.workspace_id, resume.user_id or self.user_id, "RESUME_DELETE", "RESUME", resume.id,
+                result="FAILED" if file_delete_failed else "SUCCESS",
+                detail="resume file removal failed" if file_delete_failed else "",
             )
             resume.delete()
         candidate.name = "已删除候选人"
@@ -545,6 +555,8 @@ class RecruitmentService:
         candidate.years_experience = None
         candidate.skills = []
         candidate.source = ""
+        candidate.source_detail = ""
+        candidate.consent_version = ""
         candidate.note = ""
         candidate.status = CandidateStatus.DELETED
         candidate.save()
@@ -1013,6 +1025,8 @@ class RecruitmentService:
         secondary = self._candidate(secondary_id)
         if primary.id == secondary.id:
             raise AppApiException(400, "不能与自己合并")
+        if primary.status == CandidateStatus.DELETED or secondary.status == CandidateStatus.DELETED:
+            raise AppApiException(400, "deleted candidate cannot be merged")
         with transaction.atomic():
             primary = Candidate.objects.select_for_update().get(id=primary.id)
             secondary = Candidate.objects.select_for_update().get(id=secondary.id)

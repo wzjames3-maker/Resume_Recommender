@@ -1,3 +1,5 @@
+import csv
+import io
 import os
 import tempfile
 from datetime import timedelta
@@ -998,6 +1000,16 @@ class CandidateMergeTests(TestCase):
         self.service.merge_candidates(str(self.primary.id), {"secondary_id": str(self.secondary.id)})
         self.assertFalse(Candidate.objects.filter(id=self.secondary.id).exists())
 
+    def test_merge_rejects_deleted_primary(self):
+        self.service.delete_candidate(self.primary.id)
+        with self.assertRaisesRegex(AppApiException, "deleted candidate cannot be merged"):
+            self.service.merge_candidates(str(self.primary.id), {"secondary_id": str(self.secondary.id)})
+
+    def test_merge_rejects_deleted_secondary(self):
+        self.service.delete_candidate(self.secondary.id)
+        with self.assertRaisesRegex(AppApiException, "deleted candidate cannot be merged"):
+            self.service.merge_candidates(str(self.primary.id), {"secondary_id": str(self.secondary.id)})
+
 
 class StatusMachineMatrixTests(TestCase):
     """A2: 扩展后的迁移矩阵每行允许/禁止流转各一例"""
@@ -1899,6 +1911,9 @@ class CandidateDeleteTests(TestCase):
             self.service.delete_candidate(self.candidate.id)
 
     def test_delete_anonymizes_pii(self):
+        self.candidate.source_detail = "内推人:张三"
+        self.candidate.consent_version = "v1"
+        self.candidate.save(update_fields=["source_detail", "consent_version"])
         result = self.service.delete_candidate(self.candidate.id)
         self.assertEqual(result["status"], "DELETED")
         candidate = Candidate.objects.get(id=self.candidate.id)
@@ -1911,6 +1926,8 @@ class CandidateDeleteTests(TestCase):
         self.assertIsNone(candidate.years_experience)
         self.assertEqual(candidate.skills, [])
         self.assertEqual(candidate.source, "")
+        self.assertEqual(candidate.source_detail, "")
+        self.assertEqual(candidate.consent_version, "")
         self.assertEqual(candidate.note, "")
 
     def test_delete_writes_delete_audit(self):
@@ -1958,6 +1975,45 @@ class CandidateDeleteTests(TestCase):
             viewer.get_candidate(self.candidate.id)
         detail = self.service.get_candidate(self.candidate.id)
         self.assertEqual(detail["status"], "DELETED")
+
+    def test_edit_rejects_deleted(self):
+        self.service.delete_candidate(self.candidate.id)
+        with self.assertRaisesRegex(AppApiException, "deleted candidate cannot be edited"):
+            self.service.edit_candidate(self.candidate.id, {"name": "Renamed"})
+
+    def test_archive_rejects_deleted(self):
+        self.service.delete_candidate(self.candidate.id)
+        with self.assertRaisesRegex(AppApiException, "deleted candidate cannot be archived"):
+            self.service.archive_candidate(self.candidate.id)
+
+    def test_non_admin_explicit_deleted_filter_hidden(self):
+        self.service.delete_candidate(self.candidate.id)
+        for role in ("VIEWER", "OPERATOR"):
+            member = RecruitmentService(workspace_id="workspace-a", user_id=uuid.uuid7(), hr_role=role)
+            result = member.page_candidates(1, 20, {"status": "DELETED"})
+            self.assertEqual(result["total"], 0)
+        admin_result = self.service.page_candidates(1, 20, {"status": "DELETED"})
+        self.assertEqual(admin_result["total"], 1)
+
+    def test_delete_reports_resume_file_removal_failure(self):
+        handle = tempfile.NamedTemporaryFile(suffix=".txt", delete=False)
+        handle.write(b"resume")
+        handle.close()
+        resume = ResumeFile.objects.create(
+            workspace_id="workspace-a", file_name="r.txt", extension="txt",
+            file_path=handle.name, file_size=1, sha256="sha-" + uuid.uuid7().hex,
+            candidate=self.candidate, user_id=self.user_id,
+        )
+        with patch("hr.serializers.recruitment.os.remove", side_effect=OSError("permission denied")):
+            self.service.delete_candidate(self.candidate.id)
+        self.assertFalse(ResumeFile.objects.filter(id=resume.id).exists())
+        self.assertTrue(
+            HrAuditLog.objects.filter(
+                workspace_id="workspace-a", action="RESUME_DELETE",
+                object_type="RESUME", object_id=str(resume.id), result="FAILED",
+                detail__contains="removal failed",
+            ).exists()
+        )
 
     def test_terminal_assignment_kept_as_anonymous_reference(self):
         assignment_id = self.service.create_assignment(self.job.id, self.candidate.id, {})["id"]
@@ -2019,6 +2075,19 @@ class CleanupOrphanResumeTaskTests(TestCase):
         cleanup_orphan_resumes.run()
         self.assertTrue(ResumeFile.objects.filter(id=resume.id).exists())
         self.assertTrue(os.path.exists(resume.file_path))
+
+    def test_reports_resume_file_removal_failure(self):
+        resume = self._resume(days_old=31)
+        with patch("hr.task.resume.os.remove", side_effect=OSError("permission denied")):
+            cleanup_orphan_resumes.run()
+        self.assertFalse(ResumeFile.objects.filter(id=resume.id).exists())
+        self.assertTrue(
+            HrAuditLog.objects.filter(
+                workspace_id="workspace-a", action="RESUME_DELETE",
+                object_type="RESUME", object_id=str(resume.id), result="FAILED",
+                detail__contains="removal failed",
+            ).exists()
+        )
 
 
 class CandidateExportTests(TestCase):
@@ -2104,3 +2173,16 @@ class CandidateLifecycleRouteTests(_HrApiBase):
         self.assertIn("source_type", body)
         self.assertNotIn("13812345678", body)
         self.assertNotIn("alice@example.com", body)
+
+    def test_export_escapes_formula_injection(self):
+        self.candidate.name = '=HYPERLINK("https://evil.example","Click")'
+        self.candidate.save(update_fields=["name"])
+        path = "/admin/api/workspace/workspace-a/hr/export/candidates"
+        response = self._client(self.admin).post(path, data={"filters": {}}, content_type="application/json")
+        self.assertEqual(response.status_code, 200)
+        body = b"".join(response.streaming_content).decode("utf-8")
+        self.assertIn("'=HYPERLINK", body)
+        rows = list(csv.DictReader(io.StringIO(body)))
+        self.assertEqual(len(rows), 1)
+        self.assertTrue(rows[0]["name"].startswith("'=HYPERLINK"))
+        self.assertFalse(rows[0]["name"].startswith("="))

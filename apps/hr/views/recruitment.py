@@ -23,6 +23,15 @@ def _service(request, workspace_id):
     )
 
 
+_FORMULA_PREFIXES = ("=", "+", "-", "@")
+
+
+def _csv_escape(value):
+    if isinstance(value, str) and value.startswith(_FORMULA_PREFIXES):
+        return "'" + value
+    return value
+
+
 def _csv_response(records, fields):
     def generate():
         output = io.StringIO()
@@ -32,7 +41,7 @@ def _csv_response(records, fields):
         for record in records:
             output.seek(0)
             output.truncate(0)
-            writer.writerow({field: record.get(field, "") for field in fields})
+            writer.writerow({field: _csv_escape(record.get(field, "")) for field in fields})
             yield output.getvalue()
 
     response = StreamingHttpResponse(generate(), content_type="text/csv; charset=utf-8")
