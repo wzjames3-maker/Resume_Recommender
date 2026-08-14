@@ -215,3 +215,72 @@ class HrConfig(models.Model):
 
     class Meta:
         db_table = "hr_config"
+
+
+class HrRole(models.TextChoices):
+    VIEWER = "VIEWER", "Viewer"
+    OPERATOR = "OPERATOR", "Operator"
+    ADMIN = "ADMIN", "Admin"
+
+
+class HrAuditAction(models.TextChoices):
+    VIEW_DETAIL = "VIEW_DETAIL", "View detail"
+    CREATE = "CREATE", "Create"
+    UPDATE = "UPDATE", "Update"
+    ARCHIVE = "ARCHIVE", "Archive"
+    RESTORE = "RESTORE", "Restore"
+    DELETE = "DELETE", "Delete"
+    JOB_CLOSE = "JOB_CLOSE", "Job close"
+    JOB_REOPEN = "JOB_REOPEN", "Job reopen"
+    ASSIGNMENT_TRANSITION = "ASSIGNMENT_TRANSITION", "Assignment transition"
+    RESUME_UPLOAD = "RESUME_UPLOAD", "Resume upload"
+    RESUME_DOWNLOAD = "RESUME_DOWNLOAD", "Resume download"
+    RESUME_DELETE = "RESUME_DELETE", "Resume delete"
+    MERGE = "MERGE", "Merge"
+    GRANT_ACCESS = "GRANT_ACCESS", "Grant access"
+    REVOKE_ACCESS = "REVOKE_ACCESS", "Revoke access"
+    EXPORT = "EXPORT", "Export"
+    ACCESS_DENIED = "ACCESS_DENIED", "Access denied"
+
+
+class HrAuditObjectType(models.TextChoices):
+    CANDIDATE = "CANDIDATE", "Candidate"
+    JOB = "JOB", "Job"
+    ASSIGNMENT = "ASSIGNMENT", "Assignment"
+    RESUME = "RESUME", "Resume"
+    HR_ACCESS = "HR_ACCESS", "HR access"
+    OTHER = "OTHER", "Other"
+
+
+class HrAuditResult(models.TextChoices):
+    SUCCESS = "SUCCESS", "Success"
+    FAILED = "FAILED", "Failed"
+    DENIED = "DENIED", "Denied"
+
+
+class HrAccess(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
+    workspace_id = models.CharField(max_length=64, db_index=True)
+    user_id = models.UUIDField()
+    role = models.CharField(max_length=16, choices=HrRole.choices, default=HrRole.VIEWER)
+
+    class Meta:
+        db_table = "hr_access"
+        constraints = [
+            models.UniqueConstraint(fields=["workspace_id", "user_id"], name="hr_access_unique_workspace_user")
+        ]
+
+
+class HrAuditLog(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
+    workspace_id = models.CharField(max_length=64, db_index=True)
+    user_id = models.UUIDField()
+    action = models.CharField(max_length=32, choices=HrAuditAction.choices)
+    object_type = models.CharField(max_length=32, choices=HrAuditObjectType.choices, default=HrAuditObjectType.OTHER)
+    object_id = models.CharField(max_length=64, blank=True, default="")
+    result = models.CharField(max_length=8, choices=HrAuditResult.choices, default=HrAuditResult.SUCCESS)
+    detail = models.TextField(blank=True, default="")
+    create_time = models.DateTimeField(auto_now_add=True, db_index=True)
+
+    class Meta:
+        db_table = "hr_audit_log"

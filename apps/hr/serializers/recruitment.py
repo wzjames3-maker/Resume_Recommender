@@ -28,6 +28,7 @@ from hr.models import (
     TerminationReason,
 )
 from hr.services.resume_parser import extract_text_from_docx, extract_text_from_txt
+from hr.services.audit import write_audit_log
 from hr.task.resume import parse_resume_task
 from maxkb.const import PROJECT_DIR
 
@@ -75,10 +76,10 @@ _ALLOWED_TRANSITIONS = {
 
 
 class RecruitmentService:
-    def __init__(self, workspace_id, user_id, is_workspace_manage):
+    def __init__(self, workspace_id, user_id, hr_role):
         self.workspace_id = workspace_id
         self.user_id = user_id
-        self.is_workspace_manage = is_workspace_manage
+        self.hr_role = hr_role
 
     def _candidate(self, candidate_id):
         candidate = Candidate.objects.filter(id=candidate_id, workspace_id=self.workspace_id).first()
@@ -98,9 +99,34 @@ class RecruitmentService:
             raise NotFound404(404, "Resource not found")
         return assignment
 
+    @staticmethod
+    def _masked_phone(phone):
+        if not phone or len(phone) <= 7:
+            return phone
+        return f"{phone[:3]}****{phone[-4:]}"
+
+    @staticmethod
+    def _masked_email(email):
+        if not email or "@" not in email:
+            return email
+        local, _, domain = email.partition("@")
+        return f"{local[:2]}***@{domain}"
+
     def _require_manage(self):
-        if not self.is_workspace_manage:
+        if self.hr_role != "ADMIN":
+            write_audit_log(
+                self.workspace_id, self.user_id, "ACCESS_DENIED", "OTHER",
+                result="DENIED", detail="Workspace administrator permission is required",
+            )
             raise AppUnauthorizedFailed(403, "Workspace administrator permission is required")
+
+    def _require_operator(self):
+        if self.hr_role not in ("OPERATOR", "ADMIN"):
+            write_audit_log(
+                self.workspace_id, self.user_id, "ACCESS_DENIED", "OTHER",
+                result="DENIED", detail="Operator permission is required",
+            )
+            raise AppUnauthorizedFailed(403, "Operator permission is required")
 
     @staticmethod
     def _required_string(data, field, maximum):
@@ -188,13 +214,13 @@ class RecruitmentService:
             raise AppApiException(400, "termination_reason is invalid")
         return value
 
-    @staticmethod
-    def _candidate_output(candidate):
+    def _candidate_output(self, candidate):
+        masked = self.hr_role == "VIEWER"
         return {
             "id": str(candidate.id),
             "name": candidate.name,
-            "email": candidate.email,
-            "phone": candidate.phone,
+            "email": self._masked_email(candidate.email) if masked else candidate.email,
+            "phone": self._masked_phone(candidate.phone) if masked else candidate.phone,
             "current_city": candidate.current_city,
             "target_city": candidate.target_city,
             "highest_degree": candidate.highest_degree,
@@ -245,6 +271,7 @@ class RecruitmentService:
         }
 
     def create_candidate(self, data):
+        self._require_operator()
         candidate = Candidate.objects.create(
             workspace_id=self.workspace_id,
             user_id=self.user_id,
@@ -259,6 +286,7 @@ class RecruitmentService:
             source=self._optional_string(data, "source", 64),
             note=self._optional_string(data, "note", 4096),
         )
+        write_audit_log(self.workspace_id, self.user_id, "CREATE", "CANDIDATE", candidate.id)
         return self._candidate_output(candidate)
 
     @staticmethod
@@ -350,6 +378,7 @@ class RecruitmentService:
             {**self._assignment_output(assignment), "job_name": assignment.job.name}
             for assignment in assignments
         ]
+        write_audit_log(self.workspace_id, self.user_id, "VIEW_DETAIL", "CANDIDATE", candidate.id)
         return result
 
     def edit_candidate(self, candidate_id, data):
@@ -380,6 +409,7 @@ class RecruitmentService:
             update_fields.append("skills")
         if update_fields:
             candidate.save(update_fields=[*update_fields, "update_time"])
+        write_audit_log(self.workspace_id, self.user_id, "UPDATE", "CANDIDATE", candidate.id)
         return self._candidate_output(candidate)
 
     def archive_candidate(self, candidate_id):
@@ -393,6 +423,7 @@ class RecruitmentService:
             raise AppApiException(400, "Candidate has an active assignment")
         candidate.status = CandidateStatus.ARCHIVED
         candidate.save(update_fields=["status", "update_time"])
+        write_audit_log(self.workspace_id, self.user_id, "ARCHIVE", "CANDIDATE", candidate.id)
         return self._candidate_output(candidate)
 
     def create_job(self, data):
@@ -412,6 +443,7 @@ class RecruitmentService:
             description=self._optional_string(data, "description", 4096),
             skill_requirements=self._skill_requirements(data),
         )
+        write_audit_log(self.workspace_id, self.user_id, "CREATE", "JOB", job.id)
         return self._job_output(job)
 
     def page_jobs(self, current_page, page_size, query):
@@ -449,6 +481,7 @@ class RecruitmentService:
             {**self._assignment_output(assignment), "candidate_name": assignment.candidate.name}
             for assignment in assignments
         ]
+        write_audit_log(self.workspace_id, self.user_id, "VIEW_DETAIL", "JOB", job.id)
         return result
 
     def edit_job(self, job_id, data):
@@ -500,9 +533,11 @@ class RecruitmentService:
                 update_fields.append("close_reason")
         if update_fields:
             job.save(update_fields=[*update_fields, "update_time"])
+        write_audit_log(self.workspace_id, self.user_id, "UPDATE", "JOB", job.id)
         return self._job_output(job)
 
     def create_assignment(self, job_id, candidate_id, data):
+        self._require_operator()
         job = self._job(job_id)
         candidate = self._candidate(candidate_id)
         if candidate.status != CandidateStatus.ACTIVE:
@@ -541,6 +576,7 @@ class RecruitmentService:
                     assignment.save(update_fields=["applied_at"])
         except IntegrityError as exc:
             raise AppApiException(400, "An active assignment already exists") from exc
+        write_audit_log(self.workspace_id, self.user_id, "CREATE", "ASSIGNMENT", assignment.id)
         return self._assignment_output(assignment)
 
     def close_job(self, job_id, close_reason):
@@ -561,6 +597,7 @@ class RecruitmentService:
                 termination_reason=TerminationReason.JOB_CLOSED,
                 update_time=timezone.now(),
             )
+        write_audit_log(self.workspace_id, self.user_id, "JOB_CLOSE", "JOB", job.id)
         return {"closed_count": closed_count}
 
     def reopen_job(self, job_id):
@@ -571,9 +608,14 @@ class RecruitmentService:
         job.status = JobStatus.OPEN
         job.close_reason = None
         job.save(update_fields=["status", "close_reason", "update_time"])
+        write_audit_log(self.workspace_id, self.user_id, "JOB_REOPEN", "JOB", job.id)
         return self._job_output(job)
 
     def update_assignment(self, assignment_id, data):
+        self._require_operator()
+        if data.get("status") == AssignmentStatus.PENDING_SCREEN:
+            self._require_manage()
+        transition = None
         try:
             with transaction.atomic():
                 assignment = CandidateAssignment.objects.select_for_update().filter(
@@ -607,6 +649,7 @@ class RecruitmentService:
                         assignment.termination_reason = None
                         assignment.note = f"[restore] {reason.strip()}"
                         update_fields.extend(["status", "termination_reason", "note"])
+                        transition = "RESTORE"
                     else:
                         if target_status in JOB_OPEN_REQUIRED_TARGETS:
                             job = Job.objects.select_for_update().get(id=assignment.job_id)
@@ -621,6 +664,7 @@ class RecruitmentService:
                             update_fields.append("termination_reason")
                         assignment.status = target_status
                         update_fields.append("status")
+                        transition = "ASSIGNMENT_TRANSITION"
                 if "owner_id" in data:
                     assignment.owner_id = self._owner_id(data)
                     update_fields.append("owner_id")
@@ -632,6 +676,10 @@ class RecruitmentService:
                 assignment.save(update_fields=[*update_fields, "update_time"])
         except IntegrityError as exc:
             raise AppApiException(400, "An active assignment already exists") from exc
+        if transition == "RESTORE":
+            write_audit_log(self.workspace_id, self.user_id, "RESTORE", "ASSIGNMENT", assignment.id)
+        elif transition:
+            write_audit_log(self.workspace_id, self.user_id, "ASSIGNMENT_TRANSITION", "ASSIGNMENT", assignment.id)
         return self._assignment_output(assignment)
 
     def _resume_dir(self):
@@ -656,6 +704,7 @@ class RecruitmentService:
         }
 
     def upload_resumes(self, files, source_channel):
+        self._require_operator()
         if source_channel not in ResumeChannel.values:
             raise AppApiException(400, "source_channel is invalid")
         records = []
@@ -710,6 +759,10 @@ class RecruitmentService:
                 "candidate_id": None,
                 "error_message": error_message,
             })
+        write_audit_log(
+            self.workspace_id, self.user_id, "RESUME_UPLOAD", "RESUME",
+            object_id=",".join(str(record["resume_id"]) for record in records),
+        )
         return records
 
     def list_candidate_resumes(self, candidate_id):
@@ -723,6 +776,7 @@ class RecruitmentService:
         if resume is None:
             raise NotFound404(404, "Resource not found")
         resume.delete()
+        write_audit_log(self.workspace_id, self.user_id, "RESUME_DELETE", "RESUME", resume_id)
         return True
 
     def _resume_file(self, resume_id):
@@ -732,6 +786,7 @@ class RecruitmentService:
         return resume
 
     def download_resume(self, resume_id):
+        self._require_operator()
         resume = self._resume_file(resume_id)
         if not os.path.exists(resume.file_path):
             raise NotFound404(404, "File not found")
@@ -739,9 +794,11 @@ class RecruitmentService:
             "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             "txt": "text/plain",
         }.get(resume.extension.lower(), "application/octet-stream")
+        write_audit_log(self.workspace_id, self.user_id, "RESUME_DOWNLOAD", "RESUME", resume_id)
         return resume.file_path, resume.file_name, content_type
 
     def resume_content(self, resume_id):
+        self._require_operator()
         resume = self._resume_file(resume_id)
         if not os.path.exists(resume.file_path):
             raise NotFound404(404, "File not found")
@@ -781,7 +838,13 @@ class RecruitmentService:
                     matches.append(row)
         return {
             "candidates": [
-                {"id": str(row.id), "name": row.name, "phone": row.phone, "email": row.email, "current_city": row.current_city}
+                {
+                    "id": str(row.id),
+                    "name": row.name,
+                    "phone": self._masked_phone(row.phone) if self.hr_role == "VIEWER" else row.phone,
+                    "email": self._masked_email(row.email) if self.hr_role == "VIEWER" else row.email,
+                    "current_city": row.current_city,
+                }
                 for row in matches[:20]
             ]
         }
@@ -828,6 +891,7 @@ class RecruitmentService:
             ResumeFile.objects.filter(candidate=secondary).update(candidate=primary)
             CandidateAssignment.objects.filter(candidate=secondary).update(candidate=primary)
             secondary.delete()
+        write_audit_log(self.workspace_id, self.user_id, "MERGE", "CANDIDATE", primary.id, detail=str(secondary_id))
         return self.get_candidate(primary_id)
 
     def batch_resume_status(self, resume_ids):
@@ -897,6 +961,7 @@ class RecruitmentService:
         }
 
     def create_interview(self, assignment_id, data):
+        self._require_operator()
         assignment = self._assignment(assignment_id)
         max_round = Interview.objects.filter(
             workspace_id=self.workspace_id,
@@ -921,6 +986,7 @@ class RecruitmentService:
         return [self._interview_output(interview) for interview in interviews]
 
     def update_interview(self, interview_id, data):
+        self._require_operator()
         interview = Interview.objects.filter(id=interview_id, workspace_id=self.workspace_id).first()
         if interview is None:
             raise NotFound404(404, "Resource not found")

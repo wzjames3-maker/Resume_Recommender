@@ -5,15 +5,29 @@ from unittest.mock import patch
 
 from django.db import IntegrityError, transaction
 from django.test import TestCase
+from rest_framework.test import APIClient
 import uuid_utils.compat as uuid
 
 from common.exception.app_exception import AppApiException, AppUnauthorizedFailed, NotFound404
-from hr.models import AssignmentStatus, Candidate, CandidateAssignment, HrConfig, Interview, Job, ResumeFile, ResumeStatus
+from hr.models import (
+    AssignmentStatus,
+    Candidate,
+    CandidateAssignment,
+    HrAccess,
+    HrAuditLog,
+    HrConfig,
+    Interview,
+    Job,
+    ResumeFile,
+    ResumeStatus,
+)
+from hr.services.audit import write_audit_log
 from hr.task.resume import parse_resume_task
 from hr.serializers.ai import AiService
 from hr.serializers.recruitment import RecruitmentService
 from hr.services.ai_parser import extract_skills, parse_search_conditions
 from hr.services.resume_parser import parse_resume_text
+from users.models import User
 
 
 class AssignmentConstraintTests(TestCase):
@@ -70,7 +84,7 @@ class RecruitmentServiceTests(TestCase):
         self.service = RecruitmentService(
             workspace_id="workspace-a",
             user_id=self.user_id,
-            is_workspace_manage=True,
+            hr_role="ADMIN",
         )
         self.candidate = Candidate.objects.create(name="Alice", workspace_id="workspace-a")
         self.job = Job.objects.create(
@@ -126,7 +140,7 @@ class RecruitmentServiceTests(TestCase):
         member_service = RecruitmentService(
             workspace_id="workspace-a",
             user_id=self.user_id,
-            is_workspace_manage=False,
+            hr_role="OPERATOR",
         )
 
         with self.assertRaises(AppUnauthorizedFailed):
@@ -177,7 +191,7 @@ class ActiveAssignmentArchiveTests(TestCase):
         self.service = RecruitmentService(
             workspace_id="workspace-a",
             user_id=self.user_id,
-            is_workspace_manage=True,
+            hr_role="ADMIN",
         )
         self.candidate = Candidate.objects.create(name="Alice", workspace_id="workspace-a")
         self.job = Job.objects.create(
@@ -290,7 +304,7 @@ class ResumeFileModelTests(TestCase):
 class ResumeServiceTests(TestCase):
     def setUp(self):
         self.user_id = uuid.uuid7()
-        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=True)
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, hr_role="ADMIN")
 
     def _txt_file(self, content, name="resume.txt"):
         handle = tempfile.NamedTemporaryFile(suffix=".txt", delete=False)
@@ -361,7 +375,7 @@ class ResumeServiceTests(TestCase):
 
 class AdvancedSearchTests(TestCase):
     def setUp(self):
-        self.service = RecruitmentService(workspace_id="workspace-a", user_id=uuid.uuid7(), is_workspace_manage=True)
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=uuid.uuid7(), hr_role="ADMIN")
         self.alice = Candidate.objects.create(
             name="Alice", workspace_id="workspace-a", skills=["Python", "Django"],
             highest_degree="本科", years_experience=5, source="JOB_SITE",
@@ -394,7 +408,7 @@ class AdvancedSearchTests(TestCase):
 
 class JobMatchTests(TestCase):
     def setUp(self):
-        self.service = RecruitmentService(workspace_id="workspace-a", user_id=uuid.uuid7(), is_workspace_manage=True)
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=uuid.uuid7(), hr_role="ADMIN")
         self.alice = Candidate.objects.create(
             name="Alice", workspace_id="workspace-a", skills=["Python", "Django", "PostgreSQL"],
             current_city="杭州", target_city="上海", years_experience=5, status="ACTIVE",
@@ -440,7 +454,7 @@ class JobMatchTests(TestCase):
 
 class InterviewStatusMachineTests(TestCase):
     def setUp(self):
-        self.service = RecruitmentService(workspace_id="workspace-a", user_id=uuid.uuid7(), is_workspace_manage=True)
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=uuid.uuid7(), hr_role="ADMIN")
         self.candidate = Candidate.objects.create(name="Alice", workspace_id="workspace-a")
         self.job = Job.objects.create(name="Engineer", workspace_id="workspace-a", headcount=1)
         self.assignment_id = self.service.create_assignment(self.job.id, self.candidate.id, {})["id"]
@@ -483,7 +497,7 @@ class InterviewStatusMachineTests(TestCase):
 
 class InterviewServiceTests(TestCase):
     def setUp(self):
-        self.service = RecruitmentService(workspace_id="workspace-a", user_id=uuid.uuid7(), is_workspace_manage=True)
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=uuid.uuid7(), hr_role="ADMIN")
         self.candidate = Candidate.objects.create(name="Bob", workspace_id="workspace-a")
         self.job = Job.objects.create(name="Engineer", workspace_id="workspace-a", headcount=1)
         self.assignment_id = self.service.create_assignment(self.job.id, self.candidate.id, {})["id"]
@@ -596,7 +610,7 @@ class AiParserTests(TestCase):
 class AiServiceTests(TestCase):
     def setUp(self):
         self.user_id = uuid.uuid7()
-        self.service = AiService(workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=True)
+        self.service = AiService(workspace_id="workspace-a", user_id=self.user_id, hr_role="ADMIN")
 
     def test_config_default_is_null(self):
         self.assertEqual(self.service.get_config(), {"llm_model_id": None})
@@ -626,7 +640,7 @@ class AiServiceTests(TestCase):
             self.service.save_config({})
 
     def test_member_cannot_save_config(self):
-        member_service = AiService(workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=False)
+        member_service = AiService(workspace_id="workspace-a", user_id=self.user_id, hr_role="OPERATOR")
         with self.assertRaises(AppUnauthorizedFailed):
             member_service.save_config({"llm_model_id": "model-1"})
 
@@ -751,7 +765,7 @@ class ResumeParseTaskTests(TestCase):
 
 class ResumeBatchStatusTests(TestCase):
     def setUp(self):
-        self.service = RecruitmentService(workspace_id="workspace-a", user_id=uuid.uuid7(), is_workspace_manage=True)
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=uuid.uuid7(), hr_role="ADMIN")
 
     def _resume(self, status="PENDING"):
         return ResumeFile.objects.create(
@@ -798,7 +812,7 @@ class ResumeBatchStatusRouteTests(TestCase):
 
 class ResumeDownloadTests(TestCase):
     def setUp(self):
-        self.service = RecruitmentService(workspace_id="workspace-a", user_id=uuid.uuid7(), is_workspace_manage=True)
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=uuid.uuid7(), hr_role="ADMIN")
         self.handle = tempfile.NamedTemporaryFile(suffix=".txt", delete=False)
         self.handle.write("姓名：张三\n电话：13812345678".encode("utf-8"))
         self.handle.close()
@@ -853,7 +867,7 @@ class ResumeDownloadTests(TestCase):
 
 class DuplicateDetectionTests(TestCase):
     def setUp(self):
-        self.service = RecruitmentService(workspace_id="workspace-a", user_id=uuid.uuid7(), is_workspace_manage=True)
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=uuid.uuid7(), hr_role="ADMIN")
         self.alice = Candidate.objects.create(
             name="Alice", workspace_id="workspace-a", phone="13800000001", email="alice@example.com",
         )
@@ -907,7 +921,7 @@ class DuplicateDetectionTests(TestCase):
 class CandidateMergeTests(TestCase):
     def setUp(self):
         self.user_id = uuid.uuid7()
-        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=True)
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, hr_role="ADMIN")
         self.primary = Candidate.objects.create(
             name="Alice", workspace_id="workspace-a", phone="13800000001", skills=["Python"],
         )
@@ -968,7 +982,7 @@ class CandidateMergeTests(TestCase):
             self.service.merge_candidates(str(self.primary.id), {"secondary_id": str(foreign.id)})
 
     def test_merge_requires_manage(self):
-        member_service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=False)
+        member_service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, hr_role="OPERATOR")
         with self.assertRaises(AppUnauthorizedFailed):
             member_service.merge_candidates(str(self.primary.id), {"secondary_id": str(self.secondary.id)})
 
@@ -988,7 +1002,7 @@ class StatusMachineMatrixTests(TestCase):
 
     def setUp(self):
         self.user_id = uuid.uuid7()
-        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=True)
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, hr_role="ADMIN")
         self.job = Job.objects.create(name="Engineer", workspace_id="workspace-a", headcount=1)
 
     def _new_assignment(self):
@@ -1046,7 +1060,7 @@ class TerminationReasonTests(TestCase):
 
     def setUp(self):
         self.user_id = uuid.uuid7()
-        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=True)
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, hr_role="ADMIN")
         self.job = Job.objects.create(name="Engineer", workspace_id="workspace-a", headcount=1)
 
     def _new_assignment(self):
@@ -1080,7 +1094,7 @@ class RestoreRejectedTests(TestCase):
 
     def setUp(self):
         self.user_id = uuid.uuid7()
-        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=True)
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, hr_role="ADMIN")
         self.candidate = Candidate.objects.create(name="Alice", workspace_id="workspace-a")
         self.job = Job.objects.create(name="Engineer", workspace_id="workspace-a", headcount=1)
         self.assignment_id = self.service.create_assignment(self.job.id, self.candidate.id, {})["id"]
@@ -1090,7 +1104,7 @@ class RestoreRejectedTests(TestCase):
 
     def test_member_cannot_restore(self):
         member_service = RecruitmentService(
-            workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=False
+            workspace_id="workspace-a", user_id=self.user_id, hr_role="OPERATOR"
         )
         with self.assertRaises(AppUnauthorizedFailed):
             member_service.update_assignment(self.assignment_id, {"status": AssignmentStatus.PENDING_SCREEN, "note": "误拒绝"})
@@ -1120,7 +1134,7 @@ class ReapplyTests(TestCase):
 
     def setUp(self):
         self.user_id = uuid.uuid7()
-        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=True)
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, hr_role="ADMIN")
         self.candidate = Candidate.objects.create(name="Alice", workspace_id="workspace-a")
         self.job = Job.objects.create(name="Engineer", workspace_id="workspace-a", headcount=1)
 
@@ -1167,7 +1181,7 @@ class CloseJobTests(TestCase):
 
     def setUp(self):
         self.user_id = uuid.uuid7()
-        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=True)
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, hr_role="ADMIN")
         self.job = Job.objects.create(name="Engineer", workspace_id="workspace-a", headcount=5)
         self.first = self.service.create_assignment(
             self.job.id, Candidate.objects.create(name="A", workspace_id="workspace-a").id, {}
@@ -1217,7 +1231,7 @@ class CloseJobTests(TestCase):
 
     def test_member_cannot_close_or_reopen(self):
         member_service = RecruitmentService(
-            workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=False
+            workspace_id="workspace-a", user_id=self.user_id, hr_role="OPERATOR"
         )
         with self.assertRaises(AppUnauthorizedFailed):
             member_service.close_job(self.job.id, "FILLED")
@@ -1241,7 +1255,7 @@ class JobPositionStatusTests(TestCase):
 
     def setUp(self):
         self.user_id = uuid.uuid7()
-        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=True)
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, hr_role="ADMIN")
         self.candidate = Candidate.objects.create(name="Alice", workspace_id="workspace-a")
         self.job = Job.objects.create(name="Engineer", workspace_id="workspace-a", headcount=1)
 
@@ -1278,7 +1292,7 @@ class OwnerFieldTests(TestCase):
     def setUp(self):
         self.user_id = uuid.uuid7()
         self.other_id = uuid.uuid7()
-        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=True)
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, hr_role="ADMIN")
 
     def test_create_defaults_owner_to_current_user(self):
         job = self.service.create_job({"name": "Engineer", "headcount": 1})
@@ -1341,7 +1355,7 @@ class JobEditGuardTests(TestCase):
 
     def setUp(self):
         self.user_id = uuid.uuid7()
-        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=True)
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, hr_role="ADMIN")
         self.job = self.service.create_job({"name": "Engineer", "headcount": 1})
 
     def test_close_status_requires_close_reason(self):
@@ -1373,7 +1387,7 @@ class EnumValidationTests(TestCase):
 
     def setUp(self):
         self.user_id = uuid.uuid7()
-        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=True)
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, hr_role="ADMIN")
         self.candidate = Candidate.objects.create(name="Alice", workspace_id="workspace-a")
         self.job = Job.objects.create(name="Engineer", workspace_id="workspace-a", headcount=1)
 
@@ -1408,3 +1422,386 @@ class CloseReopenRouteTests(TestCase):
             self.assertIs(resolved.func.cls, JobDetailAPI.Close if suffix == "close" else JobDetailAPI.Reopen)
             response = self.client.put(path, data={}, content_type="application/json")
             self.assertIn(response.status_code, (401, 403), f"{path} 未注册或未受保护: {response.status_code}")
+
+
+class HrAccessModelTests(TestCase):
+    """A3: HrAccess/HrAuditLog 模型约束"""
+
+    def test_hr_access_unique_workspace_user(self):
+        user_id = uuid.uuid7()
+        HrAccess.objects.create(workspace_id="w1", user_id=user_id, role="VIEWER")
+        with self.assertRaises(IntegrityError):
+            with transaction.atomic():
+                HrAccess.objects.create(workspace_id="w1", user_id=user_id, role="ADMIN")
+
+    def test_hr_access_same_user_different_workspace_allowed(self):
+        user_id = uuid.uuid7()
+        HrAccess.objects.create(workspace_id="w1", user_id=user_id, role="VIEWER")
+        HrAccess.objects.create(workspace_id="w2", user_id=user_id, role="ADMIN")
+        self.assertEqual(HrAccess.objects.count(), 2)
+
+    def test_hr_audit_log_defaults(self):
+        log = HrAuditLog.objects.create(
+            workspace_id="w1", user_id=uuid.uuid7(), action="CREATE", object_type="CANDIDATE"
+        )
+        self.assertEqual(log.result, "SUCCESS")
+        self.assertEqual(log.object_id, "")
+        self.assertTrue(log.create_time)
+
+
+class HrRoleEnforcementTests(TestCase):
+    """A3: 服务层角色能力矩阵（VIEWER 只读 / OPERATOR / ADMIN 分级）"""
+
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.viewer = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, hr_role="VIEWER")
+        self.operator = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, hr_role="OPERATOR")
+        self.admin = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, hr_role="ADMIN")
+        self.candidate = Candidate.objects.create(name="Alice", workspace_id="workspace-a")
+        self.job = Job.objects.create(name="Engineer", workspace_id="workspace-a", headcount=1)
+
+    def test_viewer_cannot_create_candidate(self):
+        with self.assertRaises(AppUnauthorizedFailed):
+            self.viewer.create_candidate({"name": "Bob"})
+
+    def test_viewer_cannot_create_assignment(self):
+        with self.assertRaises(AppUnauthorizedFailed):
+            self.viewer.create_assignment(self.job.id, self.candidate.id, {})
+
+    def test_viewer_cannot_transition_assignment(self):
+        assignment = self.operator.create_assignment(self.job.id, self.candidate.id, {})
+        with self.assertRaises(AppUnauthorizedFailed):
+            self.viewer.update_assignment(assignment["id"], {"status": "SCREEN_PASSED"})
+
+    def test_viewer_cannot_upload_or_download_resume(self):
+        with self.assertRaises(AppUnauthorizedFailed):
+            self.viewer.upload_resumes([], "OTHER")
+
+    def test_operator_cannot_create_job_or_edit_candidate(self):
+        with self.assertRaises(AppUnauthorizedFailed):
+            self.operator.create_job({"name": "Platform", "headcount": 1})
+        with self.assertRaises(AppUnauthorizedFailed):
+            self.operator.edit_candidate(self.candidate.id, {"name": "Renamed"})
+
+    def test_operator_can_create_candidate_assignment_and_transition(self):
+        created = self.operator.create_candidate({"name": "Bob"})
+        self.assertEqual(created["name"], "Bob")
+        assignment = self.operator.create_assignment(self.job.id, self.candidate.id, {})
+        transitioned = self.operator.update_assignment(assignment["id"], {"status": "SCREEN_PASSED"})
+        self.assertEqual(transitioned["status"], "SCREEN_PASSED")
+
+    def test_operator_cannot_archive_or_merge(self):
+        with self.assertRaises(AppUnauthorizedFailed):
+            self.operator.archive_candidate(self.candidate.id)
+        secondary = Candidate.objects.create(name="Bob", workspace_id="workspace-a")
+        with self.assertRaises(AppUnauthorizedFailed):
+            self.operator.merge_candidates(self.candidate.id, {"secondary_id": str(secondary.id)})
+
+    def test_viewer_can_read_lists(self):
+        result = self.viewer.page_candidates(1, 20, {})
+        self.assertEqual(result["total"], 1)
+
+
+class HrMaskingTests(TestCase):
+    """A3: VIEWER 联系方式脱敏，OPERATOR/ADMIN 明文，空值保持"""
+
+    def setUp(self):
+        self.candidate = Candidate.objects.create(
+            name="Alice", workspace_id="workspace-a", phone="13812345678", email="zhangsan@example.com",
+        )
+
+    def _service(self, role):
+        return RecruitmentService(workspace_id="workspace-a", user_id=uuid.uuid7(), hr_role=role)
+
+    def test_viewer_list_masks_phone_and_email(self):
+        result = self._service("VIEWER").page_candidates(1, 20, {})
+        record = result["records"][0]
+        self.assertEqual(record["phone"], "138****5678")
+        self.assertEqual(record["email"], "zh***@example.com")
+
+    def test_viewer_detail_masks_phone_and_email(self):
+        record = self._service("VIEWER").get_candidate(self.candidate.id)
+        self.assertEqual(record["phone"], "138****5678")
+        self.assertEqual(record["email"], "zh***@example.com")
+
+    def test_operator_and_admin_see_plaintext(self):
+        for role in ("OPERATOR", "ADMIN"):
+            with self.subTest(role=role):
+                record = self._service(role).get_candidate(self.candidate.id)
+                self.assertEqual(record["phone"], "13812345678")
+                self.assertEqual(record["email"], "zhangsan@example.com")
+
+    def test_viewer_empty_contact_stays_empty(self):
+        empty = Candidate.objects.create(name="Empty", workspace_id="workspace-a")
+        record = self._service("VIEWER").get_candidate(empty.id)
+        self.assertEqual(record["phone"], "")
+        self.assertIsNone(record["email"])
+
+    def test_viewer_duplicate_check_is_masked(self):
+        result = self._service("VIEWER").check_duplicate({"email": "zhangsan@example.com"})
+        self.assertEqual(result["candidates"][0]["phone"], "138****5678")
+
+
+class HrAuditLogTests(TestCase):
+    """A3: 服务层关键操作审计记录"""
+
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, hr_role="ADMIN")
+        self.candidate = Candidate.objects.create(name="Alice", workspace_id="workspace-a", phone="13812345678")
+        self.job = Job.objects.create(name="Engineer", workspace_id="workspace-a", headcount=1)
+
+    def _logs(self, action):
+        return HrAuditLog.objects.filter(workspace_id="workspace-a", user_id=self.user_id, action=action)
+
+    def test_detail_view_writes_view_detail_audit(self):
+        self.service.get_candidate(self.candidate.id)
+        self.service.get_job(self.job.id)
+        self.assertTrue(self._logs("VIEW_DETAIL").filter(object_type="CANDIDATE", object_id=str(self.candidate.id)).exists())
+        self.assertTrue(self._logs("VIEW_DETAIL").filter(object_type="JOB", object_id=str(self.job.id)).exists())
+
+    def test_create_candidate_writes_create_audit(self):
+        created = self.service.create_candidate({"name": "Bob"})
+        self.assertTrue(self._logs("CREATE").filter(object_type="CANDIDATE", object_id=str(created["id"])).exists())
+
+    def test_assignment_transition_writes_audit(self):
+        assignment = self.service.create_assignment(self.job.id, self.candidate.id, {})
+        self.service.update_assignment(assignment["id"], {"status": "SCREEN_PASSED"})
+        self.assertTrue(self._logs("ASSIGNMENT_TRANSITION").filter(object_type="ASSIGNMENT").exists())
+
+    def test_archive_and_close_job_write_audit(self):
+        assignment = self.service.create_assignment(self.job.id, self.candidate.id, {})
+        self.service.update_assignment(assignment["id"], {"status": "REJECTED", "termination_reason": "NOT_FIT"})
+        self.service.archive_candidate(self.candidate.id)
+        self.assertTrue(self._logs("ARCHIVE").exists())
+        self.service.close_job(self.job.id, "FILLED")
+        self.assertTrue(self._logs("JOB_CLOSE").filter(object_type="JOB").exists())
+        self.service.reopen_job(self.job.id)
+        self.assertTrue(self._logs("JOB_REOPEN").exists())
+
+    @patch("hr.serializers.recruitment.parse_resume_task.delay")
+    def test_resume_upload_and_download_write_audit(self, mock_delay):
+        handle = tempfile.NamedTemporaryFile(suffix=".txt", delete=False)
+        handle.write("姓名：李四\n电话：13912345678".encode("utf-8"))
+        handle.close()
+        record = self.service.upload_resumes([(handle.name, "li.txt", "txt")], "OTHER")[0]
+        self.assertTrue(self._logs("RESUME_UPLOAD").filter(object_id=str(record["resume_id"])).exists())
+        self.service.download_resume(str(record["resume_id"]))
+        self.assertTrue(self._logs("RESUME_DOWNLOAD").filter(object_id=str(record["resume_id"])).exists())
+
+    def test_merge_writes_merge_audit(self):
+        secondary = Candidate.objects.create(name="Bob", workspace_id="workspace-a")
+        self.service.merge_candidates(self.candidate.id, {"secondary_id": str(secondary.id)})
+        self.assertTrue(self._logs("MERGE").filter(object_id=str(self.candidate.id)).exists())
+
+    def test_denied_write_writes_access_denied_audit(self):
+        viewer = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, hr_role="VIEWER")
+        with self.assertRaises(AppUnauthorizedFailed):
+            viewer.create_candidate({"name": "Bob"})
+        denied = HrAuditLog.objects.filter(
+            workspace_id="workspace-a", user_id=self.user_id, action="ACCESS_DENIED", result="DENIED"
+        )
+        self.assertTrue(denied.exists())
+
+
+class _HrApiBase(TestCase):
+    def _user(self, username, nick_name, role="USER"):
+        return User.objects.create(username=username, nick_name=nick_name, password="p", role=role)
+
+    def _client(self, user):
+        client = APIClient()
+        client.force_authenticate(user=user)
+        return client
+
+
+class HrAccessApiTests(_HrApiBase):
+    """A3: GET/PUT /access 授权 API 与装饰器权限执行"""
+
+    def setUp(self):
+        self.admin = self._user("hr-admin", "HR Admin")
+        self.operator = self._user("hr-operator", "HR Operator")
+        self.viewer = self._user("hr-viewer", "HR Viewer")
+        self.member = self._user("plain-member", "Plain Member")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.admin.id, role="ADMIN")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.operator.id, role="OPERATOR")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.viewer.id, role="VIEWER")
+
+    def test_member_without_hr_access_gets_403_and_audit(self):
+        response = self._client(self.member).get("/admin/api/workspace/workspace-a/hr/candidates/1/20")
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(
+            HrAuditLog.objects.filter(
+                workspace_id="workspace-a", user_id=self.member.id, action="ACCESS_DENIED", result="DENIED"
+            ).exists()
+        )
+
+    def test_access_list_returns_members_with_roles(self):
+        response = self._client(self.admin).get("/admin/api/workspace/workspace-a/hr/access")
+        self.assertEqual(response.status_code, 200)
+        by_id = {item["id"]: item for item in response.json()["data"]}
+        self.assertEqual(by_id[str(self.admin.id)]["hr_role"], "ADMIN")
+        self.assertEqual(by_id[str(self.operator.id)]["hr_role"], "OPERATOR")
+        self.assertEqual(by_id[str(self.viewer.id)]["hr_role"], "VIEWER")
+        self.assertIsNone(by_id[str(self.member.id)]["hr_role"])
+
+    def test_put_access_grants_and_upgrades_role(self):
+        response = self._client(self.admin).put(
+            "/admin/api/workspace/workspace-a/hr/access",
+            {"items": [{"user_id": str(self.member.id), "role": "OPERATOR"}]},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        access = HrAccess.objects.get(workspace_id="workspace-a", user_id=self.member.id)
+        self.assertEqual(access.role, "OPERATOR")
+
+    def test_put_access_revokes_role(self):
+        response = self._client(self.admin).put(
+            "/admin/api/workspace/workspace-a/hr/access",
+            {"items": [{"user_id": str(self.operator.id), "role": None}]},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(HrAccess.objects.filter(workspace_id="workspace-a", user_id=self.operator.id).exists())
+
+    def test_put_access_rejects_invalid_role(self):
+        response = self._client(self.admin).put(
+            "/admin/api/workspace/workspace-a/hr/access",
+            {"items": [{"user_id": str(self.member.id), "role": "OWNER"}]},
+            content_type="application/json",
+        )
+        self.assertEqual(response.json()["code"], 400)
+
+    def test_put_access_rejects_non_member(self):
+        stranger = self._user("sys-admin", "Sys Admin", role="ADMIN")
+        response = self._client(self.admin).put(
+            "/admin/api/workspace/workspace-a/hr/access",
+            {"items": [{"user_id": str(stranger.id), "role": "OPERATOR"}]},
+            content_type="application/json",
+        )
+        self.assertEqual(response.json()["code"], 400)
+
+    def test_put_access_writes_grant_and_revoke_audit(self):
+        self._client(self.admin).put(
+            "/admin/api/workspace/workspace-a/hr/access",
+            {"items": [{"user_id": str(self.member.id), "role": "OPERATOR"}]},
+            content_type="application/json",
+        )
+        self.assertTrue(
+            HrAuditLog.objects.filter(
+                workspace_id="workspace-a", user_id=self.admin.id, action="GRANT_ACCESS",
+                object_type="HR_ACCESS", object_id=str(self.member.id),
+            ).exists()
+        )
+        self._client(self.admin).put(
+            "/admin/api/workspace/workspace-a/hr/access",
+            {"items": [{"user_id": str(self.member.id), "role": None}]},
+            content_type="application/json",
+        )
+        self.assertTrue(
+            HrAuditLog.objects.filter(
+                workspace_id="workspace-a", user_id=self.admin.id, action="REVOKE_ACCESS",
+                object_type="HR_ACCESS", object_id=str(self.member.id),
+            ).exists()
+        )
+
+    def test_operator_cannot_manage_access(self):
+        response = self._client(self.operator).get("/admin/api/workspace/workspace-a/hr/access")
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(
+            HrAuditLog.objects.filter(
+                workspace_id="workspace-a", user_id=self.operator.id, action="ACCESS_DENIED"
+            ).exists()
+        )
+
+    def test_operator_cannot_view_audit_logs(self):
+        response = self._client(self.operator).get("/admin/api/workspace/workspace-a/hr/audit-logs")
+        self.assertEqual(response.status_code, 403)
+
+    def test_access_me_returns_current_role(self):
+        response = self._client(self.viewer).get("/admin/api/workspace/workspace-a/hr/access/me")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["data"]["role"], "VIEWER")
+
+    def test_access_me_denies_non_hr_member(self):
+        response = self._client(self.member).get("/admin/api/workspace/workspace-a/hr/access/me")
+        self.assertEqual(response.status_code, 403)
+
+    def test_viewer_cannot_create_candidate_via_api(self):
+        response = self._client(self.viewer).post(
+            "/admin/api/workspace/workspace-a/hr/candidates",
+            {"name": "Bob"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_operator_cannot_create_job_via_api(self):
+        response = self._client(self.operator).post(
+            "/admin/api/workspace/workspace-a/hr/jobs",
+            {"name": "Platform", "headcount": 1},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_viewer_detail_returns_masked_contact(self):
+        candidate = Candidate.objects.create(
+            name="Alice", workspace_id="workspace-a", phone="13812345678", email="zhangsan@example.com",
+        )
+        response = self._client(self.viewer).get(
+            f"/admin/api/workspace/workspace-a/hr/candidates/{candidate.id}"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["data"]["phone"], "138****5678")
+        self.assertEqual(response.json()["data"]["email"], "zh***@example.com")
+
+
+class HrAuditLogApiTests(_HrApiBase):
+    """A3: GET /audit-logs 查询（过滤+分页，仅 ADMIN）"""
+
+    def setUp(self):
+        self.admin = self._user("audit-admin", "Audit Admin")
+        self.operator = self._user("audit-op", "Audit Op")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.admin.id, role="ADMIN")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.operator.id, role="OPERATOR")
+        self.actor = uuid.uuid7()
+        write_audit_log("workspace-a", self.actor, "CREATE", "CANDIDATE", "cand-1")
+        write_audit_log("workspace-a", self.actor, "JOB_CLOSE", "JOB", "job-1")
+        write_audit_log("workspace-a", uuid.uuid7(), "CREATE", "CANDIDATE", "cand-2")
+
+    def test_audit_logs_lists_all(self):
+        response = self._client(self.admin).get("/admin/api/workspace/workspace-a/hr/audit-logs")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["data"]["total"], 3)
+
+    def test_audit_logs_filters_by_action_user_and_object_type(self):
+        client = self._client(self.admin)
+        response = client.get("/admin/api/workspace/workspace-a/hr/audit-logs", {"action": "CREATE"})
+        self.assertEqual(response.json()["data"]["total"], 2)
+        response = client.get("/admin/api/workspace/workspace-a/hr/audit-logs", {"user_id": str(self.actor)})
+        self.assertEqual(response.json()["data"]["total"], 2)
+        response = client.get("/admin/api/workspace/workspace-a/hr/audit-logs", {"object_type": "JOB"})
+        self.assertEqual(response.json()["data"]["total"], 1)
+
+    def test_audit_logs_pagination(self):
+        response = self._client(self.admin).get(
+            "/admin/api/workspace/workspace-a/hr/audit-logs", {"current_page": 1, "page_size": 2}
+        )
+        data = response.json()["data"]
+        self.assertEqual(data["total"], 3)
+        self.assertEqual(len(data["records"]), 2)
+
+    def test_audit_logs_rejects_invalid_filters(self):
+        client = self._client(self.admin)
+        for params in (
+            {"action": "NOPE"},
+            {"object_type": "NOPE"},
+            {"user_id": "garbage"},
+            {"start_time": "not-a-date"},
+        ):
+            with self.subTest(params=params):
+                response = client.get("/admin/api/workspace/workspace-a/hr/audit-logs", params)
+                self.assertEqual(response.json()["code"], 400)
+
+    def test_audit_logs_isolated_by_workspace(self):
+        write_audit_log("workspace-b", self.actor, "CREATE", "CANDIDATE", "cand-b")
+        response = self._client(self.admin).get("/admin/api/workspace/workspace-a/hr/audit-logs")
+        self.assertEqual(response.json()["data"]["total"], 3)

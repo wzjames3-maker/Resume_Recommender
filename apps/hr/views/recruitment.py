@@ -8,39 +8,30 @@ from rest_framework.views import APIView
 
 from common import result
 from common.auth import TokenAuth
-from common.auth.authentication import has_permissions
-from common.constants.permission_constants import RoleConstants
 from common.exception.app_exception import AppApiException
 from hr.serializers.recruitment import RecruitmentService
-from users.serializers.user import is_workspace_manage
+from hr.views.permissions import hr_access_required, hr_admin_required
 
 
 def _service(request, workspace_id):
     return RecruitmentService(
         workspace_id=workspace_id,
         user_id=request.user.id,
-        is_workspace_manage=is_workspace_manage(request.user.id, workspace_id),
+        hr_role=getattr(request, "hr_role", None),
     )
-
-
-member_required = has_permissions(
-    RoleConstants.USER.get_workspace_role(),
-    RoleConstants.WORKSPACE_MANAGE.get_workspace_role(),
-)
-manage_required = has_permissions(RoleConstants.WORKSPACE_MANAGE.get_workspace_role())
 
 
 class CandidateAPI(APIView):
     authentication_classes = [TokenAuth]
 
-    @member_required
+    @hr_access_required
     def post(self, request, workspace_id):
         return result.success(_service(request, workspace_id).create_candidate(request.data))
 
     class Page(APIView):
         authentication_classes = [TokenAuth]
 
-        @member_required
+        @hr_access_required
         def get(self, request, workspace_id, current_page, page_size):
             return result.success(
                 _service(request, workspace_id).page_candidates(current_page, page_size, request.query_params)
@@ -50,25 +41,25 @@ class CandidateAPI(APIView):
 class CandidateDetailAPI(APIView):
     authentication_classes = [TokenAuth]
 
-    @member_required
+    @hr_access_required
     def get(self, request, workspace_id, candidate_id):
         return result.success(_service(request, workspace_id).get_candidate(candidate_id))
 
-    @manage_required
+    @hr_admin_required
     def put(self, request, workspace_id, candidate_id):
         return result.success(_service(request, workspace_id).edit_candidate(candidate_id, request.data))
 
     class Archive(APIView):
         authentication_classes = [TokenAuth]
 
-        @manage_required
+        @hr_admin_required
         def put(self, request, workspace_id, candidate_id):
             return result.success(_service(request, workspace_id).archive_candidate(candidate_id))
 
     class Merge(APIView):
         authentication_classes = [TokenAuth]
 
-        @manage_required
+        @hr_admin_required
         def post(self, request, workspace_id, candidate_id):
             return result.success(_service(request, workspace_id).merge_candidates(candidate_id, request.data))
 
@@ -76,7 +67,7 @@ class CandidateDetailAPI(APIView):
 class CandidateCheckDuplicateAPI(APIView):
     authentication_classes = [TokenAuth]
 
-    @member_required
+    @hr_access_required
     def post(self, request, workspace_id):
         return result.success(_service(request, workspace_id).check_duplicate(request.data))
 
@@ -84,21 +75,21 @@ class CandidateCheckDuplicateAPI(APIView):
 class JobAPI(APIView):
     authentication_classes = [TokenAuth]
 
-    @manage_required
+    @hr_admin_required
     def post(self, request, workspace_id):
         return result.success(_service(request, workspace_id).create_job(request.data))
 
     class Page(APIView):
         authentication_classes = [TokenAuth]
 
-        @member_required
+        @hr_access_required
         def get(self, request, workspace_id, current_page, page_size):
             return result.success(_service(request, workspace_id).page_jobs(current_page, page_size, request.query_params))
 
     class Assignment(APIView):
         authentication_classes = [TokenAuth]
 
-        @member_required
+        @hr_access_required
         def post(self, request, workspace_id, job_id):
             return result.success(
                 _service(request, workspace_id).create_assignment(job_id, request.data.get("candidate_id"), request.data)
@@ -108,18 +99,18 @@ class JobAPI(APIView):
 class JobDetailAPI(APIView):
     authentication_classes = [TokenAuth]
 
-    @member_required
+    @hr_access_required
     def get(self, request, workspace_id, job_id):
         return result.success(_service(request, workspace_id).get_job(job_id))
 
-    @manage_required
+    @hr_admin_required
     def put(self, request, workspace_id, job_id):
         return result.success(_service(request, workspace_id).edit_job(job_id, request.data))
 
     class Close(APIView):
         authentication_classes = [TokenAuth]
 
-        @manage_required
+        @hr_admin_required
         def put(self, request, workspace_id, job_id):
             return result.success(
                 _service(request, workspace_id).close_job(job_id, request.data.get("close_reason"))
@@ -128,7 +119,7 @@ class JobDetailAPI(APIView):
     class Reopen(APIView):
         authentication_classes = [TokenAuth]
 
-        @manage_required
+        @hr_admin_required
         def put(self, request, workspace_id, job_id):
             return result.success(_service(request, workspace_id).reopen_job(job_id))
 
@@ -136,7 +127,7 @@ class JobDetailAPI(APIView):
 class AssignmentAPI(APIView):
     authentication_classes = [TokenAuth]
 
-    @member_required
+    @hr_access_required
     def put(self, request, workspace_id, assignment_id):
         return result.success(_service(request, workspace_id).update_assignment(assignment_id, request.data))
 
@@ -145,7 +136,7 @@ class ResumeAPI(APIView):
     authentication_classes = [TokenAuth]
     parser_classes = [MultiPartParser]
 
-    @member_required
+    @hr_access_required
     def post(self, request, workspace_id):
         source_channel = request.data.get("source_channel", "OTHER")
         files = []
@@ -162,7 +153,7 @@ class ResumeAPI(APIView):
 class ResumeListAPI(APIView):
     authentication_classes = [TokenAuth]
 
-    @member_required
+    @hr_access_required
     def get(self, request, workspace_id, candidate_id):
         return result.success(_service(request, workspace_id).list_candidate_resumes(candidate_id))
 
@@ -170,14 +161,14 @@ class ResumeListAPI(APIView):
 class ResumeDetailAPI(APIView):
     authentication_classes = [TokenAuth]
 
-    @manage_required
+    @hr_admin_required
     def delete(self, request, workspace_id, resume_id):
         return result.success(_service(request, workspace_id).delete_resume(resume_id))
 
     class Download(APIView):
         authentication_classes = [TokenAuth]
 
-        @member_required
+        @hr_access_required
         def get(self, request, workspace_id, resume_id):
             file_path, file_name, content_type = _service(request, workspace_id).download_resume(resume_id)
             try:
@@ -189,7 +180,7 @@ class ResumeDetailAPI(APIView):
     class Content(APIView):
         authentication_classes = [TokenAuth]
 
-        @member_required
+        @hr_access_required
         def get(self, request, workspace_id, resume_id):
             return result.success(_service(request, workspace_id).resume_content(resume_id))
 
@@ -197,7 +188,7 @@ class ResumeDetailAPI(APIView):
 class JobMatchAPI(APIView):
     authentication_classes = [TokenAuth]
 
-    @member_required
+    @hr_access_required
     def get(self, request, workspace_id, job_id, current_page, page_size):
         return result.success(
             _service(request, workspace_id).match_job_candidates(job_id, current_page, page_size)
@@ -207,11 +198,11 @@ class JobMatchAPI(APIView):
 class InterviewAPI(APIView):
     authentication_classes = [TokenAuth]
 
-    @member_required
+    @hr_access_required
     def post(self, request, workspace_id, assignment_id):
         return result.success(_service(request, workspace_id).create_interview(assignment_id, request.data))
 
-    @member_required
+    @hr_access_required
     def get(self, request, workspace_id, assignment_id):
         return result.success(_service(request, workspace_id).list_interviews(assignment_id))
 
@@ -219,7 +210,7 @@ class InterviewAPI(APIView):
 class InterviewDetailAPI(APIView):
     authentication_classes = [TokenAuth]
 
-    @member_required
+    @hr_access_required
     def put(self, request, workspace_id, interview_id):
         return result.success(_service(request, workspace_id).update_interview(interview_id, request.data))
 
@@ -227,7 +218,7 @@ class InterviewDetailAPI(APIView):
 class ResumeBatchStatusAPI(APIView):
     authentication_classes = [TokenAuth]
 
-    @member_required
+    @hr_access_required
     def get(self, request, workspace_id):
         ids_param = request.query_params.get("ids", "")
         resume_ids = [item.strip() for item in ids_param.split(",") if item.strip()]
