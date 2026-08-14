@@ -132,7 +132,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
 - 简历：候选人简历可下载原文件、可查看提取文本（docx/txt），跨工作区与文件缺失正确 404。
 - 查重：列表标记疑似重复（同手机号/邮箱，邮箱忽略大小写）；新建/编辑保存前查重提示。
 - 合并：主优先补充字段、技能并集、备注拼接，简历/指派迁移、从候选人删除；有效指派同职位冲突拒绝。
-- 测试：`hr.tests application.tests knowledge.tests models_provider.tests`，106/106 PASS。
+- 测试：`hr.tests application.tests knowledge.tests models_provider.tests`，107/107 PASS。
 - 检查：`manage.py check` 无问题；`makemigrations --check --dry-run` 无变更。
 - 前端：简历对话框、重复标记、合并对话框可构建；`vue-tsc`、管理端和聊天端 Vite 构建均 PASS。
 
