@@ -8,6 +8,7 @@
       <el-button v-if="isHrOperator" type="primary" @click="openCandidateDialog()">新建候选人</el-button>
       <el-button v-if="isHrOperator" type="primary" plain @click="openResumeUpload()">上传简历</el-button>
       <el-button v-if="isHrAdmin" plain @click="aiSettingVisible = true">AI 设置</el-button>
+      <el-button v-if="isHrAdmin" plain :loading="exporting" @click="exportCandidates">导出</el-button>
       <input ref="resumeInputRef" type="file" multiple accept=".docx,.txt" class="hidden-input" @change="handleResumeFiles" />
     </div>
 
@@ -65,6 +66,7 @@
             <el-button v-if="isHrAdmin" link type="primary" @click="openCandidateDialog(row)">编辑</el-button>
             <el-button v-if="isHrOperator" link type="primary" :disabled="row.status !== 'ACTIVE'" @click="openAssignmentDialog(row)">加入职位</el-button>
             <el-button v-if="isHrAdmin" link type="danger" :disabled="row.status !== 'ACTIVE'" @click="archive(row)">归档</el-button>
+            <el-button v-if="isHrAdmin" link type="danger" @click="removeCandidate(row)">删除</el-button>
             <el-button link type="primary" @click="openResumeListDialog(row)">简历</el-button>
             <el-button v-if="isHrAdmin" link type="danger" :disabled="!row.duplicate_ids?.length" @click="openMergeDialog(row)">合并</el-button>
           </template>
@@ -88,6 +90,18 @@
           <el-col :span="12"><el-form-item label="工作年限"><el-input-number v-model="candidateForm.years_experience" :min="0" :max="99" /></el-form-item></el-col>
         </el-row>
         <el-form-item label="技能"><el-input v-model="skillsText" placeholder="用逗号分隔，例如 Python, Django" /></el-form-item>
+        <el-row :gutter="16">
+          <el-col :span="12"><el-form-item label="来源类型"><el-select v-model="candidateForm.source_type" style="width: 100%"><el-option v-for="(label, value) in channelLabels" :key="value" :label="label" :value="value" /></el-select></el-form-item></el-col>
+          <el-col :span="12"><el-form-item label="来源详情"><el-input v-model="candidateForm.source_detail" maxlength="128" /></el-form-item></el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :span="12"><el-form-item label="收集日期"><el-date-picker v-model="candidateForm.collected_at" type="datetime" style="width: 100%" value-format="YYYY-MM-DDTHH:mm:ss" /></el-form-item></el-col>
+          <el-col :span="12"><el-form-item label="告知状态"><el-select v-model="candidateForm.consent_status" style="width: 100%"><el-option v-for="(label, value) in consentStatusLabels" :key="value" :label="label" :value="value" /></el-select></el-form-item></el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :span="12"><el-form-item label="告知版本"><el-input v-model="candidateForm.consent_version" maxlength="32" /></el-form-item></el-col>
+          <el-col :span="12"><el-form-item label="联系偏好"><el-select v-model="candidateForm.contact_preference" style="width: 100%"><el-option v-for="(label, value) in contactPreferenceLabels" :key="value" :label="label" :value="value" /></el-select></el-form-item></el-col>
+        </el-row>
         <el-form-item label="来源"><el-input v-model="candidateForm.source" /></el-form-item>
         <el-form-item label="备注"><el-input v-model="candidateForm.note" type="textarea" :rows="3" maxlength="4096" show-word-limit /></el-form-item>
       </el-form>
@@ -245,7 +259,7 @@ import AppTable from '@/components/app-table/index.vue'
 import AiSettingDialog from '@/views/hr/components/AiSettingDialog.vue'
 import HrApi from '@/api/hr/recruitment'
 import AuthorizationApi from '@/api/system/resource-authorization'
-import type { Candidate, CandidateDetail, Job, RelationType, ResumeChannel, ResumeFile, ResumeUploadResult } from '@/api/type/hr'
+import type { Candidate, CandidateDetail, ConsentStatus, ContactPreference, Job, RelationType, ResumeChannel, ResumeFile, ResumeUploadResult } from '@/api/type/hr'
 import useStore from '@/stores'
 import { MsgConfirm, MsgError, MsgSuccess } from '@/utils/message'
 
@@ -261,6 +275,20 @@ const channelLabels: Record<string, string> = {
   HEADHUNTER: '猎头',
   CAMPUS: '校园',
   OTHER: '其他',
+}
+
+const consentStatusLabels: Record<string, string> = {
+  UNKNOWN: '未知',
+  NOTIFIED: '已告知',
+  CONSENTED: '已同意',
+  NOT_REQUIRED: '无需同意',
+}
+
+const contactPreferenceLabels: Record<string, string> = {
+  EMAIL: '邮箱',
+  PHONE: '电话',
+  NO_CONTACT: '不联系',
+  UNSPECIFIED: '未指定',
 }
 
 const relationTypeLabels: Record<string, string> = {
@@ -283,6 +311,7 @@ const assignmentStatusLabels: Record<string, string> = {
 
 const loading = ref(false)
 const saving = ref(false)
+const exporting = ref(false)
 const candidates = ref<Candidate[]>([])
 const openJobs = ref<Job[]>([])
 const members = ref<WorkspaceMember[]>([])
@@ -315,6 +344,9 @@ const isHrOperator = computed(() => user.getHrRole() === 'OPERATOR' || user.getH
 const candidateForm = reactive({
   name: '', email: '', phone: '', current_city: '', target_city: '', highest_degree: '',
   years_experience: null as number | null, source: '', note: '',
+  source_type: 'OTHER' as ResumeChannel, source_detail: '',
+  collected_at: null as string | null, consent_status: 'UNKNOWN' as ConsentStatus,
+  consent_version: '', contact_preference: 'UNSPECIFIED' as ContactPreference,
 })
 
 function memberName(memberId: string | null) {
@@ -343,6 +375,12 @@ function resetCandidateForm(candidate?: Candidate) {
   candidateForm.years_experience = candidate?.years_experience ?? null
   candidateForm.source = candidate?.source || ''
   candidateForm.note = candidate?.note || ''
+  candidateForm.source_type = candidate?.source_type || 'OTHER'
+  candidateForm.source_detail = candidate?.source_detail || ''
+  candidateForm.collected_at = candidate?.collected_at || null
+  candidateForm.consent_status = candidate?.consent_status || 'UNKNOWN'
+  candidateForm.consent_version = candidate?.consent_version || ''
+  candidateForm.contact_preference = candidate?.contact_preference || 'UNSPECIFIED'
   skillsText.value = candidate?.skills.join(', ') || ''
 }
 
@@ -443,6 +481,30 @@ function archive(candidate: Candidate) {
       refresh()
     })
     .catch(() => {})
+}
+
+function removeCandidate(candidate: Candidate) {
+  MsgConfirm(
+    '删除候选人',
+    `删除即匿名化处理：姓名被替换、联系方式等个人信息将被清空，且该候选人的简历文件会被删除。确认删除 ${candidate.name}？`,
+    { confirmButtonClass: 'danger' },
+  )
+    .then(() => HrApi.deleteCandidate(candidate.id))
+    .then(() => {
+      MsgSuccess('候选人已删除')
+      refresh()
+    })
+    .catch(() => {})
+}
+
+function exportCandidates() {
+  exporting.value = true
+  HrApi.exportCandidates({ ...filters })
+    .then(() => MsgSuccess('候选人已导出'))
+    .catch(() => {})
+    .finally(() => {
+      exporting.value = false
+    })
 }
 
 function openAssignmentDialog(candidate: Candidate) {

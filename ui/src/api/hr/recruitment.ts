@@ -1,5 +1,5 @@
 import type { Result } from '@/request/Result'
-import { exportFile, del, get, post, put } from '@/request'
+import { exportFile, exportFilePost, del, get, post, put } from '@/request'
 import type {
   AiConditions,
   Assignment,
@@ -48,6 +48,12 @@ const updateCandidate = (candidateId: string, data: Partial<Candidate>) =>
 
 const archiveCandidate = (candidateId: string) =>
   put(`${prefix.value}/candidates/${candidateId}/archive`) as Promise<Result<Candidate>>
+
+const deleteCandidate = (candidateId: string) =>
+  put(`${prefix.value}/candidates/${candidateId}/delete`) as Promise<Result<Candidate>>
+
+const exportCandidates = (filters: Record<string, unknown>) =>
+  exportFilePost('candidates.csv', `${prefix.value}/export/candidates`, {}, { filters })
 
 const getJobs = (page: pageRequest, params?: Record<string, unknown>) =>
   get(`${prefix.value}/jobs/${page.current_page}/${page.page_size}`, params) as Promise<Result<PageResult<Job>>>
@@ -149,8 +155,10 @@ export default {
   createCandidate,
   createInterview,
   createJob,
+  deleteCandidate,
   deleteResume,
   downloadResume,
+  exportCandidates,
   extractSkills,
   getAccess,
   getAiConfig,

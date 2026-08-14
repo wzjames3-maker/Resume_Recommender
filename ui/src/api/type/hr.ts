@@ -1,4 +1,6 @@
-export type CandidateStatus = 'ACTIVE' | 'ARCHIVED'
+export type CandidateStatus = 'ACTIVE' | 'ARCHIVED' | 'DELETED'
+export type ConsentStatus = 'UNKNOWN' | 'NOTIFIED' | 'CONSENTED' | 'NOT_REQUIRED'
+export type ContactPreference = 'EMAIL' | 'PHONE' | 'NO_CONTACT' | 'UNSPECIFIED'
 export type JobStatus = 'DRAFT' | 'OPEN' | 'ON_HOLD' | 'CLOSED'
 export type JobCloseReason = 'FILLED' | 'CANCELLED' | 'DUPLICATE' | 'OTHER'
 export type AssignmentStatus =
@@ -44,6 +46,12 @@ export interface Candidate {
   years_experience: number | null
   skills: string[]
   source: string
+  source_type: ResumeChannel
+  source_detail: string
+  collected_at: string | null
+  consent_status: ConsentStatus
+  consent_version: string
+  contact_preference: ContactPreference
   note: string
   status: CandidateStatus
   create_time: string
