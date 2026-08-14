@@ -284,12 +284,11 @@ function saveCandidate() {
   HrApi.checkDuplicate({ phone: candidateForm.phone, email: candidateForm.email, exclude_id: editingCandidate.value?.id || '' })
     .then((response) => {
       if (response.data.candidates.length > 0) {
-        MsgConfirm('发现疑似重复候选人', `有 ${response.data.candidates.length} 名候选人手机号或邮箱相同，是否继续保存？`, { type: 'warning' })
+        return MsgConfirm('发现疑似重复候选人', `有 ${response.data.candidates.length} 名候选人手机号或邮箱相同，是否继续保存？`, { type: 'warning' })
           .then(() => doSaveCandidate(data))
           .catch(() => {})
-      } else {
-        doSaveCandidate(data)
       }
+      return doSaveCandidate(data)
     })
     .catch(() => {})
     .finally(() => {
@@ -301,7 +300,7 @@ function doSaveCandidate(data: Record<string, unknown>) {
   const request = editingCandidate.value
     ? HrApi.updateCandidate(editingCandidate.value.id, data)
     : HrApi.createCandidate(data)
-  request.then(() => {
+  return request.then(() => {
     candidateDialogVisible.value = false
     MsgSuccess('候选人已保存')
     refresh()
