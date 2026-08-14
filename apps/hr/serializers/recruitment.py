@@ -22,6 +22,7 @@ from hr.models import (
     ResumeFile,
     ResumeStatus,
 )
+from hr.services.resume_parser import extract_text_from_docx, extract_text_from_txt
 from hr.task.resume import parse_resume_task
 from maxkb.const import PROJECT_DIR
 
@@ -524,6 +525,35 @@ class RecruitmentService:
             raise NotFound404(404, "Resource not found")
         resume.delete()
         return True
+
+    def _resume_file(self, resume_id):
+        resume = ResumeFile.objects.filter(id=resume_id, workspace_id=self.workspace_id).first()
+        if resume is None:
+            raise NotFound404(404, "Resource not found")
+        return resume
+
+    def download_resume(self, resume_id):
+        resume = self._resume_file(resume_id)
+        if not os.path.exists(resume.file_path):
+            raise NotFound404(404, "File not found")
+        content_type = {
+            "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "txt": "text/plain",
+        }.get(resume.extension.lower(), "application/octet-stream")
+        return resume.file_path, resume.file_name, content_type
+
+    def resume_content(self, resume_id):
+        resume = self._resume_file(resume_id)
+        if not os.path.exists(resume.file_path):
+            raise NotFound404(404, "File not found")
+        try:
+            if resume.extension == "docx":
+                text = extract_text_from_docx(resume.file_path)
+            else:
+                text = extract_text_from_txt(resume.file_path)
+        except Exception as exc:
+            raise AppApiException(400, "简历内容提取失败") from exc
+        return {"content": text}
 
     def batch_resume_status(self, resume_ids):
         try:

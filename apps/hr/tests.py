@@ -707,3 +707,59 @@ class ResumeBatchStatusRouteTests(TestCase):
 
         resolved = resolve("/admin/api/workspace/workspace-a/hr/resumes/batch-status")
         self.assertIs(resolved.func.cls, ResumeBatchStatusAPI)
+
+
+class ResumeDownloadTests(TestCase):
+    def setUp(self):
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=uuid.uuid7(), is_workspace_manage=True)
+        self.handle = tempfile.NamedTemporaryFile(suffix=".txt", delete=False)
+        self.handle.write("姓名：张三\n电话：13812345678".encode("utf-8"))
+        self.handle.close()
+        self.resume = ResumeFile.objects.create(
+            workspace_id="workspace-a", file_name="zhangsan.txt", extension="txt",
+            file_path=self.handle.name, file_size=os.path.getsize(self.handle.name),
+            sha256="sha-" + uuid.uuid7().hex, source_channel="OTHER", status="SUCCESS",
+        )
+
+    def test_download_returns_path_name_and_mime(self):
+        file_path, file_name, content_type = self.service.download_resume(str(self.resume.id))
+        self.assertEqual(file_path, self.handle.name)
+        self.assertEqual(file_name, "zhangsan.txt")
+        self.assertEqual(content_type, "text/plain")
+
+    def test_download_missing_file_raises_404(self):
+        self.resume.file_path = "/tmp/not-exists-" + uuid.uuid7().hex + ".txt"
+        self.resume.save(update_fields=["file_path"])
+        with self.assertRaises(NotFound404):
+            self.service.download_resume(str(self.resume.id))
+
+    def test_download_cross_workspace_raises_404(self):
+        foreign = ResumeFile.objects.create(
+            workspace_id="workspace-b", file_name="f.txt", extension="txt",
+            file_path="/tmp/f.txt", file_size=1, sha256="sha-" + uuid.uuid7().hex,
+        )
+        with self.assertRaises(NotFound404):
+            self.service.download_resume(str(foreign.id))
+
+    def test_content_returns_txt_text(self):
+        result = self.service.resume_content(str(self.resume.id))
+        self.assertIn("张三", result["content"])
+        self.assertIn("13812345678", result["content"])
+
+    def test_content_broken_docx_raises_400(self):
+        broken = tempfile.NamedTemporaryFile(suffix=".docx", delete=False)
+        broken.write(b"not a docx zip")
+        broken.close()
+        docx_resume = ResumeFile.objects.create(
+            workspace_id="workspace-a", file_name="bad.docx", extension="docx",
+            file_path=broken.name, file_size=os.path.getsize(broken.name),
+            sha256="sha-" + uuid.uuid7().hex, source_channel="OTHER", status="SUCCESS",
+        )
+        with self.assertRaisesRegex(AppApiException, "提取失败"):
+            self.service.resume_content(str(docx_resume.id))
+
+    def test_content_missing_file_raises_404(self):
+        self.resume.file_path = "/tmp/not-exists-" + uuid.uuid7().hex + ".txt"
+        self.resume.save(update_fields=["file_path"])
+        with self.assertRaises(NotFound404):
+            self.service.resume_content(str(self.resume.id))

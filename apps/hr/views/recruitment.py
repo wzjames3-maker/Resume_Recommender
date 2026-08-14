@@ -2,6 +2,7 @@ import os
 import tempfile
 
 import uuid_utils.compat as uuid
+from django.http import FileResponse
 from rest_framework.parsers import MultiPartParser
 from rest_framework.views import APIView
 
@@ -141,6 +142,25 @@ class ResumeDetailAPI(APIView):
     @manage_required
     def delete(self, request, workspace_id, resume_id):
         return result.success(_service(request, workspace_id).delete_resume(resume_id))
+
+    class Download(APIView):
+        authentication_classes = [TokenAuth]
+
+        @member_required
+        def get(self, request, workspace_id, resume_id):
+            file_path, file_name, content_type = _service(request, workspace_id).download_resume(resume_id)
+            try:
+                handle = open(file_path, "rb")
+            except OSError as exc:
+                raise AppApiException(500, "文件读取失败") from exc
+            return FileResponse(handle, content_type=content_type, as_attachment=True, filename=file_name)
+
+    class Content(APIView):
+        authentication_classes = [TokenAuth]
+
+        @member_required
+        def get(self, request, workspace_id, resume_id):
+            return result.success(_service(request, workspace_id).resume_content(resume_id))
 
 
 class JobMatchAPI(APIView):
