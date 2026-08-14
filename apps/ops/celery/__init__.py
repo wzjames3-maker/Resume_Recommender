@@ -40,5 +40,6 @@ app.conf.update(
         'knowledge.task.embedding',
         'knowledge.task.generate',
         'knowledge.task.sync',
+        'hr.task.resume',
     ]
 )

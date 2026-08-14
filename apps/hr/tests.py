@@ -1,3 +1,4 @@
+import os
 import tempfile
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -7,7 +8,8 @@ from django.test import TestCase
 import uuid_utils.compat as uuid
 
 from common.exception.app_exception import AppApiException, AppUnauthorizedFailed, NotFound404
-from hr.models import AssignmentStatus, Candidate, CandidateAssignment, HrConfig, Interview, Job, ResumeFile
+from hr.models import AssignmentStatus, Candidate, CandidateAssignment, HrConfig, Interview, Job, ResumeFile, ResumeStatus
+from hr.task.resume import parse_resume_task
 from hr.serializers.ai import AiService
 from hr.serializers.recruitment import RecruitmentService
 from hr.services.ai_parser import extract_skills, parse_search_conditions
@@ -592,3 +594,40 @@ class AiRouteSmokeTests(TestCase):
         for path in self._paths():
             response = self.client.get(path)
             self.assertIn(response.status_code, (401, 403), f"{path} 未注册或未受保护: {response.status_code}")
+
+
+class ResumeParseTaskTests(TestCase):
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+
+    def _resume(self, content, extension="txt", workspace_id="workspace-a"):
+        handle = tempfile.NamedTemporaryFile(suffix=f".{extension}", delete=False)
+        handle.write(content.encode("utf-8"))
+        handle.close()
+        return ResumeFile.objects.create(
+            workspace_id=workspace_id, file_name=f"r.{extension}", extension=extension,
+            file_path=handle.name, file_size=os.path.getsize(handle.name),
+            sha256="sha-" + uuid.uuid7().hex, source_channel="OTHER",
+            status=ResumeStatus.PENDING, user_id=self.user_id,
+        )
+
+    def test_task_parses_and_creates_candidate(self):
+        resume = self._resume("姓名：李四\n电话：13912345678\n3年工作经验")
+        parse_resume_task.run(str(resume.id))
+        resume.refresh_from_db()
+        self.assertEqual(resume.status, "SUCCESS")
+        self.assertIsNotNone(resume.candidate)
+        self.assertEqual(resume.candidate.name, "李四")
+        self.assertEqual(resume.candidate.phone, "13912345678")
+        self.assertEqual(resume.candidate.source, "OTHER")
+
+    def test_task_marks_failed_on_parse_error(self):
+        resume = self._resume("not a docx zip", extension="docx")
+        parse_resume_task.run(str(resume.id))
+        resume.refresh_from_db()
+        self.assertEqual(resume.status, "FAILED")
+        self.assertTrue(resume.error_message)
+        self.assertIsNone(resume.candidate)
+
+    def test_task_ignores_missing_resume(self):
+        parse_resume_task.run(str(uuid.uuid7()))
