@@ -241,7 +241,7 @@ pnpm exec eslint .
 | `manage.py makemigrations --check --dry-run` | No changes detected（无新迁移） |
 | `ui: vue-tsc --build` | PASS |
 | `ui: vite build` / `vite build --mode chat` | PASS；产物无已裁剪端点 |
-| 下载/查看 | 200 附件流、缺失文件 404、跨工作区 404、损坏 docx 400、txt 内容一致均覆盖 |
+| 下载/查看 | 服务层覆盖：路径/名称/mime、缺失文件 404、跨工作区 404、损坏 docx 400、txt 内容一致；HTTP 层附件流与路由冒烟未覆盖（已知） |
 | 查重 | 同手机号/邮箱标记（邮箱忽略大小写）、跨工作区排除、exclude 自身、空参数、编辑查重均覆盖 |
 | 合并 | 字段补充/技能并集/备注拼接、简历与指派迁移、Interview 保留、同人 400、冲突指派 400、跨工作区 404、非 manage 无权限、归档从候选人合并均覆盖 |
 | 备注 | 首次全量跑出现 1 次 failures=1，随后连续 5 次全量 OK 未复现，记录为瞬态观察 |

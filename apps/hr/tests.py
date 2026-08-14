@@ -812,6 +812,10 @@ class DuplicateDetectionTests(TestCase):
         result = self.service.check_duplicate({})
         self.assertEqual(result["candidates"], [])
 
+    def test_check_duplicate_rejects_invalid_exclude_id(self):
+        with self.assertRaisesRegex(AppApiException, "exclude_id is invalid"):
+            self.service.check_duplicate({"phone": "13800000001", "exclude_id": "garbage"})
+
 
 class CandidateMergeTests(TestCase):
     def setUp(self):

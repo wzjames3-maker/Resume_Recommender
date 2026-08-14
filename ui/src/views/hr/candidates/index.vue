@@ -280,6 +280,7 @@ function aiSearch() {
 function saveCandidate() {
   if (!candidateForm.name.trim()) return
   const data = { ...candidateForm, skills: skillsText.value.split(',').map((skill) => skill.trim()).filter(Boolean) }
+  saving.value = true
   HrApi.checkDuplicate({ phone: candidateForm.phone, email: candidateForm.email, exclude_id: editingCandidate.value?.id || '' })
     .then((response) => {
       if (response.data.candidates.length > 0) {
@@ -291,10 +292,12 @@ function saveCandidate() {
       }
     })
     .catch(() => {})
+    .finally(() => {
+      saving.value = false
+    })
 }
 
 function doSaveCandidate(data: Record<string, unknown>) {
-  saving.value = true
   const request = editingCandidate.value
     ? HrApi.updateCandidate(editingCandidate.value.id, data)
     : HrApi.createCandidate(data)
@@ -302,7 +305,7 @@ function doSaveCandidate(data: Record<string, unknown>) {
     candidateDialogVisible.value = false
     MsgSuccess('候选人已保存')
     refresh()
-  }).finally(() => { saving.value = false })
+  })
 }
 
 function archive(candidate: Candidate) {
@@ -417,7 +420,7 @@ function viewResumeContent(resume: ResumeFile) {
   resumeContentVisible.value = true
   HrApi.getResumeContent(resume.id).then((response) => {
     resumeContent.value = response.data.content
-  })
+  }).catch(() => MsgError('简历内容提取失败'))
 }
 
 function downloadResumeFile(resume: ResumeFile) {

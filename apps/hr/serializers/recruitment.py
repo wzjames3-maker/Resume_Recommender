@@ -564,7 +564,7 @@ class RecruitmentService:
         if not os.path.exists(resume.file_path):
             raise NotFound404(404, "File not found")
         try:
-            if resume.extension == "docx":
+            if resume.extension.lower() == "docx":
                 text = extract_text_from_docx(resume.file_path)
             else:
                 text = extract_text_from_txt(resume.file_path)
@@ -580,6 +580,10 @@ class RecruitmentService:
             return {"candidates": []}
         queryset = Candidate.objects.filter(workspace_id=self.workspace_id)
         if exclude_id:
+            try:
+                uuid.UUID(exclude_id)
+            except (ValueError, TypeError) as exc:
+                raise AppApiException(400, "exclude_id is invalid") from exc
             queryset = queryset.exclude(id=exclude_id)
         matches = []
         seen = set()
@@ -609,15 +613,17 @@ class RecruitmentService:
         secondary = self._candidate(secondary_id)
         if primary.id == secondary.id:
             raise AppApiException(400, "不能与自己合并")
-        primary_jobs = set(
-            CandidateAssignment.objects.filter(candidate=primary, status__in=ACTIVE_ASSIGNMENT_STATUSES)
-            .values_list("job_id", flat=True)
-        )
-        if CandidateAssignment.objects.filter(
-            candidate=secondary, status__in=ACTIVE_ASSIGNMENT_STATUSES, job_id__in=primary_jobs
-        ).exists():
-            raise AppApiException(400, "存在与主候选人冲突的有效指派，请先调整")
         with transaction.atomic():
+            primary = Candidate.objects.select_for_update().get(id=primary.id)
+            secondary = Candidate.objects.select_for_update().get(id=secondary.id)
+            primary_jobs = set(
+                CandidateAssignment.objects.filter(candidate=primary, status__in=ACTIVE_ASSIGNMENT_STATUSES)
+                .values_list("job_id", flat=True)
+            )
+            if CandidateAssignment.objects.filter(
+                candidate=secondary, status__in=ACTIVE_ASSIGNMENT_STATUSES, job_id__in=primary_jobs
+            ).exists():
+                raise AppApiException(400, "存在与主候选人冲突的有效指派，请先调整")
             if not primary.name:
                 primary.name = secondary.name
             if not primary.email:
