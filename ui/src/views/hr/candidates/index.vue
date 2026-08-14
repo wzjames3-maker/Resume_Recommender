@@ -93,8 +93,8 @@
         <el-form-item label="上传结果">
           <div class="w-full">
             <div v-for="record in uploadResults" :key="record.resume_id" class="upload-result">
-              <el-tag :type="record.status === 'SUCCESS' ? 'success' : 'danger'" size="small">
-                {{ record.status === 'SUCCESS' ? '成功' : '失败' }}
+              <el-tag :type="record.status === 'SUCCESS' ? 'success' : record.status === 'FAILED' ? 'danger' : 'info'" size="small">
+                {{ record.status === 'SUCCESS' ? '成功' : record.status === 'FAILED' ? '失败' : '解析中' }}
               </el-tag>
               <span class="ml-8">{{ record.file_name }}</span>
               <span v-if="record.duplicate" class="ml-8 color-secondary">重复，已关联既有候选人</span>
@@ -123,7 +123,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
 import AppTable from '@/components/app-table/index.vue'
 import AiSettingDialog from '@/views/hr/components/AiSettingDialog.vue'
 import HrApi from '@/api/hr/recruitment'
@@ -157,6 +157,7 @@ const aiQuery = ref('')
 const aiSearching = ref(false)
 const uploadChannel = ref('OTHER')
 const uploadResults = ref<ResumeUploadResult[]>([])
+let resumePollTimer: ReturnType<typeof setInterval> | null = null
 const resumeInputRef = ref<HTMLInputElement>()
 const editingCandidate = ref<Candidate | null>(null)
 const assigningCandidate = ref<Candidate | null>(null)
@@ -283,15 +284,57 @@ function handleResumeFiles(event: Event) {
   HrApi.uploadResumes(files, uploadChannel.value)
     .then((response) => {
       uploadResults.value = response.data
-      const failed = uploadResults.value.some((record) => record.status === 'FAILED')
-      if (failed) MsgError('部分简历解析失败，请查看结果')
-      else MsgSuccess('简历上传完成')
-      refresh()
+      const pendingIds = uploadResults.value.filter((record) => record.status === 'PENDING').map((record) => record.resume_id)
+      if (pendingIds.length > 0) startResumePolling(pendingIds)
+      else finishResumeUpload()
     })
     .catch(() => {})
 }
 
+function finishResumeUpload() {
+  const failed = uploadResults.value.some((record) => record.status === 'FAILED')
+  if (failed) MsgError('部分简历解析失败，请查看结果')
+  else MsgSuccess('简历解析完成')
+  refresh()
+}
+
+function startResumePolling(ids: string[]) {
+  stopResumePolling()
+  const endsAt = Date.now() + 60 * 1000
+  resumePollTimer = setInterval(() => {
+    HrApi.getResumeBatchStatus(ids)
+      .then((response) => {
+        const statusMap = new Map(response.data.map((item) => [item.resume_id, item]))
+        let allDone = true
+        for (const record of uploadResults.value) {
+          const latest = statusMap.get(record.resume_id)
+          if (!latest) continue
+          record.status = latest.status
+          record.error_message = latest.error_message || ''
+          if (latest.status === 'PENDING') allDone = false
+        }
+        if (allDone || Date.now() > endsAt) {
+          stopResumePolling()
+          finishResumeUpload()
+        }
+      })
+      .catch(() => {})
+  }, 1000)
+}
+
+function stopResumePolling() {
+  if (resumePollTimer) {
+    clearInterval(resumePollTimer)
+    resumePollTimer = null
+  }
+}
+
 onMounted(loadCandidates)
+watch(uploadDialogVisible, (visible) => {
+  if (!visible) stopResumePolling()
+})
+
+onUnmounted(stopResumePolling)
 </script>
 
 <style scoped>
