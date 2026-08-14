@@ -93,15 +93,39 @@ class ResumeParseTaskTests(TestCase):
         parse_resume_task.run(str(uuid.uuid7()))
 ```
 
-并更新 `apps/hr/tests.py` 顶部 import（追加）：
+并更新 `apps/hr/tests.py` 顶部 import：
+
+当前顶部（前 10 行）为：
+
+```python
+import tempfile
+from types import SimpleNamespace
+from unittest.mock import patch
+
+from django.db import IntegrityError, transaction
+from django.test import TestCase
+import uuid_utils.compat as uuid
+
+from common.exception.app_exception import AppApiException, AppUnauthorizedFailed, NotFound404
+from hr.models import AssignmentStatus, Candidate, CandidateAssignment, HrConfig, Interview, Job, ResumeFile
+```
+
+改为：
 
 ```python
 import os
-from hr.models import ResumeStatus
+import tempfile
+from types import SimpleNamespace
+from unittest.mock import patch
+
+from django.db import IntegrityError, transaction
+from django.test import TestCase
+import uuid_utils.compat as uuid
+
+from common.exception.app_exception import AppApiException, AppUnauthorizedFailed, NotFound404
+from hr.models import AssignmentStatus, Candidate, CandidateAssignment, HrConfig, Interview, Job, ResumeFile, ResumeStatus
 from hr.task.resume import parse_resume_task
 ```
-
-（`os` 已用于 `tempfile` 相关？如已导入则跳过；确认 tests.py 顶部现有 import 后再追加，避免重复。）
 
 - [ ] **步骤 2：运行测试确认失败**
 
