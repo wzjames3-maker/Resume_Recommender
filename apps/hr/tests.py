@@ -159,10 +159,16 @@ class RecruitmentServiceTests(TestCase):
         self.service.update_assignment(
             assignment["id"], {"status": AssignmentStatus.REJECTED, "termination_reason": "NOT_FIT"}
         )
-        self.service.edit_job(self.job.id, {"status": "CLOSED"})
+        self.service.close_job(self.job.id, "FILLED")
 
         with self.assertRaisesRegex(AppApiException, "closed"):
             self.service.create_assignment(self.job.id, self.candidate.id, {})
+
+    def test_create_assignment_locks_job_row(self):
+        with patch.object(Job.objects, "select_for_update", wraps=Job.objects.select_for_update) as locked:
+            result = self.service.create_assignment(self.job.id, self.candidate.id, {})
+        locked.assert_called_once()
+        self.assertEqual(result["status"], "PENDING_SCREEN")
 
 
 class ActiveAssignmentArchiveTests(TestCase):
@@ -469,7 +475,8 @@ class InterviewStatusMachineTests(TestCase):
 
     def test_closed_job_cannot_enter_interviewing(self):
         self._transition(AssignmentStatus.SCREEN_PASSED)
-        self.service.edit_job(self.job.id, {"status": "CLOSED"})
+        self.job.status = "CLOSED"
+        self.job.save(update_fields=["status"])
         with self.assertRaisesRegex(AppApiException, "closed"):
             self._transition(AssignmentStatus.INTERVIEWING)
 
@@ -1319,6 +1326,46 @@ class OwnerFieldTests(TestCase):
         result = self.service.page_candidates(1, 20, {"owner_id": str(self.other_id)})
         self.assertEqual(result["total"], 1)
         self.assertEqual(result["records"][0]["name"], "Bob")
+
+    def test_page_jobs_rejects_invalid_owner_id(self):
+        with self.assertRaisesRegex(AppApiException, "owner_id is invalid"):
+            self.service.page_jobs(1, 20, {"owner_id": "garbage"})
+
+    def test_page_candidates_rejects_invalid_owner_id(self):
+        with self.assertRaisesRegex(AppApiException, "owner_id is invalid"):
+            self.service.page_candidates(1, 20, {"owner_id": "garbage"})
+
+
+class JobEditGuardTests(TestCase):
+    """A2 review: edit_job 收紧关闭语义，关闭走专用接口"""
+
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, is_workspace_manage=True)
+        self.job = self.service.create_job({"name": "Engineer", "headcount": 1})
+
+    def test_close_status_requires_close_reason(self):
+        with self.assertRaisesRegex(AppApiException, "close_reason"):
+            self.service.edit_job(self.job["id"], {"status": "CLOSED"})
+
+    def test_close_status_requires_valid_close_reason(self):
+        with self.assertRaisesRegex(AppApiException, "close_reason"):
+            self.service.edit_job(self.job["id"], {"status": "CLOSED", "close_reason": "NOPE"})
+
+    def test_closed_job_must_be_reopened_via_reopen_endpoint(self):
+        self.service.edit_job(self.job["id"], {"status": "CLOSED", "close_reason": "FILLED"})
+        with self.assertRaisesRegex(AppApiException, "reopened via reopen"):
+            self.service.edit_job(self.job["id"], {"status": "OPEN"})
+
+    def test_close_reason_only_valid_for_closed_status(self):
+        with self.assertRaisesRegex(AppApiException, "close_reason only valid for CLOSED"):
+            self.service.edit_job(self.job["id"], {"close_reason": "FILLED"})
+
+    def test_closed_job_edit_keeps_close_reason(self):
+        self.service.edit_job(self.job["id"], {"status": "CLOSED", "close_reason": "CANCELLED"})
+        result = self.service.edit_job(self.job["id"], {"status": "CLOSED", "close_reason": "DUPLICATE"})
+        self.assertEqual(result["status"], "CLOSED")
+        self.assertEqual(result["close_reason"], "DUPLICATE")
 
 
 class EnumValidationTests(TestCase):

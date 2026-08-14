@@ -311,6 +311,7 @@ class RecruitmentService:
             queryset = queryset.filter(source=source)
         owner_id = query.get("owner_id")
         if owner_id:
+            owner_id = self._owner_id({"owner_id": owner_id})
             queryset = queryset.filter(
                 id__in=CandidateAssignment.objects.filter(
                     workspace_id=self.workspace_id, owner_id=owner_id
@@ -425,7 +426,7 @@ class RecruitmentService:
                 raise AppApiException(400, "status is invalid")
             queryset = queryset.filter(status=status)
         if owner_id:
-            queryset = queryset.filter(owner_id=owner_id)
+            queryset = queryset.filter(owner_id=self._owner_id({"owner_id": owner_id}))
         queryset = queryset.annotate(
             active_assignment_count=Count(
                 "candidateassignment",
@@ -477,6 +478,11 @@ class RecruitmentService:
         if "status" in data:
             if data["status"] not in JobStatus.values:
                 raise AppApiException(400, "status is invalid")
+            if job.status == JobStatus.CLOSED and data["status"] != JobStatus.CLOSED:
+                raise AppApiException(400, "closed job must be reopened via reopen endpoint")
+            if data["status"] == JobStatus.CLOSED:
+                job.close_reason = self._close_reason(data)
+                update_fields.append("close_reason")
             job.status = data["status"]
             update_fields.append("status")
         if "owner_id" in data:
@@ -486,8 +492,12 @@ class RecruitmentService:
             value = data["close_reason"] or None
             if value is not None and value not in JobCloseReason.values:
                 raise AppApiException(400, "close_reason is invalid")
+            final_status = data.get("status") or job.status
+            if value is not None and final_status != JobStatus.CLOSED:
+                raise AppApiException(400, "close_reason only valid for CLOSED status")
             job.close_reason = value
-            update_fields.append("close_reason")
+            if "close_reason" not in update_fields:
+                update_fields.append("close_reason")
         if update_fields:
             job.save(update_fields=[*update_fields, "update_time"])
         return self._job_output(job)
@@ -495,8 +505,6 @@ class RecruitmentService:
     def create_assignment(self, job_id, candidate_id, data):
         job = self._job(job_id)
         candidate = self._candidate(candidate_id)
-        if job.status != JobStatus.OPEN:
-            raise AppApiException(400, "Job is closed")
         if candidate.status != CandidateStatus.ACTIVE:
             raise AppApiException(400, "Candidate is archived")
         if CandidateAssignment.objects.filter(
@@ -513,6 +521,9 @@ class RecruitmentService:
         ).exists()
         try:
             with transaction.atomic():
+                job = Job.objects.select_for_update().get(id=job.id)
+                if job.status != JobStatus.OPEN:
+                    raise AppApiException(400, "Job is closed")
                 assignment = CandidateAssignment.objects.create(
                     workspace_id=self.workspace_id,
                     user_id=self.user_id,

@@ -120,8 +120,8 @@
         <el-row :gutter="16">
           <el-col :span="12">
             <el-form-item label="状态">
-              <el-select v-model="jobForm.status" style="width: 100%">
-                <el-option v-for="(label, value) in jobStatusLabels" :key="value" :label="label" :value="value" />
+              <el-select v-model="jobForm.status" style="width: 100%" :disabled="editingJob?.status === 'CLOSED'">
+                <el-option v-for="(label, value) in statusOptions" :key="value" :label="label" :value="value" />
               </el-select>
             </el-form-item>
           </el-col>
@@ -269,6 +269,14 @@ const jobStatusLabels: Record<string, string> = {
   ON_HOLD: '暂停',
   CLOSED: '已关闭',
 }
+
+const statusOptions = computed(() => {
+  if (!editingJob.value) {
+    return Object.fromEntries(Object.entries(jobStatusLabels).filter(([value]) => value !== 'CLOSED'))
+  }
+  if (editingJob.value.status === 'CLOSED') return { CLOSED: jobStatusLabels.CLOSED }
+  return jobStatusLabels
+})
 
 const jobCloseReasonLabels: Record<string, string> = {
   FILLED: '招满',
