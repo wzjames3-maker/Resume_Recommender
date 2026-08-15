@@ -57,9 +57,10 @@
                       </template>
                     </el-table-column>
                     <el-table-column prop="note" label="备注" show-overflow-tooltip />
-                    <el-table-column label="操作" width="90">
+                    <el-table-column label="操作" width="150">
                       <template #default="{ row: assignment }">
                         <el-button v-if="isHrOperator" link type="primary" size="small" @click="openInterviewDrawer(row, assignment)">面试</el-button>
+                        <el-button v-if="isHrAdmin && assignment.status === 'OFFER'" link type="primary" size="small" @click="openOfferDrawer(row, assignment)">Offer</el-button>
                       </template>
                     </el-table-column>
                   </el-table>
@@ -212,6 +213,83 @@
         </el-table-column>
       </el-table>
       <template #footer><el-button @click="interviewDrawerVisible = false">关闭</el-button></template>
+    </el-dialog>
+
+    <el-dialog v-model="offerDrawerVisible" title="Offer 管理" width="860px">
+      <div class="flex-between mb-16">
+        <span>{{ offerCandidateName }} · {{ offerAssignment?.job_name || '' }}</span>
+        <el-button v-if="isHrAdmin" type="primary" size="small" @click="addOfferFormVisible = true">新建版本</el-button>
+      </div>
+      <el-form v-if="addOfferFormVisible" label-width="88px" class="mb-16 p-16 border rounded">
+        <el-row :gutter="16">
+          <el-col :span="8"><el-form-item label="金额"><el-input-number v-model="offerForm.salary_amount" :min="0" :precision="2" style="width: 100%" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="币种"><el-input v-model="offerForm.currency" maxlength="16" /></el-form-item></el-col>
+          <el-col :span="8"><el-form-item label="备注"><el-input v-model="offerForm.note" /></el-form-item></el-col>
+        </el-row>
+        <div class="text-right">
+          <el-button size="small" @click="addOfferFormVisible = false">取消</el-button>
+          <el-button size="small" type="primary" @click="createOfferRecord">保存</el-button>
+        </div>
+      </el-form>
+      <el-table :data="offerList" size="small">
+        <el-table-column prop="version" label="版本" width="60" />
+        <el-table-column label="金额" width="110">
+          <template #default="{ row }">{{ row.salary_amount == null ? '-' : row.salary_amount + ' ' + row.currency }}</template>
+        </el-table-column>
+        <el-table-column label="审批" width="100">
+          <template #default="{ row }">
+            <el-tag :type="row.approval_status === 'APPROVED' ? 'success' : row.approval_status === 'REJECTED' ? 'danger' : 'info'" size="small">
+              {{ row.approval_status === 'APPROVED' ? '已通过' : row.approval_status === 'REJECTED' ? '已驳回' : '待审批' }}
+            </el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="100">
+          <template #default="{ row }"><el-tag :type="offerStatusTag(row.status)" size="small">{{ offerStatusLabels[row.status] }}</el-tag></template>
+        </el-table-column>
+        <el-table-column label="时间" min-width="160">
+          <template #default="{ row }">{{ offerTimeText(row) }}</template>
+        </el-table-column>
+        <el-table-column label="附件" min-width="120">
+          <template #default="{ row }">
+            <template v-if="row.attachment_name">
+              <el-button link type="primary" size="small" @click="downloadOfferAttachment(row)">{{ row.attachment_name }}</el-button>
+              <el-button v-if="isHrAdmin" link type="danger" size="small" @click="removeOfferAttachment(row)">删除</el-button>
+            </template>
+            <el-upload v-else-if="isHrAdmin && row.status === 'DRAFT'" :show-file-list="false" :before-upload="(file: File) => uploadOfferAttachment(row, file)">
+              <el-button link type="primary" size="small">上传</el-button>
+            </el-upload>
+          </template>
+        </el-table-column>
+        <el-table-column label="操作" width="240" fixed="right">
+          <template #default="{ row }">
+            <template v-if="isHrAdmin && row.status === 'DRAFT'">
+              <el-button link type="primary" size="small" @click="openApproveOfferDialog(row)">审批</el-button>
+              <el-button link type="primary" size="small" @click="sendOfferRecord(row)">发送</el-button>
+            </template>
+            <template v-else-if="isHrAdmin && row.status === 'SENT'">
+              <el-button link type="success" size="small" @click="acceptOfferRecord(row)">接受</el-button>
+              <el-button link type="danger" size="small" @click="rejectOfferRecord(row)">拒绝</el-button>
+              <el-button link type="warning" size="small" @click="withdrawOfferRecord(row)">撤回</el-button>
+            </template>
+          </template>
+        </el-table-column>
+      </el-table>
+      <template #footer><el-button @click="offerDrawerVisible = false">关闭</el-button></template>
+    </el-dialog>
+
+    <el-dialog v-model="approveOfferDialogVisible" title="Offer 审批" width="440px">
+      <el-form label-width="88px">
+        <el-form-item label="审批结果" required>
+          <el-select v-model="approveForm.approval_status" style="width: 100%">
+            <el-option label="通过" value="APPROVED" />
+            <el-option label="驳回" value="REJECTED" />
+          </el-select>
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="approveOfferDialogVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="!approveForm.approval_status" @click="approveOfferRecord">提交</el-button>
+      </template>
     </el-dialog>
 
     <el-dialog v-model="closeDialogVisible" title="关闭职位" width="440px">
@@ -662,6 +740,154 @@ function updateInterviewRecord(interview: Interview) {
   HrApi.updateInterview(interview.id, { status: interview.status, feedback: interview.feedback })
     .then(() => MsgSuccess('面试记录已更新'))
     .catch(() => {})
+}
+
+const offerDrawerVisible = ref(false)
+const addOfferFormVisible = ref(false)
+const approveOfferDialogVisible = ref(false)
+const offerAssignment = ref<Assignment | null>(null)
+const offerCandidateName = ref('')
+const offerList = ref<Offer[]>([])
+const offerForm = reactive({ salary_amount: null as number | null, currency: 'CNY', note: '' })
+const approveForm = reactive({ approval_status: '' as string })
+const approveTarget = ref<Offer | null>(null)
+
+const offerStatusLabels: Record<string, string> = {
+  DRAFT: '草稿', SENT: '已发送', ACCEPTED: '已接受', REJECTED: '已拒绝', WITHDRAWN: '已撤回',
+}
+
+function offerStatusTag(status: string) {
+  if (status === 'ACCEPTED') return 'success'
+  if (status === 'REJECTED' || status === 'WITHDRAWN') return 'danger'
+  if (status === 'SENT') return 'warning'
+  return 'info'
+}
+
+function offerTimeText(offer: Offer) {
+  const time = offer.accepted_at || offer.rejected_at || offer.withdrawn_at || offer.sent_at || offer.approved_at
+  return time ? new Date(time).toLocaleString() : '-'
+}
+
+function resetOfferForm() {
+  offerForm.salary_amount = null
+  offerForm.currency = 'CNY'
+  offerForm.note = ''
+}
+
+function openOfferDrawer(job: Job, assignment: Assignment) {
+  offerAssignment.value = assignment
+  offerCandidateName.value = assignment.candidate_name || ''
+  offerList.value = []
+  addOfferFormVisible.value = false
+  resetOfferForm()
+  offerDrawerVisible.value = true
+  HrApi.getOffers(assignment.id).then((response) => {
+    offerList.value = response.data
+  })
+}
+
+function createOfferRecord() {
+  if (!offerAssignment.value) return
+  HrApi.createOffer(offerAssignment.value.id, {
+    salary_amount: offerForm.salary_amount ?? null,
+    currency: offerForm.currency || 'CNY',
+    note: offerForm.note,
+  })
+    .then(() => {
+      MsgSuccess('Offer 已创建')
+      addOfferFormVisible.value = false
+      resetOfferForm()
+      reloadOffers()
+    })
+    .catch(() => {})
+}
+
+function reloadOffers() {
+  if (offerAssignment.value) {
+    HrApi.getOffers(offerAssignment.value.id).then((response) => {
+      offerList.value = response.data
+    })
+  }
+}
+
+function openApproveOfferDialog(offer: Offer) {
+  approveTarget.value = offer
+  approveForm.approval_status = 'APPROVED'
+  approveOfferDialogVisible.value = true
+}
+
+function approveOfferRecord() {
+  if (!approveTarget.value) return
+  HrApi.approveOffer(approveTarget.value.id, { approval_status: approveForm.approval_status })
+    .then(() => {
+      MsgSuccess('审批已提交')
+      approveOfferDialogVisible.value = false
+      reloadOffers()
+    })
+    .catch(() => {})
+}
+
+function sendOfferRecord(offer: Offer) {
+  HrApi.sendOffer(offer.id)
+    .then(() => {
+      MsgSuccess('Offer 已发送')
+      reloadOffers()
+    })
+    .catch(() => {})
+}
+
+function acceptOfferRecord(offer: Offer) {
+  MsgConfirm('接受 Offer', '确认接受第 ' + offer.version + ' 版 Offer？指派将自动进入「已入职」，并触发入职交接。', { confirmButtonClass: 'danger' })
+    .then(() => HrApi.acceptOffer(offer.id))
+    .then(() => {
+      MsgSuccess('Offer 已接受，已触发入职交接')
+      reloadOffers()
+      refresh()
+    })
+    .catch(() => {})
+}
+
+function rejectOfferRecord(offer: Offer) {
+  MsgConfirm('拒绝 Offer', '确认拒绝第 ' + offer.version + ' 版 Offer？拒绝原因请直接修改该版本备注。', { confirmButtonClass: 'danger' })
+    .then(() => HrApi.rejectOffer(offer.id, { note: offer.note }))
+    .then(() => {
+      MsgSuccess('Offer 已标记拒绝')
+      reloadOffers()
+    })
+    .catch(() => {})
+}
+
+function withdrawOfferRecord(offer: Offer) {
+  MsgConfirm('撤回 Offer', '确认撤回第 ' + offer.version + ' 版 Offer？', { confirmButtonClass: 'danger' })
+    .then(() => HrApi.withdrawOffer(offer.id))
+    .then(() => {
+      MsgSuccess('Offer 已撤回')
+      reloadOffers()
+    })
+    .catch(() => {})
+}
+
+function uploadOfferAttachment(offer: Offer, file: File) {
+  HrApi.uploadOfferAttachment(offer.id, file)
+    .then(() => {
+      MsgSuccess('附件已上传')
+      reloadOffers()
+    })
+    .catch(() => {})
+  return false
+}
+
+function removeOfferAttachment(offer: Offer) {
+  HrApi.deleteOfferAttachment(offer.id)
+    .then(() => {
+      MsgSuccess('附件已删除')
+      reloadOffers()
+    })
+    .catch(() => {})
+}
+
+function downloadOfferAttachment(offer: Offer) {
+  HrApi.downloadOfferAttachment(offer.id, offer.attachment_name || 'offer.pdf')
 }
 
 onMounted(() => {

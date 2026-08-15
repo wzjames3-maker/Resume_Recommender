@@ -13,12 +13,14 @@ import type {
   HrAuditObjectType,
   HrConfig,
   HrRole,
+  HandoffRecord,
   Interview,
   Job,
   JobCloseReason,
   JobDetail,
   JobMatchPage,
   MyInterview,
+  Offer,
   PageResult,
   ResumeBatchStatus,
   ResumeFile,
@@ -114,6 +116,54 @@ const getMyInterviews = () =>
 const submitInterviewFeedback = (interviewId: string, data: Record<string, unknown>) =>
   put(`${prefix.value}/interviews/${interviewId}/feedback`, data) as Promise<Result<Interview>>
 
+const getOffers = (assignmentId: string) =>
+  get(`${prefix.value}/assignments/${assignmentId}/offers`) as Promise<Result<Offer[]>>
+
+const createOffer = (assignmentId: string, data: Partial<Offer>) =>
+  post(`${prefix.value}/assignments/${assignmentId}/offers`, data) as Promise<Result<Offer>>
+
+const getOffer = (offerId: string) => get(`${prefix.value}/offers/${offerId}`) as Promise<Result<Offer>>
+
+const updateOffer = (offerId: string, data: Partial<Offer>) =>
+  put(`${prefix.value}/offers/${offerId}`, data) as Promise<Result<Offer>>
+
+const approveOffer = (offerId: string, data: Record<string, unknown>) =>
+  put(`${prefix.value}/offers/${offerId}/approve`, data) as Promise<Result<Offer>>
+
+const sendOffer = (offerId: string) => put(`${prefix.value}/offers/${offerId}/send`) as Promise<Result<Offer>>
+
+const acceptOffer = (offerId: string) =>
+  put(`${prefix.value}/offers/${offerId}/accept`) as Promise<Result<Offer>>
+
+const rejectOffer = (offerId: string, data: Record<string, unknown>) =>
+  put(`${prefix.value}/offers/${offerId}/reject`, data) as Promise<Result<Offer>>
+
+const withdrawOffer = (offerId: string) =>
+  put(`${prefix.value}/offers/${offerId}/withdraw`) as Promise<Result<Offer>>
+
+const uploadOfferAttachment = (offerId: string, file: File) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  return post(`${prefix.value}/offers/${offerId}/attachment`, formData) as Promise<Result<Offer>>
+}
+
+const deleteOfferAttachment = (offerId: string) =>
+  del(`${prefix.value}/offers/${offerId}/attachment`) as Promise<Result<Offer>>
+
+const downloadOfferAttachment = (offerId: string, fileName: string) =>
+  exportFile(fileName, `${prefix.value}/offers/${offerId}/attachment/download`, {}, undefined)
+
+const getHandoffs = (page: pageRequest) =>
+  get(`${prefix.value}/handoffs/${page.current_page}/${page.page_size}`) as Promise<Result<PageResult<HandoffRecord>>>
+
+const retryHandoff = (handoffId: string) =>
+  post(`${prefix.value}/handoffs/${handoffId}/retry`) as Promise<Result<HandoffRecord>>
+
+const getHandoffConfig = () => get(`${prefix.value}/handoff/config`) as Promise<Result<{ target_type: string; webhook_url: string }>>
+
+const putHandoffConfig = (data: Record<string, unknown>) =>
+  put(`${prefix.value}/handoff/config`, data) as Promise<Result<{ target_type: string; webhook_url: string }>>
+
 const getAiConfig = () => get(`${prefix.value}/ai/config`) as Promise<Result<HrConfig>>
 
 const putAiConfig = (data: Record<string, unknown>) =>
@@ -158,6 +208,8 @@ const getAuditLogs = (params: {
 }) => get(`${prefix.value}/audit-logs`, params) as Promise<Result<HrAuditLogPage>>
 
 export default {
+  acceptOffer,
+  approveOffer,
   archiveCandidate,
   checkDuplicate,
   closeJob,
@@ -165,8 +217,11 @@ export default {
   createCandidate,
   createInterview,
   createJob,
+  createOffer,
   deleteCandidate,
+  deleteOfferAttachment,
   deleteResume,
+  downloadOfferAttachment,
   downloadResume,
   exportCandidates,
   extractSkills,
@@ -176,24 +231,35 @@ export default {
   getCandidate,
   getCandidateResumes,
   getCandidates,
+  getHandoffConfig,
+  getHandoffs,
   getInterviews,
   getJob,
   getJobMatches,
   getJobs,
   getMyHrRole,
   getMyInterviews,
+  getOffer,
+  getOffers,
   getResumeBatchStatus,
   getResumeContent,
   mergeCandidates,
   parseSearch,
   putAiConfig,
+  putHandoffConfig,
+  rejectOffer,
   reopenJob,
   restoreCandidate,
+  retryHandoff,
+  sendOffer,
   submitInterviewFeedback,
   updateAccess,
   updateAssignment,
   updateCandidate,
   updateInterview,
   updateJob,
+  updateOffer,
+  uploadOfferAttachment,
   uploadResumes,
+  withdrawOffer,
 }

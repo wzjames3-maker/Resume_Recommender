@@ -98,6 +98,50 @@ export interface CandidateDetail extends Candidate {
   assignments: Assignment[]
 }
 
+export type OfferStatus = 'DRAFT' | 'SENT' | 'ACCEPTED' | 'REJECTED' | 'WITHDRAWN'
+export type OfferApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
+
+export interface Offer {
+  id: string
+  assignment_id: string
+  candidate_id: string
+  job_id: string
+  version: number
+  status: OfferStatus
+  salary_amount: string | null
+  currency: string
+  approval_status: OfferApprovalStatus
+  approver_id: string | null
+  approved_at: string | null
+  sent_at: string | null
+  accepted_at: string | null
+  rejected_at: string | null
+  withdrawn_at: string | null
+  note: string
+  attachment_name: string
+  create_time: string
+  update_time: string
+}
+
+export interface HandoffRecord {
+  id: string
+  assignment_id: string
+  candidate_id: string
+  job_id: string
+  offer_id: string
+  status: 'PENDING' | 'SUCCESS' | 'FAILED'
+  attempts: number
+  last_error: string
+  handoff_time: string | null
+  candidate_name: string
+  job_name: string
+  department: string
+  phone: string
+  email: string
+  create_time: string
+  update_time: string
+}
+
 export interface Job {
   id: string
   name: string

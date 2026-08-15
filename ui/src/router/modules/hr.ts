@@ -44,6 +44,12 @@ const hrRouter = {
       meta: { title: '审计日志', activeMenu: '/hr', sameRoute: 'hr', permission: [HrRoleConst.ADMIN] },
       component: () => import('@/views/hr/audit/index.vue'),
     },
+    {
+      path: '/hr/handoffs',
+      name: 'hr-handoffs',
+      meta: { title: '入职交接', activeMenu: '/hr', sameRoute: 'hr', permission: [HrRoleConst.ADMIN] },
+      component: () => import('@/views/hr/handoffs/index.vue'),
+    },
   ],
 }
 
