@@ -120,7 +120,17 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 
 ### 5.3 C 阶段：语义检索与智能优化
 
-Embedding 语义召回、可解释匹配、人工反馈、索引与候选人生命周期同步、试点标注集 Top-K 对比。知识库/Embedding 语义检索当前明确未交付（PRD 第 9.1 节）。
+**试点进展（2026-08-15，外部模型接入已完成）**：OpenAI 兼容 Provider 注册 LLM `sensenova-6.8-flash-lite`（SenseNova）、Embedding `BAAI/bge-large-zh-v1.5` + Rerank `BAAI/bge-reranker-v2-m3`（SiliconFlow）；RERANKER 模型类型补齐（model/rerank.py + credential/rerank.py，top_n 默认 3）。真实模型端到端验证（`installer/real_model_smoke.py`，`RUN_REAL_MODEL=1` 门控 + 渐进档位 1|2|3）：S1（5 份简历）17/17、S2（30 份）向量化 30/30 + 问答引用；实体查询 recall@5=3/8 低于结构化基线（佐证实体检索走结构化）、自然语言查询召回合理。密钥走环境变量（`.env.example` 有占位）。规格/审计：`docs/superpowers/specs/2026-08-15-external-model-pilot-design.md`、`docs/superpowers/audits/2026-08-15-external-model-pilot.md`。
+
+**剩余（未交付）**：语义索引与候选人生命周期同步、人工反馈、Rerank 接入 chat 检索流水线、更大标注集量化对比、档位 3（200 份）。**注意**：冒烟中修复了应用创建/发布链路的 3 个裁剪期 bug（96afbd0），application.tests 现有 10 用例。
+
+**运行要点**：web `python main.py dev`；celery `PATH=.venv/bin:$PATH MAXKB_WORKER_TMP=/tmp/maxkb-worker python main.py dev celery`；冒烟 `RUN_REAL_MODEL=1 REAL_MODEL_STAGE=1 SENSENOVA_API_KEY=... SILICONFLOW_API_KEY=... python installer/real_model_smoke.py`。冒烟用户 `smoke-admin`（ADMIN 角色，密码 Smoke@123，仅本机）；模型/知识库/应用 API 只认 `default` 工作区（HR 模块才用自定义 workspace + HrAccess）。
+
+## 5.4 已修复的核心层 bug（2026-08-15，冒烟暴露）
+
+- `to_application_knowledge_mapping`/`reset_application_version` 缺 self → 应用创建/发布必 500，已 @staticmethod 修复（96afbd0）
+- `list_knowledge` 误标 @staticmethod 且缺 `KnowledgeScope` 导入 → 发布后读取知识列表必崩，已修复（96afbd0）
+- SiliconFlow Embedding 不接受 `dimensions` 参数（OpenAI 兼容差异）→ 模型参数表单留空，bge-large-zh-v1.5 固定 1024 维（pgvector 无维度约束）
 
 ## 6. 已知限制与口径
 

@@ -1,0 +1,309 @@
+{
+  "checks": [
+    {
+      "name": "登录",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "语料准备",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "三个外部模型创建/校验",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "知识库创建",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "文档上传",
+      "ok": true,
+      "detail": "上传0 跳过30"
+    },
+    {
+      "name": "向量化完成",
+      "ok": true,
+      "detail": "成功30/30 失败:[]"
+    },
+    {
+      "name": "命中测试[北京师范大学毕业的候选人简历]",
+      "ok": false,
+      "detail": "期望=resume_0000_李冠光.txt top1=['resume_0008_谈菁咏.txt']"
+    },
+    {
+      "name": "命中测试[北京吉利学院毕业的候选人简历]",
+      "ok": false,
+      "detail": "期望=resume_0001_乐志昌.txt top1=['resume_0002_贾苑凤.txt']"
+    },
+    {
+      "name": "命中测试[中国科学院大学毕业的候选人简历]",
+      "ok": true,
+      "detail": "期望=resume_0002_贾苑凤.txt top1=['resume_0002_贾苑凤.txt']"
+    },
+    {
+      "name": "命中测试[中央财经大学毕业的候选人简历]",
+      "ok": false,
+      "detail": "期望=resume_0003_沈晶馥.txt top1=['resume_0004_彭子.txt']"
+    },
+    {
+      "name": "命中测试[北京工商大学毕业的候选人简历]",
+      "ok": false,
+      "detail": "期望=resume_0004_彭子.txt top1=['resume_0002_贾苑凤.txt']"
+    },
+    {
+      "name": "命中测试[国家开放大学（中央广播电视大学）毕业]",
+      "ok": true,
+      "detail": "期望=resume_0005_酆娜.txt top1=['resume_0004_彭子.txt']"
+    },
+    {
+      "name": "命中测试[中国社会科学院大学毕业的候选人简历]",
+      "ok": false,
+      "detail": "期望=resume_0006_和君英.txt top1=['resume_0002_贾苑凤.txt']"
+    },
+    {
+      "name": "命中测试[北京市崇文区职工大学毕业的候选人简历]",
+      "ok": false,
+      "detail": "期望=resume_0007_马风.txt top1=['resume_0002_贾苑凤.txt']"
+    },
+    {
+      "name": "重排[北京师范大学毕业的候选人简历]",
+      "ok": true,
+      "detail": "top5索引=[7, 8, 5, 10, 2]"
+    },
+    {
+      "name": "重排[北京吉利学院毕业的候选人简历]",
+      "ok": true,
+      "detail": "top5索引=[11, 9, 3, 5, 7]"
+    },
+    {
+      "name": "重排[中国科学院大学毕业的候选人简历]",
+      "ok": true,
+      "detail": "top5索引=[7, 6, 11, 10, 2]"
+    },
+    {
+      "name": "应用创建/复用",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "应用发布",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "匿名认证",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "打开会话",
+      "ok": true,
+      "detail": ""
+    },
+    {
+      "name": "问答链路（LLM 引用）",
+      "ok": true,
+      "detail": "回答97字 引用3条"
+    }
+  ],
+  "errors": [],
+  "queries": [
+    {
+      "query": "北京师范大学毕业的候选人简历",
+      "expected": "resume_0000_李冠光.txt",
+      "top5": [
+        "resume_0008_谈菁咏.txt",
+        "resume_0009_酆素.txt",
+        "resume_0014_邬和.txt",
+        "resume_0020_臧嘉菁.txt",
+        "resume_0025_廉娜.txt"
+      ],
+      "hit": false
+    },
+    {
+      "query": "北京吉利学院毕业的候选人简历",
+      "expected": "resume_0001_乐志昌.txt",
+      "top5": [
+        "resume_0002_贾苑凤.txt",
+        "resume_0010_凤林.txt",
+        "resume_0011_强琛光.txt",
+        "resume_0014_邬和.txt",
+        "resume_0020_臧嘉菁.txt"
+      ],
+      "hit": false
+    },
+    {
+      "query": "中国科学院大学毕业的候选人简历",
+      "expected": "resume_0002_贾苑凤.txt",
+      "top5": [
+        "resume_0002_贾苑凤.txt",
+        "resume_0003_沈晶馥.txt",
+        "resume_0005_酆娜.txt",
+        "resume_0009_酆素.txt",
+        "resume_0020_臧嘉菁.txt"
+      ],
+      "hit": true
+    },
+    {
+      "query": "中央财经大学毕业的候选人简历",
+      "expected": "resume_0003_沈晶馥.txt",
+      "top5": [
+        "resume_0004_彭子.txt",
+        "resume_0009_酆素.txt",
+        "resume_0013_赵良全.txt",
+        "resume_0014_邬和.txt",
+        "resume_0020_臧嘉菁.txt"
+      ],
+      "hit": false
+    },
+    {
+      "query": "北京工商大学毕业的候选人简历",
+      "expected": "resume_0004_彭子.txt",
+      "top5": [
+        "resume_0002_贾苑凤.txt",
+        "resume_0011_强琛光.txt",
+        "resume_0013_赵良全.txt",
+        "resume_0014_邬和.txt",
+        "resume_0020_臧嘉菁.txt"
+      ],
+      "hit": false
+    },
+    {
+      "query": "国家开放大学（中央广播电视大学）毕业的候选人简历",
+      "expected": "resume_0005_酆娜.txt",
+      "top5": [
+        "resume_0004_彭子.txt",
+        "resume_0005_酆娜.txt",
+        "resume_0009_酆素.txt",
+        "resume_0014_邬和.txt",
+        "resume_0025_廉娜.txt"
+      ],
+      "hit": true
+    },
+    {
+      "query": "中国社会科学院大学毕业的候选人简历",
+      "expected": "resume_0006_和君英.txt",
+      "top5": [
+        "resume_0002_贾苑凤.txt",
+        "resume_0009_酆素.txt",
+        "resume_0011_强琛光.txt",
+        "resume_0011_强琛光.txt",
+        "resume_0023_岑发家.txt"
+      ],
+      "hit": false
+    },
+    {
+      "query": "北京市崇文区职工大学毕业的候选人简历",
+      "expected": "resume_0007_马风.txt",
+      "top5": [
+        "resume_0002_贾苑凤.txt",
+        "resume_0011_强琛光.txt",
+        "resume_0013_赵良全.txt",
+        "resume_0020_臧嘉菁.txt",
+        "resume_0023_岑发家.txt"
+      ],
+      "hit": false
+    },
+    {
+      "query": "有多年后端开发经验且熟悉数据库的候选人",
+      "expected": null,
+      "top5": [
+        "resume_0002_贾苑凤.txt",
+        "resume_0002_贾苑凤.txt",
+        "resume_0006_和君英.txt",
+        "resume_0011_强琛光.txt",
+        "resume_0021_吕伊荔.txt"
+      ],
+      "hit": false
+    },
+    {
+      "query": "负责过互联网产品运营和用户增长的候选人",
+      "expected": null,
+      "top5": [
+        "resume_0004_彭子.txt",
+        "resume_0006_和君英.txt",
+        "resume_0011_强琛光.txt",
+        "resume_0015_皮云.txt",
+        "resume_0025_廉娜.txt"
+      ],
+      "hit": false
+    },
+    {
+      "query": "有数据分析与机器学习项目经验的候选人",
+      "expected": null,
+      "top5": [
+        "resume_0002_贾苑凤.txt",
+        "resume_0002_贾苑凤.txt",
+        "resume_0006_和君英.txt",
+        "resume_0011_强琛光.txt",
+        "resume_0014_邬和.txt"
+      ],
+      "hit": false
+    }
+  ],
+  "rerank": [
+    {
+      "query": "北京师范大学毕业的候选人简历",
+      "rerank_top_indexes": [
+        7,
+        8,
+        5,
+        10,
+        2
+      ],
+      "scores": [
+        0.05840258300304413,
+        0.0433100089430809,
+        0.024100374430418015,
+        0.022528307512402534,
+        0.017215728759765625
+      ]
+    },
+    {
+      "query": "北京吉利学院毕业的候选人简历",
+      "rerank_top_indexes": [
+        11,
+        9,
+        3,
+        5,
+        7
+      ],
+      "scores": [
+        0.06884244084358215,
+        0.04596482962369919,
+        0.03687411546707153,
+        0.033391546458005905,
+        0.031058713793754578
+      ]
+    },
+    {
+      "query": "中国科学院大学毕业的候选人简历",
+      "rerank_top_indexes": [
+        7,
+        6,
+        11,
+        10,
+        2
+      ],
+      "scores": [
+        0.0650005042552948,
+        0.039504777640104294,
+        0.03716293349862099,
+        0.03416253253817558,
+        0.027685893699526787
+      ]
+    }
+  ],
+  "chat": [
+    {
+      "query": "北京师范大学毕业的候选人简历",
+      "answer": "\n\n根据知识库内容，没有候选人毕业于北京师范大学。\n\n知识库中三位候选人的毕业院校分别是：\n*   臧嘉菁：北京印刷学院\n*   邬和：北京市海淀区职工大学\n*   谈菁咏：北京市海淀区职工大学",
+      "citation_count": 3
+    }
+  ]
+}
