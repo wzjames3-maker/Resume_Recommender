@@ -18,6 +18,13 @@ from .recruitment import (
 )
 from .ai import HrAIConfigAPI, HrSearchParseAPI, HrSkillExtractAPI
 from .access import HrAccessAPI, HrAccessMeAPI, HrAuditLogAPI
+from .offer_views import (
+    HandoffConfigAPI,
+    HandoffListAPI,
+    HandoffRetryAPI,
+    OfferDetailAPI,
+    OfferListAPI,
+)
 
 __all__ = [
     "AssignmentAPI",
@@ -42,4 +49,9 @@ __all__ = [
     "HrAccessAPI",
     "HrAccessMeAPI",
     "HrAuditLogAPI",
+    "HandoffConfigAPI",
+    "HandoffListAPI",
+    "HandoffRetryAPI",
+    "OfferDetailAPI",
+    "OfferListAPI",
 ]

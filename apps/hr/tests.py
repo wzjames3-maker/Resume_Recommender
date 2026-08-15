@@ -17,17 +17,21 @@ from hr.models import (
     AssignmentStatus,
     Candidate,
     CandidateAssignment,
+    HandoffStatus,
     HrAccess,
     HrAuditLog,
     HrConfig,
     Interview,
     Job,
+    Offer,
+    OnboardingHandoff,
     ResumeFile,
     ResumeStatus,
 )
 from hr.services.audit import write_audit_log
 from hr.task.resume import cleanup_orphan_resumes, parse_resume_task
 from hr.serializers.ai import AiService
+from hr.serializers.offer import OfferService, OnboardingService
 from hr.serializers.recruitment import CANDIDATE_EXPORT_FIELDS, RecruitmentService
 from hr.services.ai_parser import extract_skills, parse_search_conditions
 from hr.services.resume_parser import parse_resume_text
@@ -2471,3 +2475,413 @@ class CandidateLifecycleRouteTests(_HrApiBase):
         self.assertEqual(len(rows), 1)
         self.assertTrue(rows[0]["name"].startswith("'=HYPERLINK"))
         self.assertFalse(rows[0]["name"].startswith("="))
+
+class OfferServiceTests(TestCase):
+    """B2: Offer 工件状态机、版本、审批、附件与权限"""
+
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.service = OfferService(workspace_id="workspace-a", user_id=self.user_id, hr_role="ADMIN")
+        self.recruitment = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, hr_role="ADMIN")
+        self.candidate = Candidate.objects.create(name="Alice", workspace_id="workspace-a")
+        self.job = Job.objects.create(name="Engineer", workspace_id="workspace-a", headcount=1)
+        self.assignment_id = self.recruitment.create_assignment(self.job.id, self.candidate.id, {})["id"]
+
+    def _to_offer(self):
+        self.recruitment.update_assignment(self.assignment_id, {"status": "SCREEN_PASSED"})
+        self.recruitment.update_assignment(self.assignment_id, {"status": "INTERVIEWING"})
+        self.recruitment.update_assignment(self.assignment_id, {"status": "OFFER"})
+
+    def _sent_offer(self):
+        self._to_offer()
+        offer_id = self.service.create_offer(self.assignment_id, {"salary_amount": "25000", "currency": "CNY"})["id"]
+        self.service.send_offer(offer_id)
+        return offer_id
+
+    def test_create_offer_requires_offer_assignment(self):
+        with self.assertRaisesRegex(AppApiException, "not in offer status"):
+            self.service.create_offer(self.assignment_id, {})
+
+    def test_create_offer_auto_increments_version(self):
+        self._to_offer()
+        first = self.service.create_offer(self.assignment_id, {"salary_amount": "20000"})
+        second = self.service.create_offer(self.assignment_id, {"salary_amount": "25000"})
+        self.assertEqual(first["version"], 1)
+        self.assertEqual(second["version"], 2)
+        self.assertEqual(second["status"], "DRAFT")
+
+    def test_create_offer_saves_amount_currency_and_note(self):
+        self._to_offer()
+        offer = self.service.create_offer(self.assignment_id, {
+            "salary_amount": "30000.50", "currency": "USD", "note": "含期权",
+        })
+        self.assertEqual(offer["salary_amount"], "30000.50")
+        self.assertEqual(offer["currency"], "USD")
+        self.assertEqual(offer["note"], "含期权")
+
+    def test_update_offer_only_in_draft(self):
+        offer_id = self._sent_offer()
+        with self.assertRaisesRegex(AppApiException, "draft offer"):
+            self.service.update_offer(offer_id, {"salary_amount": "99999"})
+
+    def test_approve_offer_writes_audit(self):
+        self._to_offer()
+        offer_id = self.service.create_offer(self.assignment_id, {})["id"]
+        updated = self.service.approve_offer(offer_id, {"approval_status": "APPROVED", "approver_id": str(self.user_id)})
+        self.assertEqual(updated["approval_status"], "APPROVED")
+        self.assertIsNotNone(updated["approved_at"])
+        self.assertTrue(
+            HrAuditLog.objects.filter(
+                workspace_id="workspace-a", user_id=self.user_id, action="OFFER_APPROVE", object_type="OFFER"
+            ).exists()
+        )
+
+    def test_approve_rejects_invalid_status(self):
+        self._to_offer()
+        offer_id = self.service.create_offer(self.assignment_id, {})["id"]
+        with self.assertRaisesRegex(AppApiException, "approval_status is invalid"):
+            self.service.approve_offer(offer_id, {"approval_status": "NOPE"})
+
+    def test_send_offer_marks_sent(self):
+        self._to_offer()
+        offer_id = self.service.create_offer(self.assignment_id, {})["id"]
+        sent = self.service.send_offer(offer_id)
+        self.assertEqual(sent["status"], "SENT")
+        self.assertIsNotNone(sent["sent_at"])
+        self.assertTrue(
+            HrAuditLog.objects.filter(
+                workspace_id="workspace-a", user_id=self.user_id, action="OFFER_SEND", object_type="OFFER"
+            ).exists()
+        )
+
+    def test_send_from_non_draft_rejected(self):
+        offer_id = self._sent_offer()
+        with self.assertRaisesRegex(AppApiException, "Illegal status transition"):
+            self.service.send_offer(offer_id)
+
+    def test_accept_offer_moves_assignment_to_hired(self):
+        offer_id = self._sent_offer()
+        accepted = self.service.accept_offer(offer_id)
+        self.assertEqual(accepted["status"], "ACCEPTED")
+        self.assertIsNotNone(accepted["accepted_at"])
+        assignment = CandidateAssignment.objects.get(id=self.assignment_id)
+        self.assertEqual(assignment.status, "HIRED")
+        self.assertTrue(
+            HrAuditLog.objects.filter(
+                workspace_id="workspace-a", user_id=self.user_id, action="OFFER_ACCEPT", object_type="OFFER"
+            ).exists()
+        )
+        self.assertTrue(
+            HrAuditLog.objects.filter(
+                workspace_id="workspace-a", action="ASSIGNMENT_TRANSITION", object_type="ASSIGNMENT"
+            ).exists()
+        )
+
+    def test_accept_twice_rejected(self):
+        offer_id = self._sent_offer()
+        self.service.accept_offer(offer_id)
+        with self.assertRaisesRegex(AppApiException, "Illegal status transition"):
+            self.service.accept_offer(offer_id)
+
+    def test_reject_offer_writes_audit(self):
+        offer_id = self._sent_offer()
+        rejected = self.service.reject_offer(offer_id, {"note": "薪资未谈拢"})
+        self.assertEqual(rejected["status"], "REJECTED")
+        self.assertIsNotNone(rejected["rejected_at"])
+        self.assertEqual(rejected["note"], "薪资未谈拢")
+        self.assertTrue(
+            HrAuditLog.objects.filter(
+                workspace_id="workspace-a", user_id=self.user_id, action="OFFER_REJECT", object_type="OFFER"
+            ).exists()
+        )
+
+    def test_withdraw_offer_writes_audit(self):
+        offer_id = self._sent_offer()
+        withdrawn = self.service.withdraw_offer(offer_id)
+        self.assertEqual(withdrawn["status"], "WITHDRAWN")
+        self.assertIsNotNone(withdrawn["withdrawn_at"])
+        self.assertTrue(
+            HrAuditLog.objects.filter(
+                workspace_id="workspace-a", user_id=self.user_id, action="OFFER_WITHDRAW", object_type="OFFER"
+            ).exists()
+        )
+
+    def test_rejected_offer_allows_new_version_while_assignment_in_offer(self):
+        offer_id = self._sent_offer()
+        self.service.reject_offer(offer_id, {"note": "薪资未谈拢"})
+        new_version = self.service.create_offer(self.assignment_id, {"salary_amount": "30000"})
+        self.assertEqual(new_version["version"], 2)
+        self.assertEqual(new_version["status"], "DRAFT")
+
+    def test_no_new_offer_after_accepted(self):
+        offer_id = self._sent_offer()
+        self.service.accept_offer(offer_id)
+        with self.assertRaisesRegex(AppApiException, "not in offer status"):
+            self.service.create_offer(self.assignment_id, {"salary_amount": "30000"})
+
+    def test_offer_cross_workspace_not_found(self):
+        self._to_offer()
+        offer_id = self.service.create_offer(self.assignment_id, {})["id"]
+        foreign = OfferService(workspace_id="workspace-b", user_id=self.user_id, hr_role="ADMIN")
+        with self.assertRaises(NotFound404):
+            foreign.get_offer(offer_id)
+
+    def test_operator_cannot_manage_offers(self):
+        self._to_offer()
+        operator = OfferService(workspace_id="workspace-a", user_id=uuid.uuid7(), hr_role="OPERATOR")
+        with self.assertRaises(AppUnauthorizedFailed):
+            operator.create_offer(self.assignment_id, {})
+        offer_id = self.service.create_offer(self.assignment_id, {})["id"]
+        with self.assertRaises(AppUnauthorizedFailed):
+            operator.accept_offer(offer_id)
+
+    def test_attachment_upload_and_download_permission(self):
+        self._to_offer()
+        offer_id = self.service.create_offer(self.assignment_id, {})["id"]
+        handle = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        handle.write(b"%PDF-offer-letter")
+        handle.close()
+        uploaded = self.service.upload_offer_attachment(offer_id, handle.name, "offer-letter.pdf")
+        self.assertEqual(uploaded["attachment_name"], "offer-letter.pdf")
+        offer = Offer.objects.get(id=offer_id)
+        self.assertTrue(os.path.exists(offer.attachment_path))
+        file_path, file_name = self.service.offer_attachment_file(offer_id)
+        self.assertEqual(file_name, "offer-letter.pdf")
+        viewer = OfferService(workspace_id="workspace-a", user_id=uuid.uuid7(), hr_role="VIEWER")
+        with self.assertRaises(AppUnauthorizedFailed):
+            viewer.offer_attachment_file(offer_id)
+        self.service.remove_offer_attachment(offer_id)
+        self.assertFalse(os.path.exists(offer.attachment_path))
+
+
+class HandoffTests(TestCase):
+    """B3: Offer 接受后幂等交接（CHECKLIST/WEBHOOK、失败重试、审计）"""
+
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.offer_service = OfferService(workspace_id="workspace-a", user_id=self.user_id, hr_role="ADMIN")
+        self.handoff_service = OnboardingService(workspace_id="workspace-a", user_id=self.user_id, hr_role="ADMIN")
+        self.recruitment = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, hr_role="ADMIN")
+        self.candidate = Candidate.objects.create(
+            name="Alice", workspace_id="workspace-a", phone="13812345678", email="alice@example.com"
+        )
+        self.job = Job.objects.create(
+            name="Engineer", department="Engineering", workspace_id="workspace-a", headcount=1
+        )
+        self.assignment_id = self.recruitment.create_assignment(self.job.id, self.candidate.id, {})["id"]
+        for status in ("SCREEN_PASSED", "INTERVIEWING", "OFFER"):
+            self.recruitment.update_assignment(self.assignment_id, {"status": status})
+        self.offer_id = self.offer_service.create_offer(
+            self.assignment_id, {"salary_amount": "25000", "currency": "CNY"}
+        )["id"]
+        self.offer_service.send_offer(self.offer_id)
+
+    def test_accept_creates_handoff_with_full_payload(self):
+        self.offer_service.accept_offer(self.offer_id)
+        handoff = OnboardingHandoff.objects.get(assignment_id=self.assignment_id)
+        self.assertEqual(handoff.status, HandoffStatus.SUCCESS)  # 默认 CHECKLIST 直接产出清单
+        import json as _json
+        payload = _json.loads(handoff.payload)
+        self.assertEqual(payload["candidate_name"], "Alice")
+        self.assertEqual(payload["job_name"], "Engineer")
+        self.assertEqual(payload["department"], "Engineering")
+        self.assertEqual(payload["salary_amount"], "25000.00")
+        self.assertEqual(payload["candidate_phone"], "13812345678")
+        self.assertEqual(handoff.attempts, 1)
+        self.assertTrue(
+            HrAuditLog.objects.filter(
+                workspace_id="workspace-a", action="HANDOFF", object_type="ONBOARDING", result="SUCCESS"
+            ).exists()
+        )
+
+    def test_handoff_creation_is_idempotent(self):
+        self.offer_service.accept_offer(self.offer_id)
+        offer = Offer.objects.get(id=self.offer_id)
+        self.handoff_service.create_handoff_for_offer(offer)
+        self.assertEqual(OnboardingHandoff.objects.filter(assignment_id=self.assignment_id).count(), 1)
+
+    def test_webhook_success(self):
+        HrConfig.objects.update_or_create(
+            workspace_id="workspace-a",
+            defaults={"handoff_target_type": "WEBHOOK", "handoff_webhook_url": "https://hris.example.com/hires"},
+        )
+        with patch("hr.serializers.offer.urlopen") as urlopen:
+            response = type("Response", (), {"status": 200, "read": lambda self: b'{"ok": true}'})()
+            urlopen.return_value = response
+            self.offer_service.accept_offer(self.offer_id)
+        handoff = OnboardingHandoff.objects.get(assignment_id=self.assignment_id)
+        self.assertEqual(handoff.status, HandoffStatus.SUCCESS)
+        self.assertEqual(handoff.attempts, 1)
+        urlopen.assert_called_once()
+
+    def test_webhook_failure_marks_failed(self):
+        HrConfig.objects.update_or_create(
+            workspace_id="workspace-a",
+            defaults={"handoff_target_type": "WEBHOOK", "handoff_webhook_url": "https://hris.example.com/hires"},
+        )
+        response = type("Response", (), {"status": 500, "read": lambda self: b"boom"})()
+        with patch("hr.serializers.offer.urlopen", return_value=response):
+            self.offer_service.accept_offer(self.offer_id)
+        handoff = OnboardingHandoff.objects.get(assignment_id=self.assignment_id)
+        self.assertEqual(handoff.status, HandoffStatus.FAILED)
+        self.assertIn("500", handoff.last_error)
+        self.assertTrue(
+            HrAuditLog.objects.filter(
+                workspace_id="workspace-a", action="HANDOFF", object_type="ONBOARDING", result="FAILED"
+            ).exists()
+        )
+
+    def test_retry_failed_handoff(self):
+        HrConfig.objects.update_or_create(
+            workspace_id="workspace-a",
+            defaults={"handoff_target_type": "WEBHOOK", "handoff_webhook_url": "https://hris.example.com/hires"},
+        )
+        with patch("hr.serializers.offer.urlopen") as urlopen:
+            urlopen.side_effect = [type("Response", (), {"status": 500, "read": lambda self: b"boom"})(),
+                                   type("Response", (), {"status": 200, "read": lambda self: b"ok"})()]
+            self.offer_service.accept_offer(self.offer_id)
+            handoff = OnboardingHandoff.objects.get(assignment_id=self.assignment_id)
+            self.assertEqual(handoff.status, HandoffStatus.FAILED)
+            retried = self.handoff_service.retry_handoff(handoff.id)
+        self.assertEqual(retried["status"], "SUCCESS")
+        handoff.refresh_from_db()
+        self.assertEqual(handoff.attempts, 2)
+
+    def test_retry_success_handoff_rejected(self):
+        self.offer_service.accept_offer(self.offer_id)
+        handoff = OnboardingHandoff.objects.get(assignment_id=self.assignment_id)
+        with self.assertRaisesRegex(AppApiException, "failed handoff"):
+            self.handoff_service.retry_handoff(handoff.id)
+
+    def test_handoff_cross_workspace_not_found(self):
+        self.offer_service.accept_offer(self.offer_id)
+        handoff = OnboardingHandoff.objects.get(assignment_id=self.assignment_id)
+        foreign = OnboardingService(workspace_id="workspace-b", user_id=self.user_id, hr_role="ADMIN")
+        with self.assertRaises(NotFound404):
+            foreign.retry_handoff(handoff.id)
+
+    def test_operator_cannot_retry(self):
+        self.offer_service.accept_offer(self.offer_id)
+        handoff = OnboardingHandoff.objects.get(assignment_id=self.assignment_id)
+        operator = OnboardingService(workspace_id="workspace-a", user_id=uuid.uuid7(), hr_role="OPERATOR")
+        with self.assertRaises(AppUnauthorizedFailed):
+            operator.retry_handoff(handoff.id)
+
+
+class OfferApiTests(_HrApiBase):
+    """B2 路由：Offer 全链路与权限"""
+
+    def setUp(self):
+        self.admin = self._user("hr-admin", "HR Admin")
+        self.operator = self._user("hr-operator", "HR Operator")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.admin.id, role="ADMIN")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.operator.id, role="OPERATOR")
+        self.recruitment = RecruitmentService(workspace_id="workspace-a", user_id=self.admin.id, hr_role="ADMIN")
+        candidate = Candidate.objects.create(name="Alice", workspace_id="workspace-a")
+        job = Job.objects.create(name="Engineer", workspace_id="workspace-a", headcount=1)
+        self.assignment_id = self.recruitment.create_assignment(job.id, candidate.id, {})["id"]
+        for status in ("SCREEN_PASSED", "INTERVIEWING", "OFFER"):
+            self.recruitment.update_assignment(self.assignment_id, {"status": status})
+        self.client_admin = self._client(self.admin)
+
+    def test_full_offer_flow_via_api(self):
+        path = "/admin/api/workspace/workspace-a/hr/assignments/{}/offers".format(self.assignment_id)
+        offer_id = self.client_admin.post(
+            path, {"salary_amount": "25000", "currency": "CNY"}, content_type="application/json"
+        ).json()["data"]["id"]
+        self.client_admin.put("/admin/api/workspace/workspace-a/hr/offers/{}/approve".format(offer_id),
+                              {"approval_status": "APPROVED", "approver_id": str(self.admin.id)},
+                              content_type="application/json")
+        self.client_admin.put("/admin/api/workspace/workspace-a/hr/offers/{}/send".format(offer_id))
+        accepted = self.client_admin.put("/admin/api/workspace/workspace-a/hr/offers/{}/accept".format(offer_id))
+        self.assertEqual(accepted.json()["data"]["status"], "ACCEPTED")
+        assignment = self.client_admin.get(
+            "/admin/api/workspace/workspace-a/hr/assignments/{}/interviews".format(self.assignment_id)
+        )
+        self.assertEqual(assignment.status_code, 200)
+        from hr.models import CandidateAssignment as _CA
+        self.assertEqual(_CA.objects.get(id=self.assignment_id).status, "HIRED")
+
+    def test_operator_offer_create_gets_403(self):
+        response = self._client(self.operator).post(
+            "/admin/api/workspace/workspace-a/hr/assignments/{}/offers".format(self.assignment_id),
+            {}, content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(
+            HrAuditLog.objects.filter(
+                workspace_id="workspace-a", user_id=self.operator.id, action="ACCESS_DENIED", result="DENIED"
+            ).exists()
+        )
+
+    def test_attachment_upload_and_download(self):
+        path = "/admin/api/workspace/workspace-a/hr/assignments/{}/offers".format(self.assignment_id)
+        offer_id = self.client_admin.post(path, {}, content_type="application/json").json()["data"]["id"]
+        with tempfile.NamedTemporaryFile(suffix=".pdf") as handle:
+            handle.write(b"%PDF-offer")
+            handle.seek(0)
+            response = self.client_admin.post(
+                "/admin/api/workspace/workspace-a/hr/offers/{}/attachment".format(offer_id),
+                {"file": handle}, format="multipart",
+            )
+        self.assertEqual(response.status_code, 200)
+        download = self.client_admin.get(
+            "/admin/api/workspace/workspace-a/hr/offers/{}/attachment/download".format(offer_id)
+        )
+        self.assertEqual(download.status_code, 200)
+        self.assertIn(b"%PDF-offer", b"".join(download.streaming_content))
+
+
+class HandoffApiTests(_HrApiBase):
+    """B3 路由：交接列表/重试/配置"""
+
+    def setUp(self):
+        self.admin = self._user("hr-admin", "HR Admin")
+        self.operator = self._user("hr-operator", "HR Operator")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.admin.id, role="ADMIN")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.operator.id, role="OPERATOR")
+        recruitment = RecruitmentService(workspace_id="workspace-a", user_id=self.admin.id, hr_role="ADMIN")
+        candidate = Candidate.objects.create(name="Alice", workspace_id="workspace-a", phone="13812345678")
+        job = Job.objects.create(name="Engineer", workspace_id="workspace-a", headcount=1)
+        self.assignment_id = recruitment.create_assignment(job.id, candidate.id, {})["id"]
+        for status in ("SCREEN_PASSED", "INTERVIEWING", "OFFER"):
+            recruitment.update_assignment(self.assignment_id, {"status": status})
+        offer = OfferService(workspace_id="workspace-a", user_id=self.admin.id, hr_role="ADMIN")
+        self.offer_id = offer.create_offer(self.assignment_id, {})["id"]
+        offer.send_offer(self.offer_id)
+        offer.accept_offer(self.offer_id)
+        self.handoff = OnboardingHandoff.objects.get(assignment_id=self.assignment_id)
+
+    def test_list_handoffs(self):
+        response = self._client(self.admin).get("/admin/api/workspace/workspace-a/hr/handoffs/1/20")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["data"]["total"], 1)
+        record = response.json()["data"]["records"][0]
+        self.assertEqual(record["status"], "SUCCESS")
+        self.assertEqual(record["candidate_name"], "Alice")
+        self.assertEqual(record["phone"], "138****5678")
+
+    def test_retry_requires_admin(self):
+        response = self._client(self.operator).post(
+            "/admin/api/workspace/workspace-a/hr/handoffs/{}/retry".format(self.handoff.id)
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_put_handoff_config(self):
+        response = self._client(self.admin).put(
+            "/admin/api/workspace/workspace-a/hr/handoff/config",
+            {"target_type": "WEBHOOK", "webhook_url": "https://hris.example.com/hires"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        config = HrConfig.objects.get(workspace_id="workspace-a")
+        self.assertEqual(config.handoff_target_type, "WEBHOOK")
+        self.assertEqual(config.handoff_webhook_url, "https://hris.example.com/hires")
+
+    def test_put_handoff_config_rejects_invalid_target(self):
+        response = self._client(self.admin).put(
+            "/admin/api/workspace/workspace-a/hr/handoff/config",
+            {"target_type": "SMS"}, content_type="application/json",
+        )
+        self.assertEqual(response.json()["code"], 400)
+

@@ -183,6 +183,91 @@ class InterviewStatus(models.TextChoices):
     CANCELLED = "CANCELLED", "Cancelled"
 
 
+class OfferStatus(models.TextChoices):
+    DRAFT = "DRAFT", "Draft"
+    SENT = "SENT", "Sent"
+    ACCEPTED = "ACCEPTED", "Accepted"
+    REJECTED = "REJECTED", "Rejected"
+    WITHDRAWN = "WITHDRAWN", "Withdrawn"
+
+
+class OfferApprovalStatus(models.TextChoices):
+    PENDING = "PENDING", "Pending"
+    APPROVED = "APPROVED", "Approved"
+    REJECTED = "REJECTED", "Rejected"
+
+
+class Offer(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
+    workspace_id = models.CharField(max_length=64, db_index=True)
+    assignment = models.ForeignKey(CandidateAssignment, on_delete=models.CASCADE)
+    candidate = models.ForeignKey(Candidate, on_delete=models.CASCADE)
+    job = models.ForeignKey(Job, on_delete=models.CASCADE)
+    version = models.PositiveSmallIntegerField()
+    status = models.CharField(max_length=16, choices=OfferStatus.choices, default=OfferStatus.DRAFT)
+    salary_amount = models.DecimalField(max_digits=14, decimal_places=2, null=True, blank=True)
+    currency = models.CharField(max_length=16, default="CNY")
+    approval_status = models.CharField(
+        max_length=16, choices=OfferApprovalStatus.choices, default=OfferApprovalStatus.PENDING
+    )
+    approver_id = models.UUIDField(null=True, blank=True)
+    approved_at = models.DateTimeField(null=True, blank=True)
+    sent_at = models.DateTimeField(null=True, blank=True)
+    accepted_at = models.DateTimeField(null=True, blank=True)
+    rejected_at = models.DateTimeField(null=True, blank=True)
+    withdrawn_at = models.DateTimeField(null=True, blank=True)
+    note = models.TextField(blank=True, default="")
+    attachment_name = models.CharField(max_length=255, blank=True, default="")
+    attachment_path = models.CharField(max_length=1024, blank=True, default="")
+    user_id = models.UUIDField(null=True, blank=True)
+    create_time = models.DateTimeField(auto_now_add=True)
+    update_time = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "hr_offer"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace_id", "assignment", "version"], name="hr_unique_offer_version_per_assignment"
+            )
+        ]
+
+
+class HandoffStatus(models.TextChoices):
+    PENDING = "PENDING", "Pending"
+    SUCCESS = "SUCCESS", "Success"
+    FAILED = "FAILED", "Failed"
+
+
+class HandoffTargetType(models.TextChoices):
+    CHECKLIST = "CHECKLIST", "Checklist"
+    WEBHOOK = "WEBHOOK", "Webhook"
+
+
+class OnboardingHandoff(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
+    workspace_id = models.CharField(max_length=64, db_index=True)
+    assignment = models.ForeignKey(CandidateAssignment, on_delete=models.CASCADE)
+    candidate = models.ForeignKey(Candidate, on_delete=models.CASCADE)
+    job = models.ForeignKey(Job, on_delete=models.CASCADE)
+    offer = models.ForeignKey(Offer, on_delete=models.CASCADE)
+    status = models.CharField(max_length=16, choices=HandoffStatus.choices, default=HandoffStatus.PENDING)
+    payload = models.TextField(blank=True, default="")
+    attempts = models.PositiveSmallIntegerField(default=0)
+    last_error = models.TextField(blank=True, default="")
+    handoff_time = models.DateTimeField(null=True, blank=True)
+    user_id = models.UUIDField(null=True, blank=True)
+    create_time = models.DateTimeField(auto_now_add=True)
+    update_time = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "hr_onboarding_handoff"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace_id", "assignment"], name="hr_unique_handoff_per_assignment"
+            )
+        ]
+
+
 class Interview(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
     workspace_id = models.CharField(max_length=64, db_index=True)
@@ -236,6 +321,10 @@ class HrConfig(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
     workspace_id = models.CharField(max_length=64, unique=True)
     llm_model_id = models.CharField(max_length=128)
+    handoff_target_type = models.CharField(
+        max_length=16, choices=HandoffTargetType.choices, default=HandoffTargetType.CHECKLIST
+    )
+    handoff_webhook_url = models.CharField(max_length=512, blank=True, default="")
     create_time = models.DateTimeField(auto_now_add=True)
     update_time = models.DateTimeField(auto_now=True)
 
@@ -263,6 +352,12 @@ class HrAuditAction(models.TextChoices):
     RESUME_DOWNLOAD = "RESUME_DOWNLOAD", "Resume download"
     RESUME_DELETE = "RESUME_DELETE", "Resume delete"
     INTERVIEW_FEEDBACK = "INTERVIEW_FEEDBACK", "Interview feedback"
+    OFFER_SEND = "OFFER_SEND", "Offer send"
+    OFFER_ACCEPT = "OFFER_ACCEPT", "Offer accept"
+    OFFER_REJECT = "OFFER_REJECT", "Offer reject"
+    OFFER_WITHDRAW = "OFFER_WITHDRAW", "Offer withdraw"
+    OFFER_APPROVE = "OFFER_APPROVE", "Offer approve"
+    HANDOFF = "HANDOFF", "Handoff"
     MERGE = "MERGE", "Merge"
     GRANT_ACCESS = "GRANT_ACCESS", "Grant access"
     REVOKE_ACCESS = "REVOKE_ACCESS", "Revoke access"
