@@ -66,7 +66,7 @@
 
 | 方法 | 路径 | 用途 | 权限 |
 |---|---|---|---|
-| PUT | `/candidates/{candidate_id}` | 编辑候选人（含合规元数据字段） | OPERATOR/ADMIN |
+| PUT | `/candidates/{candidate_id}` | 编辑候选人（含合规元数据字段） | ADMIN |
 | GET | `/candidates` | 列表（默认过滤 `DELETED`） | 任意 HR |
 | GET | `/candidates/{candidate_id}` | 详情（`DELETED` 仅 ADMIN 可见） | 任意 HR |
 | PUT | `/candidates/{candidate_id}/delete` | 删除/匿名化 | ADMIN |

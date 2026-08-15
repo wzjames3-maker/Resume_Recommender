@@ -50,7 +50,7 @@ def parse_resume_task(resume_id):
    - 派发失败（delay 抛其他异常）：将 `ResumeFile` 置为 `FAILED` + `error_message`，records 中该条返回 `status=FAILED` + `error_message`（不抛错，不让整个上传失败）。
 5. 返回 records：新文件 `status=PENDING`、`duplicate=False`、`candidate_id=None`；duplicate 记录同现状。
 6. `RecruitmentService.upload_resumes` 的签名与返回结构保持兼容（records 列表字段不变），解析与建人逻辑移除。
-7. **已知限制（与现状一致）**：并发上传同一文件可能同时通过查重并各自建候选人（sha256 唯一约束未在模型层实施）；属既有行为，六期不处理。
+7. **已知限制（与现状一致）**：并发上传同一文件可能同时通过查重并各自建候选人（DB 层 sha256 唯一约束实际已存在——迁移 0003，并发重复表现为 IntegrityError 未捕获而报 500，已在后续保存查重防护中修复）；属既有行为，六期不处理。
 
 ## 3. 状态查询接口
 

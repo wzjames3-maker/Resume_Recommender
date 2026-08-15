@@ -5,7 +5,7 @@
 > - `docs/superpowers/specs/2026-08-14-hr-access-audit-design.md`（A3 访问控制与审计）
 > - `docs/superpowers/specs/2026-08-14-hr-lifecycle-design.md`（A4 生命周期与简历治理）
 >
-> 执行环境：主目录 `/home/wzjames/toC/maxkb`，分支 `main`。配置：`MAXKB_CONFIG_TYPE=ENV` + `MAXKB_*`（本地 docker PostgreSQL 16/pgvector 于 127.0.0.1:5432，Redis 7 于 127.0.0.1:6379）。
+> 执行环境：主目录 `/home/wzjames/toC/maxkb`，分支 `v2`。配置：`MAXKB_CONFIG_TYPE=ENV` + `MAXKB_*`（本地 docker PostgreSQL 16/pgvector 于 127.0.0.1:5432，Redis 7 于 127.0.0.1:6379）。
 
 ## 完成定义逐项核对（PRD 9.2 A 阶段）
 

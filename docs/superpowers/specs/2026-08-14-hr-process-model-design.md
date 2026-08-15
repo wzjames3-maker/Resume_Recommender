@@ -90,7 +90,7 @@ PENDING_SCREEN / SCREEN_PASSED / INTERVIEWING / OFFER / HIRED / REJECTED / WITHD
 | PUT | `/jobs/{job_id}/reopen` | 恢复招聘：`ON_HOLD`/`CLOSED` → `OPEN`，清空 `close_reason`（仅管理员）。 |
 | POST | `/jobs/{job_id}/assignments` | 新建关联：支持 `relation_type`、`channel`、`applied_at`、`owner_id`。 |
 | PUT | `/assignments/{assignment_id}` | 状态流转与备注：支持 `status`、`termination_reason`、`owner_id`、`note` 更新。 |
-| GET | `/assignments` | 关联列表（按候选人/职位）支持 `owner_id` 筛选。 |
+| GET | `/assignments` | 关联列表（按候选人/职位）支持 `owner_id` 筛选。（**未实现**：列表能力由 job/candidate 详情承载，无独立 /assignments 列表接口） |
 | GET | `/candidates` | 候选人列表支持 `owner_id`（有该负责人关联）筛选。 |
 
 跨工作区一律 404。`close_reason`/`termination_reason` 非法枚举值 400。
