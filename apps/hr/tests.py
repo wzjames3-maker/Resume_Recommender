@@ -3405,35 +3405,52 @@ class ResumeFlowLogTests(TestCase):
         )
 
     def test_upload_and_task_write_flow_logs(self):
-        from hr.services.flow_log import list_flow_logs
-        from hr.task.resume import _index_resume
+        from hr.services.flow_log import list_flow_logs, log_flow
+        from hr.task.resume import parse_resume_task
 
-        resume = self._resume()
-        text = "姓名：李冠光\n\n【教育经历】\n- 院校：北京师范大学 | 学位：硕士"
-
-        # 模拟上传节点（直接调服务层写入）+ 完整任务索引链
-        from hr.services.flow_log import log_flow
+        # 真实文件（走完整任务：提取→解析→清洗→切片→建文档）
+        content = "姓名：李冠光\n\n【教育经历】\n- 院校：北京师范大学 | 学位：硕士"
+        handle = tempfile.NamedTemporaryFile(suffix=".txt", delete=False)
+        handle.write(content.encode("utf-8"))
+        handle.close()
+        resume = ResumeFile.objects.create(
+            workspace_id=self.workspace_id, file_name="r.txt", extension="txt",
+            file_path=handle.name, file_size=os.path.getsize(handle.name),
+            sha256="sha-" + uuid.uuid7().hex, source_channel="OTHER",
+            status=ResumeStatus.PENDING, user_id=self.user.id,
+        )
         log_flow(self.workspace_id, "UPLOAD", resume_id=resume.id,
                  detail={"file_name": "r.txt", "file_size": 1, "extension": "txt", "duplicate": False})
 
-        # 直接跑任务（mock LLM：走 rules 降级，避免真实调用）
         with patch("hr.task.resume._llm_chat_fn") as mock_fn:
             def fake_chat(prompt):
                 return "not a json"
             mock_fn.return_value = fake_chat
             with patch("knowledge.serializers.document.DocumentSerializers.Operate.refresh"):
-                _index_resume(resume, text)
+                parse_resume_task.run(str(resume.id))
+        os.remove(handle.name)
 
         logs = list_flow_logs(self.workspace_id, resume_id=resume.id)
         nodes = [log["node"] for log in logs]
         self.assertIn("UPLOAD", nodes)
+        self.assertIn("EXTRACT", nodes)
         self.assertIn("SANITIZE", nodes)
         self.assertIn("SPLIT", nodes)
         self.assertIn("DOCUMENT", nodes)
-        split_log = next(log for log in logs if log["node"] == "SPLIT")
+        # EXTRACT 保留全文，SANITIZE 保留清洗后全文（审查对照）
+        extract_log = next(log for log in logs if log["node"] == "EXTRACT")
+        self.assertIn("text", extract_log["detail"])
+        self.assertIn("李冠光", extract_log["detail"]["text"])
+        sanitize_log = next(log for log in logs if log["node"] == "SANITIZE")
+        self.assertIn("cleaned", sanitize_log["detail"])
+        # SPLIT 记录每个 chunk 的完整内容（title/content/length/pii_masked）
+        split_log = next(log for log in logs if log["node"] == "SPLIT" and log["status"] == "SUCCESS")
         self.assertEqual(split_log["detail"]["path"], "rules")
-        self.assertGreaterEqual(split_log["detail"]["chunks"], 1)
-        self.assertIn("lengths", split_log["detail"])
+        self.assertGreaterEqual(split_log["detail"]["chunks_count"], 1)
+        items = split_log["detail"]["chunks"]
+        self.assertTrue(all("title" in item and "content" in item and "length" in item for item in items))
+        self.assertTrue(all(item["length"] == len(item["content"]) for item in items))
+        self.assertTrue(any(len(item["content"]) > 0 for item in items))
         doc_log = next(log for log in logs if log["node"] == "DOCUMENT")
         self.assertIsNotNone(doc_log["document_id"])
         self.assertGreaterEqual(doc_log["detail"]["paragraphs"], 1)

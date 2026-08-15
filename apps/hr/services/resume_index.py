@@ -71,9 +71,16 @@ def index_resume(workspace_id, user_id, resume, text, chat_fn, stats=None):
         detail={
             "path": (stats or {}).get("path", "?"),
             "llm_calls": (stats or {}).get("llm_calls", 0),
-            "chunks": len(chunks),
-            "lengths": [len(chunk["content"]) for chunk in chunks],
-            "pii_masked": sum(1 for chunk in chunks if "[已脱敏]" in chunk["content"]),
+            "chunks_count": len(chunks),
+            "chunks": [
+                {
+                    "title": chunk["title"],
+                    "length": len(chunk["content"]),
+                    "pii_masked": "[已脱敏]" in chunk["content"],
+                    "content": chunk["content"],
+                }
+                for chunk in chunks
+            ],
         },
     )
     if resume.document_id:

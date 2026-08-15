@@ -71,7 +71,7 @@ def parse_resume_task(resume_id):
             text = extract_text_from_txt(local_path)
         log_flow(
             resume.workspace_id, "EXTRACT", resume_id=resume.id,
-            detail={"length": len(text), "lines": text.count("\n") + 1, "source": resume.extension},
+            detail={"length": len(text), "lines": text.count("\n") + 1, "source": resume.extension, "text": text},
         )
         parsed = parse_resume_text(text)
         with transaction.atomic():
@@ -128,7 +128,7 @@ def _index_resume(resume, text):
         cleaned = sanitize_resume_text(text)
         log_flow(
             resume.workspace_id, "SANITIZE", resume_id=resume.id,
-            detail={"before": len(text), "after": len(cleaned)},
+            detail={"before": len(text), "after": len(cleaned), "cleaned": cleaned},
         )
         stats = {}
         started = time.time()
