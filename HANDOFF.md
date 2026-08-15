@@ -103,10 +103,10 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 
 ### 5.1 部署环境验证（A 阶段关闭前提，处理真实 PII 前必须完成）
 
-- Celery worker+beat 真实调度：**heartbeat.py 硬编码 `/opt/maxkb-app/tmp`** → 已修复（2026-08-15）：探针目录改为 `MAXKB_WORKER_TMP` 环境变量覆盖、默认值不变（向后兼容）；新增 `apps/ops/tests.py` 4 用例，全量 231/231。本机起 worker 时 export `MAXKB_WORKER_TMP=$HOME/maxkb-tmp` 即可。TTL 清理 beat 任务（`hr-cleanup-orphan-resumes`）在 `apps/hr/task/resume.py` 的 `worker_ready` 信号中注册（勿改回 apps.py ready——那会在应用加载时访问数据库，导致测试库模板克隆被连接占用而失败，见提交 `fe42c65`）
+- Celery worker+beat 真实调度：**heartbeat.py 硬编码 `/opt/maxkb-app/tmp`** → 已修复（2026-08-15）：探针目录改为 `MAXKB_WORKER_TMP` 环境变量覆盖、默认值不变（向后兼容）；新增 `apps/ops/tests.py` 4 用例，全量 231/231。**已真实验证（2026-08-15）**：本机 `MAXKB_WORKER_TMP=/tmp/maxkb-worker-tmp` 启动 worker 成功，`worker_ready/worker_heartbeat` 探针文件生成，beat 任务 `hr-cleanup-orphan-resumes`（每日 03:00）注册成功；31 天前孤儿简历经真实 worker 执行清理（物理文件删除 + RESUME_DELETE 审计）。**web 全链路冒烟（2026-08-15）**：真实 HTTP 跑通 登录→职位→候选人→指派→OFFER→面试→Offer 审批/发送/接受→交接 SUCCESS→CSV 导入→归档/恢复→审计（15/15 PASS）。TTL 清理 beat 任务（`hr-cleanup-orphan-resumes`）在 `apps/hr/task/resume.py` 的 `worker_ready` 信号中注册（勿改回 apps.py ready——那会在应用加载时访问数据库，导致测试库模板克隆被连接占用而失败，见提交 `fe42c65`）
 - 对象存储私有化（当前简历在本地 `data/resume/`）
 - TLS、数据库/备份静态加密、密钥管理
-- 日志/监控脱敏人工检查
+- 日志/监控脱敏人工检查 → 已检查（2026-08-15）：`apps/hr` 无任何 logger/print；异常处理器只记录 `str(exc)+traceback`（不含请求体/局部变量，AppApiException 消息为业务文案）；简历文本仅用于解析、失败写 DB error_message 不落日志；附件/简历文件名带 UUID 前缀不含 PII。剩余：syslog handler 与监控标签的部署侧复核
 - 备份自然过期、租户注销与数据返还/删除流程
 
 ### 5.2 B 阶段：招聘协作与 Offer 交接（PRD 9.2）
