@@ -24,11 +24,25 @@
 
 ## 2. 检索管线 v2（定稿）
 
-**查询理解前置（新增）**：入口先做**查询分解**——LLM 解析用户查询为技能列表（复用 ai_parser 的 _SEARCH_PROMPT_TEMPLATE：逐项列出、不得合并复合词）：
-- "会 java python fastapi agent rag 的人" → skills = [java, python, fastapi, agent, rag]
+**查询理解前置（新增）**：入口先做**查询分解**——LLM 解析用户查询为**带重要程度的技能列表**（扩展 ai_parser 的 _SEARCH_PROMPT_TEMPLATE 输出结构：技能逐项列出、不得合并复合词、**每项标注重要程度 required/preferred/nice_to_have**）：
+- "会 java python fastapi agent rag 的人" →
+  [ {skill: java, importance: required}, {skill: python, importance: required},
+    {skill: fastapi, importance: preferred}, {skill: agent, importance: nice_to_have},
+    {skill: rag, importance: nice_to_have} ]
+  （"会 X"=required；"熟悉/了解/加分"=preferred/nice_to_have；LLM 无法判断默认 required）
 - 解析失败/无技能 → 视为整句查询（走模式 A）
 - 技能数 = 1 → 走模式 A（单技能与整句等价）
 - 技能数 ≥ 2 → 走**模式 B：技能复合检索（Skill-AND）**
+
+**重要程度的作用（三级权重）**：
+
+| 级别 | 权重 | 语义 | 放宽策略 |
+|---|---|---|---|
+| required | 3.0 | 硬性必会（"会/精通/需要 X"） | 先决条件：required 未全命中不进入 top 候选 |
+| preferred | 2.0 | 优先加分（"熟悉/优先"） | 第二步放宽：required 全命中后按 preferred 命中数排序 |
+| nice_to_have | 1.0 | 加分项（"了解/有更好"） | 最后放宽：仅作为总分微调 |
+
+简历总分 = Σ(命中技能 weight) / Σ(全部技能 weight) × 100（技能覆盖度）+ 语义加权分（命中的技能各自段落分均值）——先按覆盖度保证 AND 语义，再用语义分在同覆盖度内排序。
 
 ### 模式 A：整句检索（单意图/无技能查询）
 
@@ -56,24 +70,32 @@
 ```python
 # "会 java python fastapi agent rag 的人" 的检索方式：
 # 不是整句向量化（会把 5 个技能混成一个向量、丢失 AND 约束），而是：
-# 1) LLM 查询分解 → skills = [java, python, fastapi, agent, rag]（复用 ai_parser 的 _SEARCH_PROMPT_TEMPLATE）
-# 2) 结构化路（并行）：Candidate.skills 含全部技能的候选人 → AND 精确过滤（已有组合搜索能力）
-#    命中即"铁证"，直接列为候选，技能命中数 = len(skills)
+# 1) LLM 查询分解 → skills = [{java, required}, {python, required}, {fastapi, preferred},
+#                             {agent, nice_to_have}, {rag, nice_to_have}]
+#    （扩展 ai_parser 模板：每技能带重要程度；"会/精通"→required，"熟悉/优先"→preferred，"了解/有更好"→nice）
+# 2) 结构化路（并行）：Candidate.skills 含 required 全部技能的候选人 → AND 精确过滤（已有组合搜索能力）
+#    命中即"铁证"，直接列为候选，按 required→preferred 覆盖度排序
 # 3) 语义路（并行）：对每个技能**单独** embedding + 双路召回 + RRF（同模式 A ④⑤，k=5 → 5 次 embed）
 #    每个技能各自返回该技能最相关的段落 top(m) —— 技能是短词，单技能查询更精准
-# 4) 简历级 AND 聚合（核心）：按 document_id 聚合技能命中矩阵
+# 4) 简历级加权聚合（核心）：按 document_id 聚合技能命中矩阵
 #    hits[resume][skill] = 该技能在该简历任意段落中的最高分（> 阈值即"命中该技能"）
-#    resume.score = 加权总分；按 (命中技能数 desc, 加权总分 desc) 排序
-# 5) 渐进放宽：全部命中不足 top_k → 放宽到命中 k-1, k-2 …（meta.skill_relaxed 记录放宽到几）
-# 6) Rerank 精排 top_k（对命中 ≥ 放宽线的候选段落）
+#    coverage = Σ(命中技能 weight) / Σ(全部技能 weight)          # 权重: required=3.0/preferred=2.0/nice=1.0
+#    semantic = mean(命中技能段落分)                               # 同覆盖度内用语义分排序
+#    resume.score = coverage × 100 + semantic（先保证 AND 语义，再语义精排）
+# 5) 分级放宽（重要程度感知）：required 未全命中 → 不进入候选；
+#    required 全命中但候选不足 top_k → 放宽 preferred 命中数要求（k-1 → 0）；
+#    仍不足 → 允许缺 1 个 required（meta.skill_relaxed 记录放宽级别）
+# 6) Rerank 精排 top_k（对候选段落）
 ```
 
 **为什么技能要单独检索而不是整句**：整句 "java python fastapi agent rag" 的 embedding 是一个混合向量——
 - 语义上"java 工程师"和"会 java 的人"分布不同，混合向量对任一技能都不精准；
 - 简历 A 只提 java、简历 B 只提 python，整句检索可能把两者都排在前面，但**没有一份简历同时满足 AND**；
-- 技能单独检索 + 简历级聚合后，"5 项全命中"的简历自然排最前，部分命中的靠后——AND 语义显式成立。
+- 技能单独检索 + 简历级加权聚合后，"required 全命中 + preferred/nice 命中多"的简历自然排最前——AND 语义与重要程度同时显式成立。
 
-**结构化路与语义路的关系**：结构化路（Candidate.skills AND）命中的候选人 = 精确满足，权重最高；语义路捕获"技能写在正文但没进结构化字段"（如 fastapi/agent/rag 常在项目描述里）的简历。两路按技能命中数统一排序。
+**为什么需要重要程度排序**：用户说"会 java python fastapi agent rag 的人"时，java/python 是硬条件、agent/rag 只是加分——若全部技能等权，一个"5 项都只提一句"的简历可能压过一个"java/python 精通但没提 agent"的简历（后者才是用户要的）。LLM 标注重要程度后，**required 是筛子、preferred 是排序、nice 是微调**，避免等权 AND 把真正合适的人挤下去。
+
+**结构化路与语义路的关系**：结构化路（Candidate.skills 含 required）命中的候选人 = 精确满足，权重最高；语义路捕获"技能写在正文但没进结构化字段"（如 fastapi/agent/rag 常在项目描述里）的简历。两路按 coverage 统一排序。
 
 **降级链（渐进可用，每级都可独立关闭）**：rerank → RRF 融合 → dense 单路 → 空结果+meta
 - rerank 未配置：跳过精排，聚合排序直出
@@ -163,11 +185,17 @@ def _rerank(query, fused, rerank_model, top_n) -> tuple[list, bool]:
 def _aggregate(paragraphs, resume_map) -> list[SearchResult]:
     """Small-to-Big + 简历聚合：0.7*max + 0.3*avg；同简历合并；孤儿段落仍返回 resume 级。"""
 
-def _parse_skills(query, llm_model) -> list[str]:
-    """LLM 查询分解为技能列表（复用 ai_parser._SEARCH_PROMPT_TEMPLATE）；失败返回 []（退模式 A）。"""
+_IMPORTANCE_WEIGHT = {"required": 3.0, "preferred": 2.0, "nice_to_have": 1.0}
+
+def _parse_skills(query, llm_model) -> list[dict]:
+    """LLM 查询分解为 [{skill, importance}]（复用 ai_parser 模板并扩展输出 required/preferred/nice_to_have）；
+    失败返回 []（退模式 A）。"""
+
+def _coverage_score(hits, skills) -> float:
+    """覆盖度 = Σ(命中技能 weight) / Σ(全部技能 weight)；required 未全命中返回 0（不进入候选）。"""
 
 def _search_skill_and(skills, structured_hits, knowledge, embedding_model, candidate_k, similarity, top_k):
-    """模式 B 主干：每技能单独双路召回 → RRF → 简历级 AND 聚合 → 渐进放宽 → rerank。"""
+    """模式 B 主干：每技能单独双路召回 → RRF → 简历级加权聚合(coverage+semantic) → 分级放宽 → rerank。"""
 ```
 
 复用点（不改内核）：
@@ -193,7 +221,9 @@ def _search_skill_and(skills, structured_hits, knowledge, embedding_model, candi
 | SEARCH 审计 | 动作记录、query 原文不在 detail |
 | 参数校验 | query 缺失/超长/mode 非法/top_k 越界 400 |
 | mode=dense | 只走 dense 路（评测用） |
-| 模式 B：查询分解（mock LLM 返回 5 技能） | 走 Skill-AND、结构化路+语义路都调用 |
+| 模式 B：查询分解（mock LLM 返回 5 技能带重要程度） | 走 Skill-AND、importance 解析正确（required/preferred/nice） |
+| 模式 B：覆盖度加权 | required 全命中优先于等权命中、coverage 公式正确 |
+| 模式 B：required 未全命中被筛除 | 不进入候选，meta 记录放宽级别 |
 | 模式 B：技能命中矩阵聚合 | 全命中排前、部分命中靠后、加权总分正确 |
 | 模式 B：渐进放宽 | 全命中不足 top_k → 放宽 k-1，meta.skill_relaxed 记录 |
 | 模式 B：技能解析失败 | 退化模式 A 整句检索，meta.mode=phrase |
@@ -202,7 +232,7 @@ def _search_skill_and(skills, structured_hits, knowledge, embedding_model, candi
 ### 5.2 真实模型冒烟（installer/resume_search_smoke.py，渐进）
 
 1. 入库 5~10 份数据集简历（复用 resume_pipeline_smoke.py 或直接 SQL 造数）
-2. 5 个查询：实体型"有幕墙系统设计经验"、技能型"熟悉 Python 和 Django"、自然语言型"有销售管理经验的候选人"、复合型"3 年以上财务主管经验"、**技能复合型"会 java python fastapi agent rag 的人"（模式 B：分解为 5 技能 → 各自检索 → AND 聚合）**
+2. 6 个查询：实体型"有幕墙系统设计经验"、技能型"熟悉 Python 和 Django"、自然语言型"有销售管理经验的候选人"、复合型"3 年以上财务主管经验"、**技能复合型"会 java python fastapi agent rag 的人"（模式 B：5 技能带重要程度 → 各自检索 → 加权聚合）**、**权重对比型"会 java 精通 python 了解 rag 的人"（验证 required/preferred/nice 分级生效）**
 3. 每查询打印：dense top5 / sparse top5 / RRF top5 / rerank top5 排序对比 + 命中候选人 + meta
 4. 验收：rerank 排序与 RRF 差异可见；meta 字段完整；降级路径可手动触发验证
 
