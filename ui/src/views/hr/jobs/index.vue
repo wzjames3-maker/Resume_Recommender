@@ -350,6 +350,7 @@ import type {
   JobMatchCandidate,
   JobMatchPage,
   JobStatus,
+  Offer,
   RelationType,
   ResumeChannel,
   TerminationReason,
@@ -789,7 +790,7 @@ function openOfferDrawer(job: Job, assignment: Assignment) {
 function createOfferRecord() {
   if (!offerAssignment.value) return
   HrApi.createOffer(offerAssignment.value.id, {
-    salary_amount: offerForm.salary_amount ?? null,
+    salary_amount: offerForm.salary_amount == null ? null : String(offerForm.salary_amount),
     currency: offerForm.currency || 'CNY',
     note: offerForm.note,
   })
