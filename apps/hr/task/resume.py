@@ -6,6 +6,7 @@ import uuid_utils.compat as uuid
 from celery_once import QueueOnce
 from django.db import transaction
 from django.utils import timezone
+from celery.signals import worker_ready
 
 from hr.models import Candidate, ResumeFile, ResumeStatus
 from hr.services.audit import write_audit_log
@@ -13,6 +14,19 @@ from hr.services.resume_parser import extract_text_from_docx, extract_text_from_
 from ops import celery_app
 
 _SYSTEM_USER_ID = uuid.UUID(int=0)
+
+
+@worker_ready.connect
+def register_periodic_cleanup(sender=None, **kwargs):
+    from django_celery_beat.models import CrontabSchedule, PeriodicTask
+
+    crontab, _ = CrontabSchedule.objects.get_or_create(
+        minute="0", hour="3", day_of_week="*", day_of_month="*", month_of_year="*"
+    )
+    PeriodicTask.objects.get_or_create(
+        name="hr-cleanup-orphan-resumes",
+        defaults={"task": "hr.task.resume.cleanup_orphan_resumes", "crontab": crontab},
+    )
 
 
 @celery_app.task
