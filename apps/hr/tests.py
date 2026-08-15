@@ -2029,6 +2029,101 @@ class CandidateDeleteTests(TestCase):
             member.delete_candidate(self.candidate.id)
 
 
+class CandidateRestoreTests(TestCase):
+    """候选恢复（ARCHIVED→ACTIVE）：闭环可用、终态/非归档拒绝、权限与审计"""
+
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, hr_role="ADMIN")
+        self.candidate = Candidate.objects.create(name="Alice", workspace_id="workspace-a")
+        self.job = Job.objects.create(name="Engineer", workspace_id="workspace-a", headcount=1)
+
+    def test_restore_returns_active_and_allows_new_assignment(self):
+        self.service.archive_candidate(self.candidate.id)
+        result = self.service.restore_candidate(self.candidate.id)
+        self.assertEqual(result["status"], "ACTIVE")
+        assignment = self.service.create_assignment(self.job.id, self.candidate.id, {})
+        self.assertEqual(assignment["status"], "PENDING_SCREEN")
+
+    def test_restore_rejects_active_candidate(self):
+        with self.assertRaisesRegex(AppApiException, "not archived"):
+            self.service.restore_candidate(self.candidate.id)
+
+    def test_restore_rejects_deleted_candidate(self):
+        self.service.delete_candidate(self.candidate.id)
+        with self.assertRaisesRegex(AppApiException, "deleted candidate cannot be restored"):
+            self.service.restore_candidate(self.candidate.id)
+
+    def test_restore_rejects_cross_workspace(self):
+        foreign = Candidate.objects.create(name="Bob", workspace_id="workspace-b")
+        with self.assertRaises(NotFound404):
+            self.service.restore_candidate(foreign.id)
+
+    def test_restore_writes_restore_audit(self):
+        self.service.archive_candidate(self.candidate.id)
+        self.service.restore_candidate(self.candidate.id)
+        self.assertTrue(
+            HrAuditLog.objects.filter(
+                workspace_id="workspace-a", user_id=self.user_id, action="RESTORE",
+                object_type="CANDIDATE", object_id=str(self.candidate.id),
+            ).exists()
+        )
+
+    def test_non_admin_cannot_restore(self):
+        self.service.archive_candidate(self.candidate.id)
+        operator = RecruitmentService(workspace_id="workspace-a", user_id=uuid.uuid7(), hr_role="OPERATOR")
+        with self.assertRaises(AppUnauthorizedFailed):
+            operator.restore_candidate(self.candidate.id)
+        self.assertTrue(
+            HrAuditLog.objects.filter(
+                workspace_id="workspace-a", action="ACCESS_DENIED", result="DENIED"
+            ).exists()
+        )
+
+    def test_restore_keeps_terminal_assignment_history(self):
+        assignment_id = self.service.create_assignment(self.job.id, self.candidate.id, {})["id"]
+        self.service.update_assignment(assignment_id, {"status": "REJECTED", "termination_reason": "NOT_FIT"})
+        self.service.archive_candidate(self.candidate.id)
+        self.service.restore_candidate(self.candidate.id)
+        assignment = CandidateAssignment.objects.get(id=assignment_id)
+        self.assertEqual(assignment.status, "REJECTED")
+
+
+class CandidateRestoreApiTests(_HrApiBase):
+    """恢复路由：ADMIN 200；非 ADMIN 403 + ACCESS_DENIED 审计"""
+
+    def setUp(self):
+        self.admin = self._user("hr-admin", "HR Admin")
+        self.operator = self._user("hr-operator", "HR Operator")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.admin.id, role="ADMIN")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.operator.id, role="OPERATOR")
+        self.candidate = Candidate.objects.create(name="Alice", workspace_id="workspace-a")
+
+    def _archived(self):
+        self.candidate.status = "ARCHIVED"
+        self.candidate.save(update_fields=["status"])
+
+    def test_admin_restore_returns_200(self):
+        self._archived()
+        response = self._client(self.admin).put(
+            "/admin/api/workspace/workspace-a/hr/candidates/{}/restore".format(self.candidate.id)
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["data"]["status"], "ACTIVE")
+
+    def test_operator_restore_gets_403_and_audit(self):
+        self._archived()
+        response = self._client(self.operator).put(
+            "/admin/api/workspace/workspace-a/hr/candidates/{}/restore".format(self.candidate.id)
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(
+            HrAuditLog.objects.filter(
+                workspace_id="workspace-a", user_id=self.operator.id, action="ACCESS_DENIED", result="DENIED"
+            ).exists()
+        )
+
+
 class CleanupOrphanResumeTaskTests(TestCase):
     """A4: TTL 清理未关联简历（31 天前清理、30 天内保留、已关联不清理）"""
 

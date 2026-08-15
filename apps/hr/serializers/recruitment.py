@@ -518,6 +518,18 @@ class RecruitmentService:
         write_audit_log(self.workspace_id, self.user_id, "ARCHIVE", "CANDIDATE", candidate.id)
         return self._candidate_output(candidate)
 
+    def restore_candidate(self, candidate_id):
+        self._require_manage()
+        candidate = self._candidate(candidate_id)
+        if candidate.status == CandidateStatus.DELETED:
+            raise AppApiException(400, "deleted candidate cannot be restored")
+        if candidate.status != CandidateStatus.ARCHIVED:
+            raise AppApiException(400, "Candidate is not archived")
+        candidate.status = CandidateStatus.ACTIVE
+        candidate.save(update_fields=["status", "update_time"])
+        write_audit_log(self.workspace_id, self.user_id, "RESTORE", "CANDIDATE", candidate.id)
+        return self._candidate_output(candidate)
+
     def delete_candidate(self, candidate_id):
         self._require_manage()
         candidate = self._candidate(candidate_id)

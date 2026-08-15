@@ -49,6 +49,9 @@ const updateCandidate = (candidateId: string, data: Partial<Candidate>) =>
 const archiveCandidate = (candidateId: string) =>
   put(`${prefix.value}/candidates/${candidateId}/archive`) as Promise<Result<Candidate>>
 
+const restoreCandidate = (candidateId: string) =>
+  put(`${prefix.value}/candidates/${candidateId}/restore`) as Promise<Result<Candidate>>
+
 const deleteCandidate = (candidateId: string) =>
   put(`${prefix.value}/candidates/${candidateId}/delete`) as Promise<Result<Candidate>>
 
@@ -177,6 +180,7 @@ export default {
   parseSearch,
   putAiConfig,
   reopenJob,
+  restoreCandidate,
   updateAccess,
   updateAssignment,
   updateCandidate,

@@ -66,6 +66,7 @@
             <el-button v-if="isHrAdmin" link type="primary" @click="openCandidateDialog(row)">编辑</el-button>
             <el-button v-if="isHrOperator" link type="primary" :disabled="row.status !== 'ACTIVE'" @click="openAssignmentDialog(row)">加入职位</el-button>
             <el-button v-if="isHrAdmin" link type="danger" :disabled="row.status !== 'ACTIVE'" @click="archive(row)">归档</el-button>
+            <el-button v-if="isHrAdmin && row.status === 'ARCHIVED'" link type="success" @click="restore(row)">恢复</el-button>
             <el-button v-if="isHrAdmin" link type="danger" @click="removeCandidate(row)">删除</el-button>
             <el-button link type="primary" @click="openResumeListDialog(row)">简历</el-button>
             <el-button v-if="isHrAdmin" link type="danger" :disabled="!row.duplicate_ids?.length" @click="openMergeDialog(row)">合并</el-button>
@@ -153,7 +154,10 @@
           <el-table-column prop="note" label="备注" show-overflow-tooltip />
         </el-table>
       </div>
-      <template #footer><el-button @click="candidateDetailVisible = false">关闭</el-button></template>
+      <template #footer>
+        <el-button @click="candidateDetailVisible = false">关闭</el-button>
+        <el-button v-if="isHrAdmin && candidateDetail?.status === 'ARCHIVED'" type="success" @click="restore(candidateDetail)">恢复</el-button>
+      </template>
     </el-dialog>
 
     <el-dialog v-model="uploadDialogVisible" title="上传简历" width="520px">
@@ -479,6 +483,19 @@ function archive(candidate: Candidate) {
     .then(() => {
       MsgSuccess('候选人已归档')
       refresh()
+    })
+    .catch(() => {})
+}
+
+function restore(candidate: Candidate) {
+  MsgConfirm('恢复候选人', `将 ${candidate.name} 恢复为在库状态，可继续加入职位。`)
+    .then(() => HrApi.restoreCandidate(candidate.id))
+    .then(() => {
+      MsgSuccess('候选人已恢复')
+      refresh()
+      if (candidateDetailVisible.value && candidateDetail.value?.id === candidate.id) {
+        openCandidateDetail(candidate)
+      }
     })
     .catch(() => {})
 }

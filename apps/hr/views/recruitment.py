@@ -84,6 +84,13 @@ class CandidateDetailAPI(APIView):
         def put(self, request, workspace_id, candidate_id):
             return result.success(_service(request, workspace_id).archive_candidate(candidate_id))
 
+    class Restore(APIView):
+        authentication_classes = [TokenAuth]
+
+        @hr_admin_required
+        def put(self, request, workspace_id, candidate_id):
+            return result.success(_service(request, workspace_id).restore_candidate(candidate_id))
+
     class Delete(APIView):
         authentication_classes = [TokenAuth]
 
