@@ -5,6 +5,8 @@
     @date：2026/8/14
     @desc: HR 操作审计与授权查询 helper
 """
+import json
+
 import uuid_utils.compat as uuid
 
 from hr.models import HrAccess, HrAuditLog
@@ -19,8 +21,10 @@ def write_audit_log(workspace_id, user_id, action, object_type="OTHER", object_i
     :param object_type:  HrAuditObjectType 取值
     :param object_id:    对象 ID 或描述
     :param result:       SUCCESS / FAILED / DENIED
-    :param detail:       简短补充
+    :param detail:       简短补充（str 原样入库；dict 序列化为 JSON 字符串，保证可解析）
     """
+    if isinstance(detail, dict):
+        detail = json.dumps(detail, ensure_ascii=False)
     HrAuditLog.objects.create(
         workspace_id=workspace_id,
         user_id=user_id,

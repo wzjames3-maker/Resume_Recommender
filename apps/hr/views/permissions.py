@@ -43,6 +43,26 @@ def hr_access_required(func):
     return run
 
 
+def hr_operator_required(func):
+    """
+    要求用户具备 HR OPERATOR 或 ADMIN 角色；否则 403 并写 ACCESS_DENIED 审计。
+    用于可读敏感数据（简历全文/流转日志等）的接口，VIEWER 一律拒绝。
+    """
+
+    def run(view, request, **kwargs):
+        user_id = _current_user_id(request)
+        if user_id is None:
+            raise AppUnauthorizedFailed(401, "Authentication credentials were not provided")
+        role = get_hr_role(kwargs.get("workspace_id"), user_id)
+        if role not in (HrRole.OPERATOR, HrRole.ADMIN):
+            _deny(request, kwargs.get("workspace_id"))
+            raise AppUnauthorizedFailed(403, "HR operator permission is required")
+        request.hr_role = role
+        return func(view, request, **kwargs)
+
+    return run
+
+
 def hr_admin_required(func):
     """
     要求用户具备 HR ADMIN 角色；否则 403 并写 ACCESS_DENIED 审计。

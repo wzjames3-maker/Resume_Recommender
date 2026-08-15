@@ -209,12 +209,12 @@ def _search_skill_and(skills, knowledge, embedding_model, candidate_k, similarit
         hit_threshold = max(similarity, top_sim * 0.75)
         for item in recall["dense"]:
             if item.get("similarity", 0) >= hit_threshold:
-                # 段落 → document 映射稍后统一补全，这里先记 paragraph 级命中
+                # 段落 → document 映射稍后统一补全，这里先记 paragraph 级命中。
+                # 注意：pool 中可能已有该 pid（RRF 融合阶段），setdefault 不覆盖，
+                # 因此 hit_skills 只能通过 setdefault+append 单次追加，避免双写。
                 pid = str(item["paragraph_id"])
-                pool.setdefault(pid, {"paragraph_id": pid, "rrf": 0.0,
-                                      "dense": item.get("similarity", 0.0), "sparse": 0.0,
-                                      "hit_skills": [skill_index]})
-                entry = pool[pid]
+                entry = pool.setdefault(pid, {"paragraph_id": pid, "rrf": 0.0,
+                                              "dense": item.get("similarity", 0.0), "sparse": 0.0})
                 entry.setdefault("hit_skills", []).append(skill_index)
     # 补全段落 → document 映射
     p_list = list_paragraph(list(pool.keys()))
@@ -252,7 +252,7 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
         raise AppApiException(400, "query is required")
     if len(query) > _MAX_QUERY_LENGTH:
         raise AppApiException(400, "query is too long")
-    if mode not in _MODE_CHOICES:
+    if not isinstance(mode, str) or mode not in _MODE_CHOICES:
         raise AppApiException(400, "mode must be one of auto|hybrid|dense|phrase|skills")
     if not isinstance(top_k, int) or not (1 <= top_k <= 20):
         raise AppApiException(400, "top_k must be in [1, 20]")

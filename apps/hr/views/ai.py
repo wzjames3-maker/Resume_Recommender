@@ -77,6 +77,8 @@ class HrResumeSearchAPI(APIView):
             similarity = float(similarity)
         except (TypeError, ValueError):
             raise AppApiException(400, "top_k/recall_k/similarity must be numbers")
+        if not isinstance(mode, str) or mode not in ("auto", "hybrid", "dense", "phrase", "skills"):
+            raise AppApiException(400, "mode must be one of auto|hybrid|dense|phrase|skills")
         return result.success(search_resumes(
             workspace_id,
             query,

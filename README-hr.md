@@ -163,7 +163,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
 
 - 切片器：`sanitize_resume_text()`（含 OCR 分号流自动转行：分号 ≥5 且基本无换行时转行式文本，使 LLM 行号边界协议可用）+ ResumeSplitter（LLM 行号边界标注主干 + L2 校验[越界/重叠/覆盖/500 字上限] + L3 规则/smart 降级 + PII 掩码），单测 11 例（apps/hr/services/resume_splitter.py，含超长单行/超长段降级用例）。
 - 入库打通：`ResumeFile.document_id`（迁移 0013）+ hr/services/resume_index.py（简历知识库幂等创建/入库/删除/启停用）；`parse_resume_task` 解析成功后自动「清洗→LLM 切片→建 Document/Paragraph→向量化」，失败不阻塞建档；候选人删除/合并清文档向量、归档/恢复同步 is_active。
-- 数据流转日志：ResumeFlowLog（迁移 0014/0015）+ 查询 API `GET /workspace/{ws}/hr/resumes/{id}/flow-logs`；UPLOAD/EXTRACT/SANITIZE/SPLIT/DOCUMENT/LIFECYCLE 六节点，SPLIT 记录每个 chunk 完整内容（title/content/length/pii）、EXTRACT/SANITIZE 保留全文，可审计逐节点数据。
+- 数据流转日志：ResumeFlowLog（迁移 0014/0015）+ 查询 API `GET /workspace/{ws}/hr/resumes/{id}/flow-logs`；UPLOAD/EXTRACT/SANITIZE/SPLIT/DOCUMENT/LIFECYCLE 六节点，SPLIT 记录每个 chunk 完整内容（title/content/length/pii）、EXTRACT/SANITIZE 保留全文，可审计逐节点数据。**该 API 仅 OPERATOR+ 可访问**（EXTRACT/SANITIZE 含未脱敏全文，VIEWER 一律 403，防止绕过 VIEWER 脱敏读取简历 PII）。
 - docx 表格排版简历：extract_text_from_docx 遍历段落+表格单元格（合并单元格去重）；数据集真实表格简历端到端 8 段 → 检索命中 0.758。
 - 真实模型验证：切片冒烟 10/10 保真；端到端冒烟 3/3（上传→切片→SiliconFlow 向量化 SUCCESS→检索命中"幕墙系统设计" 0.665）；**数据集 30 份压力测试 30/30 成功、29/30 LLM 路径、30/30 内容无改写**（SenseNova 需透传 `thinking=disabled` 禁推理流，已内置于适配器；脚本 installer/resume_splitter_dataset30.py）。
 - 语义检索（阶段 3，2026-08-16）：POST /workspace/{ws}/hr/resumes/search——双路召回（dense + sparse 关键词路）→ Python RRF(k=60) 融合 → bge-reranker-v2-m3 精排 → Small-to-Big 简历聚合；模式 B（Skill-AND）技能复合检索（LLM 有序技能分解 → 逐技能双路召回 → 命中向量字典序 → rerank 精排）；hr_access_required + VIEWER 脱敏 + SEARCH 审计（查询原文不入库）；无 rerank/LLM 自动降级。单测 13 例（ResumeSearchTests 11 + AiService 配置扩展 2）。

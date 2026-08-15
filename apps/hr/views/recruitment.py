@@ -12,7 +12,7 @@ from common import result
 from common.auth import TokenAuth
 from common.exception.app_exception import AppApiException
 from hr.serializers.recruitment import CANDIDATE_EXPORT_FIELDS, RecruitmentService
-from hr.views.permissions import hr_access_required, hr_admin_required
+from hr.views.permissions import hr_access_required, hr_admin_required, hr_operator_required
 
 
 def _service(request, workspace_id):
@@ -302,11 +302,11 @@ class ResumeBatchStatusAPI(APIView):
 
 
 class ResumeFlowLogAPI(APIView):
-    """简历数据流转日志查询"""
+    """简历数据流转日志查询（EXTRACT/SANITIZE 含未脱敏全文，仅 OPERATOR+ 可读）"""
 
     authentication_classes = [TokenAuth]
 
-    @hr_access_required
+    @hr_operator_required
     def get(self, request, workspace_id, resume_id):
         from hr.services.flow_log import list_flow_logs
 

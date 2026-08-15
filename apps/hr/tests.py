@@ -3291,6 +3291,9 @@ class ResumeIndexTests(TestCase):
             model_name="BAAI/bge-large-zh-v1.5", provider="model_openai_provider",
             credential="{}", meta={}, workspace_id="default",
         )
+        # 测试库由主库 TEMPLATE 克隆（settings base/web.py TEST.TEMPLATE），可能带真实 EMBEDDING 模型；
+        # get_or_create_resume_knowledge 取 filter().first()，隔离其余模型保证断言确定（事务回滚不影响其他测试）
+        Model.objects.filter(model_type="EMBEDDING").exclude(id=self.model.id).delete()
 
     def _resume(self):
         return ResumeFile.objects.create(
@@ -3497,6 +3500,37 @@ class ResumeFlowLogTests(TestCase):
         self.assertEqual(len(logs), 2)
         self.assertEqual([log["node"] for log in logs], ["UPLOAD", "SPLIT"])
 
+    def test_flow_log_api_requires_operator(self):
+        """PII 防护：flow-logs 含 EXTRACT/SANITIZE 未脱敏全文，VIEWER 必须 403，OPERATOR+ 可读。"""
+        from hr.services.flow_log import log_flow
+
+        resume = self._resume()
+        log_flow(self.workspace_id, "EXTRACT", resume_id=resume.id,
+                 detail={"length": 10, "lines": 2, "source": "txt", "text": "电话：13812345678"})
+        admin = User.objects.create(username="flow-admin-" + uuid.uuid7().hex[:6], nick_name="fa",
+                                    password="p", role="ADMIN")
+        operator = User.objects.create(username="flow-op-" + uuid.uuid7().hex[:6], nick_name="fo",
+                                       password="p", role="USER")
+        viewer = User.objects.create(username="flow-view-" + uuid.uuid7().hex[:6], nick_name="fv",
+                                     password="p", role="USER")
+        HrAccess.objects.create(workspace_id=self.workspace_id, user_id=admin.id, role="ADMIN")
+        HrAccess.objects.create(workspace_id=self.workspace_id, user_id=operator.id, role="OPERATOR")
+        HrAccess.objects.create(workspace_id=self.workspace_id, user_id=viewer.id, role="VIEWER")
+        url = f"/admin/api/workspace/{self.workspace_id}/hr/resumes/{resume.id}/flow-logs"
+        # VIEWER 拒绝（流转日志含未脱敏全文）
+        viewer_client = APIClient()
+        viewer_client.force_authenticate(user=viewer)
+        response = viewer_client.get(url)
+        self.assertEqual(response.status_code, 403)
+        # OPERATOR/ADMIN 可读
+        for user in (operator, admin):
+            client = APIClient()
+            client.force_authenticate(user=user)
+            response = client.get(url)
+            self.assertEqual(response.status_code, 200)
+            nodes = [log["node"] for log in response.json()["data"]]
+            self.assertIn("EXTRACT", nodes)
+
 
 class ResumeSearchTests(TestCase):
     """阶段 3：简历语义检索（模式 A 整句 / 模式 B Skill-AND），mock 检索与 rerank 不调真实模型"""
@@ -3564,12 +3598,15 @@ class ResumeSearchTests(TestCase):
 
     def test_search_validation(self):
         from hr.services.resume_search import search_resumes
-        with self.assertRaises(Exception):
+        with self.assertRaises(AppApiException):
             search_resumes(self.workspace_id, "")
-        with self.assertRaises(Exception):
+        with self.assertRaises(AppApiException):
             search_resumes(self.workspace_id, "x" * 3000)
-        with self.assertRaises(Exception):
+        with self.assertRaises(AppApiException):
             search_resumes(self.workspace_id, "ok", mode="bad")
+        # 非字符串 mode（list 等）必须 400 而非 TypeError 500（修复：类型+枚举双校验）
+        with self.assertRaises(AppApiException):
+            search_resumes(self.workspace_id, "ok", mode=["auto"])
 
     def test_phrase_mode_calls_dual_and_aggregates(self):
         from hr.services.resume_search import search_resumes
@@ -3744,6 +3781,11 @@ class ResumeSearchTests(TestCase):
         log = HrAuditLog.objects.filter(workspace_id=self.workspace_id, action="SEARCH").first()
         self.assertIsNotNone(log)
         self.assertNotIn("java", str(log.detail))  # 查询原文不入审计
+        # detail 必须为 JSON 字符串（dict 序列化），保证可解析（修复：audit.py 统一序列化）
+        import json
+        parsed = json.loads(log.detail)
+        self.assertEqual(parsed["mode"], "phrase")
+        self.assertEqual(parsed["top_k"], 5)
 
     def test_skill_and_with_rerank(self):
         """模式 B + rerank：精排生效、search_type=skill_ordered_reranked"""
@@ -3769,5 +3811,27 @@ class ResumeSearchTests(TestCase):
         self.assertTrue(result["meta"]["rerank"]["enabled"])
         self.assertEqual(len(result["items"]), 1)
         self.assertIn("rerank", result["items"][0]["score"])
+
+    def test_skill_hit_skills_no_duplicate(self):
+        """修复回归：同一段落命中多个技能时 hit_skills 不得重复（原 setdefault 默认值可双写）。"""
+        from hr.services.resume_search import _search_skill_and
+        p_shared = self._paragraph("Java 和 Python 开发")
+        self._embedding(p_shared)
+        with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()),                 patch("hr.services.resume_search.EmbeddingSearch") as m_emb,                 patch("hr.services.resume_search.KeywordsSearch") as m_key:
+            # 两个技能命中同一段落
+            m_emb.return_value.handle.side_effect = [
+                [{"paragraph_id": str(p_shared.id), "similarity": 0.9}],  # skill 0
+                [{"paragraph_id": str(p_shared.id), "similarity": 0.85}],  # skill 1
+            ]
+            m_key.return_value.handle.return_value = []
+            ordered, b_meta = _search_skill_and(
+                ["java", "python"], self.knowledge, self._fake_embedding_model(), 5, 0.2, 5
+            )
+        doc_paragraphs = b_meta["doc_paragraphs"]
+        rows = doc_paragraphs.get(str(self.document.id), [])
+        self.assertTrue(rows)
+        for row in rows:
+            hit_skills = row.get("hit_skills", [])
+            self.assertEqual(len(hit_skills), len(set(hit_skills)), f"hit_skills 重复: {hit_skills}")
 
 
