@@ -156,8 +156,22 @@
       </div>
       <el-form v-if="addInterviewFormVisible" label-width="88px" class="mb-16 p-16 border rounded">
         <el-row :gutter="16">
-          <el-col :span="12"><el-form-item label="面试官"><el-input v-model="interviewForm.interviewer" /></el-form-item></el-col>
+          <el-col :span="12">
+            <el-form-item label="面试官">
+              <el-select v-model="interviewForm.interviewer_user_id" filterable clearable placeholder="选择成员（可留空填临时面试官）" style="width: 100%">
+                <el-option v-for="member in members" :key="member.id" :label="member.nick_name" :value="member.id" />
+              </el-select>
+            </el-form-item>
+          </el-col>
           <el-col :span="12"><el-form-item label="面试时间"><el-date-picker v-model="interviewForm.scheduled_at" type="datetime" value-format="YYYY-MM-DDTHH:mm:ssZ" style="width: 100%" /></el-form-item></el-col>
+        </el-row>
+        <el-row :gutter="16">
+          <el-col :span="12">
+            <el-form-item label="反馈截止">
+              <el-date-picker v-model="interviewForm.feedback_deadline" type="datetime" value-format="YYYY-MM-DDTHH:mm:ssZ" placeholder="可选" style="width: 100%" />
+            </el-form-item>
+          </el-col>
+          <el-col :span="12"><el-form-item label="临时面试官"><el-input v-model="interviewForm.interviewer" placeholder="未选成员时使用" /></el-form-item></el-col>
         </el-row>
         <div class="text-right">
           <el-button size="small" @click="addInterviewFormVisible = false">取消</el-button>
@@ -169,6 +183,16 @@
         <el-table-column prop="interviewer" label="面试官" min-width="100" />
         <el-table-column prop="scheduled_at" label="时间" min-width="150">
           <template #default="{ row }">{{ row.scheduled_at ? new Date(row.scheduled_at).toLocaleString() : '-' }}</template>
+        </el-table-column>
+        <el-table-column label="反馈截止" min-width="170">
+          <template #default="{ row }">
+            <span v-if="row.feedback_deadline">
+              {{ new Date(row.feedback_deadline).toLocaleString() }}
+              <el-tag v-if="row.feedback_submitted_at" type="success" size="small">已提交</el-tag>
+              <el-tag v-else-if="row.status === 'PENDING' && new Date(row.feedback_deadline) < new Date()" type="danger" size="small">逾期</el-tag>
+            </span>
+            <span v-else>-</span>
+          </template>
         </el-table-column>
         <el-table-column label="结果" width="130">
           <template #default="{ row }">
@@ -347,7 +371,12 @@ const interviewList = ref<Interview[]>([])
 const interviewAssignment = ref<Assignment | null>(null)
 const interviewCandidateName = ref('')
 const addInterviewFormVisible = ref(false)
-const interviewForm = reactive({ interviewer: '', scheduled_at: null as string | null })
+const interviewForm = reactive({
+  interviewer: '',
+  interviewer_user_id: null as string | null,
+  feedback_deadline: null as string | null,
+  scheduled_at: null as string | null,
+})
 const closeDialogVisible = ref(false)
 const closingJob = ref<Job | null>(null)
 const closeReason = ref('')
@@ -594,13 +623,19 @@ function addMatchToJob(job: Job, match: JobMatchCandidate) {
     .catch(() => {})
 }
 
+function resetInterviewForm() {
+  interviewForm.interviewer = ''
+  interviewForm.interviewer_user_id = null
+  interviewForm.feedback_deadline = null
+  interviewForm.scheduled_at = null
+}
+
 function openInterviewDrawer(job: Job, assignment: Assignment) {
   interviewAssignment.value = assignment
   interviewCandidateName.value = assignment.candidate_name || ''
   interviewList.value = []
   addInterviewFormVisible.value = false
-  interviewForm.interviewer = ''
-  interviewForm.scheduled_at = null
+  resetInterviewForm()
   interviewDrawerVisible.value = true
   HrApi.getInterviews(assignment.id).then((response) => {
     interviewList.value = response.data
@@ -609,12 +644,11 @@ function openInterviewDrawer(job: Job, assignment: Assignment) {
 
 function createInterviewRecord() {
   if (!interviewAssignment.value) return
-  HrApi.createInterview(interviewAssignment.value.id, interviewForm)
+  HrApi.createInterview(interviewAssignment.value.id, { ...interviewForm })
     .then(() => {
       MsgSuccess('面试已安排')
       addInterviewFormVisible.value = false
-      interviewForm.interviewer = ''
-      interviewForm.scheduled_at = null
+      resetInterviewForm()
       if (interviewAssignment.value) {
         HrApi.getInterviews(interviewAssignment.value.id).then((response) => {
           interviewList.value = response.data

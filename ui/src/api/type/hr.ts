@@ -28,11 +28,28 @@ export interface Interview {
   assignment_id: string
   round_no: number
   interviewer: string
+  interviewer_user_id: string | null
+  feedback_deadline: string | null
+  feedback_submitted_at: string | null
   scheduled_at: string | null
   status: InterviewStatus
   feedback: string
   create_time: string
   update_time: string
+}
+
+export interface MyInterview {
+  interview_id: string
+  assignment_id: string
+  round_no: number
+  scheduled_at: string | null
+  status: InterviewStatus
+  feedback: string
+  feedback_deadline: string | null
+  feedback_submitted_at: string | null
+  is_overdue: boolean
+  candidate_name: string
+  job_name: string
 }
 
 export interface Candidate {

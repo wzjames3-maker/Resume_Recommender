@@ -27,6 +27,12 @@ const hrRouter = {
       component: () => import('@/views/hr/jobs/index.vue'),
     },
     {
+      path: '/hr/my-interviews',
+      name: 'hr-my-interviews',
+      meta: { title: '我的面试', activeMenu: '/hr', sameRoute: 'hr' },
+      component: () => import('@/views/hr/my-interviews/index.vue'),
+    },
+    {
       path: '/hr/access',
       name: 'hr-access',
       meta: { title: '人事成员', activeMenu: '/hr', sameRoute: 'hr', permission: [HrRoleConst.ADMIN] },

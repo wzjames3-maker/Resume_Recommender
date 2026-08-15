@@ -18,6 +18,7 @@ import type {
   JobCloseReason,
   JobDetail,
   JobMatchPage,
+  MyInterview,
   PageResult,
   ResumeBatchStatus,
   ResumeFile,
@@ -107,6 +108,12 @@ const getInterviews = (assignmentId: string) =>
 const updateInterview = (interviewId: string, data: Partial<Interview>) =>
   put(`${prefix.value}/interviews/${interviewId}`, data) as Promise<Result<Interview>>
 
+const getMyInterviews = () =>
+  get(`${prefix.value}/interviews/mine`) as Promise<Result<MyInterview[]>>
+
+const submitInterviewFeedback = (interviewId: string, data: Record<string, unknown>) =>
+  put(`${prefix.value}/interviews/${interviewId}/feedback`, data) as Promise<Result<Interview>>
+
 const getAiConfig = () => get(`${prefix.value}/ai/config`) as Promise<Result<HrConfig>>
 
 const putAiConfig = (data: Record<string, unknown>) =>
@@ -174,6 +181,7 @@ export default {
   getJobMatches,
   getJobs,
   getMyHrRole,
+  getMyInterviews,
   getResumeBatchStatus,
   getResumeContent,
   mergeCandidates,
@@ -181,6 +189,7 @@ export default {
   putAiConfig,
   reopenJob,
   restoreCandidate,
+  submitInterviewFeedback,
   updateAccess,
   updateAssignment,
   updateCandidate,
