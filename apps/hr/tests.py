@@ -3103,3 +3103,134 @@ class HandoffApiTests(_HrApiBase):
         )
         self.assertEqual(response.json()["code"], 400)
 
+
+
+class ResumeSplitterTests(SimpleTestCase):
+    """C 阶段切片器：清洗 / LLM 边界标注 / L2 校验 / L3 降级 / PII（协议见综合方案 §6.8）"""
+
+    _RESUME = (
+        "姓名：李冠光\n"
+        "\n"
+        "【教育经历】\n"
+        "- 院校：北京师范大学 | 学位：硕士 | 毕业时间：2005.06\n"
+        "\n"
+        "【工作经历】\n"
+        "- 时间：1992.09-2017.10 | 单位：深圳大运置业 | 职务：后端开发\n"
+        "  内容：幕墙系统的概念设计及深化设计，与建筑师沟通。\n"
+    )
+
+    @staticmethod
+    def _stub(payload):
+        return lambda prompt: payload
+
+    def test_sanitize_resume_text(self):
+        from hr.services.resume_splitter import sanitize_resume_text
+
+        raw = "\x00姓名：张三\r\n\r\n\r\n  技能：  Python  \r\n"
+        self.assertEqual(sanitize_resume_text(raw), "姓名：张三\n\n 技能： Python")
+        self.assertEqual(sanitize_resume_text("a\x00b\x00c"), "abc")
+
+    def test_mask_pii(self):
+        from hr.services.resume_splitter import mask_pii
+
+        masked = mask_pii("电话 13812345678 邮箱 a@b.com 身份证 11010119900307873X")
+        self.assertNotIn("13812345678", masked)
+        self.assertNotIn("a@b.com", masked)
+        self.assertNotIn("11010119900307873X", masked)
+        self.assertIn("[已脱敏]", masked)
+        # 带分隔符的手机号变体
+        self.assertNotIn("138 1234 5678", mask_pii("电话：138 1234 5678"))
+
+    def test_llm_split_ok(self):
+        from hr.services.resume_splitter import split_resume_text
+
+        payload = (
+            '{"chunks": ['
+            '{"title": "基本信息", "start_line": 1, "end_line": 1},'
+            '{"title": "教育经历-北京师范大学", "start_line": 3, "end_line": 4},'
+            '{"title": "工作经历-深圳大运置业 后端", "start_line": 6, "end_line": 8}'
+            "]}"
+        )
+        result = split_resume_text(self._RESUME, self._stub(payload))
+        self.assertEqual(len(result), 3)
+        self.assertEqual(result[0]["title"], "基本信息")
+        self.assertIn("深圳大运置业", result[2]["content"])
+        self.assertIn("幕墙系统", result[2]["content"])
+        # 保真：所有非空行都出现在某段中
+        joined = "\n".join(row["content"] for row in result)
+        for line in self._RESUME.split("\n"):
+            if line.strip():
+                self.assertIn(line.strip(), joined)
+
+    def test_llm_json_wrapped_in_code_block(self):
+        from hr.services.resume_splitter import split_resume_text
+
+        payload = (
+            '\x60\x60\x60json\n{"chunks": ['
+            '{"title": "基本信息", "start_line": 1, "end_line": 1},'
+            '{"title": "教育经历-北京师范大学", "start_line": 3, "end_line": 4},'
+            '{"title": "工作经历-深圳大运置业 后端", "start_line": 6, "end_line": 8}'
+            "]}\n\x60\x60\x60"
+        )
+        result = split_resume_text(self._RESUME, self._stub(payload))
+        self.assertEqual(len(result), 3)
+
+    def test_llm_out_of_range_retry_then_ok(self):
+        from hr.services.resume_splitter import split_resume_text
+
+        bad = '{"chunks": [{"title": "x", "start_line": 99, "end_line": 100}]}'
+        good = (
+            '{"chunks": ['
+            '{"title": "基本信息", "start_line": 1, "end_line": 1},'
+            '{"title": "教育经历-北京师范大学", "start_line": 3, "end_line": 4},'
+            '{"title": "工作经历-深圳大运置业 后端", "start_line": 6, "end_line": 8}'
+            "]}"
+        )
+        calls = []
+
+        def flaky(prompt):
+            calls.append(1)
+            return bad if len(calls) == 1 else good
+
+        result = split_resume_text(self._RESUME, flaky)
+        self.assertEqual(len(result), 3)
+        self.assertEqual(len(calls), 2)  # 第一次失败，重试成功
+
+    def test_llm_gap_falls_back_to_rules(self):
+        from hr.services.resume_splitter import split_resume_text
+
+        # 两次都漏掉工作经历内容行（覆盖不全）→ 走规则降级
+        payload = (
+            '{"chunks": ['
+            '{"title": "基本信息", "start_line": 1, "end_line": 1},'
+            '{"title": "教育经历-北京师范大学", "start_line": 3, "end_line": 4}'
+            "]}"
+        )
+        result = split_resume_text(self._RESUME, self._stub(payload))
+        # 规则降级结果：教育/工作两个区块均存在
+        self.assertGreaterEqual(len(result), 2)
+        self.assertTrue(any("教育经历" in row["title"] for row in result))
+        self.assertTrue(any("工作经历" in row["title"] for row in result))
+
+    def test_llm_invalid_json_falls_back_to_rules(self):
+        from hr.services.resume_splitter import split_resume_text
+
+        result = split_resume_text(self._RESUME, self._stub("not a json"))
+        self.assertGreaterEqual(len(result), 2)
+        self.assertTrue(any("教育经历" in row["title"] for row in result))
+
+    def test_smart_fallback_unstructured(self):
+        from hr.services.resume_splitter import split_resume_text
+
+        text = "第一段。\n\n第二段内容。\n\n第三段内容。\n\n第四段内容。\n\n第五段内容。"
+        result = split_resume_text(text, self._stub("garbage"))
+        self.assertGreaterEqual(len(result), 1)
+        joined = "\n".join(row["content"] for row in result)
+        self.assertIn("第一段", joined)
+        self.assertIn("第五段", joined)
+
+    def test_short_text_raises(self):
+        from hr.services.resume_splitter import split_resume_text
+
+        with self.assertRaises(ValueError):
+            split_resume_text("太短", self._stub("{}"))
