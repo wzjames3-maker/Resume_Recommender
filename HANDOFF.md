@@ -57,7 +57,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 | `README-hr.md` | 各期验收记录（一期到 A 阶段，含测试数演进） |
 | `docs/superpowers/specs/2026-08-13-*.md` | 二至七期规格（简历/搜索匹配/AI/异步/合并） |
 
-## 3. 已完成（当前测试基线：四 app + ops 231/231 PASS，HR 215）
+## 3. 已完成（当前测试基线：四 app + ops 240/240 PASS，HR 224）
 
 ### 3.1 PRD 七期（基础能力）
 
@@ -135,7 +135,7 @@ Embedding 语义召回、可解释匹配、人工反馈、索引与候选人生�
 ## 7. 提交流程与账本
 
 - 每期：docs 规格提交 → docs 实现计划提交 → 实现（TDD）→ 全量验收 → 审查 → 修复
-- 测试数演进：23→31→39→47→76→86→107→141→183→207→215（HR）→227（四 app）→231（四 app + ops 4，2026-08-15）
+- 测试数演进：23→31→39→47→76→86→107→141→183→207→215（HR）→227（四 app）→231（四 app + ops 4，2026-08-15）→240（+候选恢复 9，2026-08-15）
 - 规格/计划/验收文档路径规范：`docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`、`docs/superpowers/plans/`、`docs/superpowers/audits/YYYY-MM-DD-<topic>-baseline.md`
 - 提交信息：`feat(人事)/fix(人事)/docs(人事)/test(人事): 中文描述`
 
@@ -169,7 +169,7 @@ Embedding 语义召回、可解释匹配、人工反馈、索引与候选人生�
 
 | 缺口 | 说明 |
 |---|---|
-| **候选人恢复（ARCHIVED→ACTIVE）** | PRD §4.1 与 A3 能力矩阵宣称可恢复，但无路由、无方法、无前端按钮——归档后无法恢复，形成死路。RESTORE 审计动作仅用于指派误拒绝恢复 |
+| **候选人恢复（ARCHIVED→ACTIVE）** | **已修复（2026-08-15）**：新增 `PUT /candidates/{id}/restore`（ADMIN，`hr_admin_required` + `_require_manage` 双层校验）、`restore_candidate` 服务方法（DELETED/非 ARCHIVED 拒绝 400）、`RESTORE` 审计（object_type=CANDIDATE）、前端列表/详情恢复按钮；9 个新测试，全量 240/240（见规格 `docs/superpowers/specs/2026-08-15-hr-candidate-restore-design.md`）。RESTORE 审计动作现同时用于指派误拒绝恢复（ASSIGNMENT）与候选人恢复（CANDIDATE） |
 
 ### 8.4 历史阶段记录（非错误，可保留）
 
