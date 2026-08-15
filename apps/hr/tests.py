@@ -14,6 +14,10 @@ from rest_framework.test import APIClient
 import uuid_utils.compat as uuid
 
 from common.exception.app_exception import AppApiException, AppUnauthorizedFailed, NotFound404
+from django.contrib.postgres.search import SearchVector
+from django.db.models import Value
+from unittest.mock import Mock
+
 from hr.models import (
     AssignmentStatus,
     Candidate,
@@ -37,7 +41,7 @@ from hr.serializers.offer import OfferService, OnboardingService
 from hr.serializers.recruitment import CANDIDATE_EXPORT_FIELDS, RecruitmentService
 from hr.services.ai_parser import extract_skills, parse_search_conditions
 from hr.services.resume_index import delete_resume_index, get_or_create_resume_knowledge, index_resume, set_resume_index_active
-from knowledge.models import Document, Paragraph
+from knowledge.models import Document, Embedding, Knowledge, KnowledgeFolder, KnowledgeScope, KnowledgeType, Paragraph
 from models_provider.models import Model
 from hr.services.resume_parser import parse_resume_text
 from users.models import User
@@ -752,14 +756,14 @@ class AiServiceTests(TestCase):
         self.service = AiService(workspace_id="workspace-a", user_id=self.user_id, hr_role="ADMIN")
 
     def test_config_default_is_null(self):
-        self.assertEqual(self.service.get_config(), {"llm_model_id": None})
+        self.assertEqual(self.service.get_config(), {"llm_model_id": None, "rerank_model_id": None})
 
     @patch("hr.serializers.ai.get_model_by_id")
     def test_save_and_get_config(self, mock_get_model):
         mock_get_model.return_value = SimpleNamespace(model_type="LLM")
         saved = self.service.save_config({"llm_model_id": "model-1"})
-        self.assertEqual(saved, {"llm_model_id": "model-1"})
-        self.assertEqual(self.service.get_config(), {"llm_model_id": "model-1"})
+        self.assertEqual(saved, {"llm_model_id": "model-1", "rerank_model_id": None})
+        self.assertEqual(self.service.get_config(), {"llm_model_id": "model-1", "rerank_model_id": None})
         mock_get_model.assert_called_once_with("model-1", "workspace-a")
 
     @patch("hr.serializers.ai.get_model_by_id")
@@ -773,6 +777,19 @@ class AiServiceTests(TestCase):
         mock_get_model.side_effect = Exception("Model does not exist")
         with self.assertRaisesRegex(AppApiException, "模型不存在"):
             self.service.save_config({"llm_model_id": "model-1"})
+
+    @patch("hr.serializers.ai.get_model_by_id")
+    def test_save_config_with_rerank(self, mock_get_model):
+        mock_get_model.side_effect = [SimpleNamespace(model_type="LLM"), SimpleNamespace(model_type="RERANKER")]
+        saved = self.service.save_config({"llm_model_id": "model-1", "rerank_model_id": "rerank-1"})
+        self.assertEqual(saved, {"llm_model_id": "model-1", "rerank_model_id": "rerank-1"})
+        self.assertEqual(self.service.get_config()["rerank_model_id"], "rerank-1")
+
+    @patch("hr.serializers.ai.get_model_by_id")
+    def test_save_config_rejects_non_rerank_model(self, mock_get_model):
+        mock_get_model.side_effect = [SimpleNamespace(model_type="LLM"), SimpleNamespace(model_type="EMBEDDING")]
+        with self.assertRaisesRegex(AppApiException, "RERANKER"):
+            self.service.save_config({"llm_model_id": "model-1", "rerank_model_id": "rerank-1"})
 
     def test_save_config_requires_model_id(self):
         with self.assertRaisesRegex(AppApiException, "llm_model_id is required"):
@@ -791,7 +808,7 @@ class AiServiceTests(TestCase):
     def test_parse_search_rejects_non_llm_configured_model(self, mock_get_model):
         HrConfig.objects.create(workspace_id="workspace-a", llm_model_id="model-1")
         mock_get_model.return_value = SimpleNamespace(model_type="EMBEDDING")
-        with self.assertRaisesRegex(AppApiException, "LLM"):
+        with self.assertRaisesRegex(AppApiException, "AI 设置"):
             self.service.parse_search("找 Python 后端")
 
     def test_extract_skills_requires_config(self):
@@ -3479,3 +3496,252 @@ class ResumeFlowLogTests(TestCase):
         logs = list_flow_logs(self.workspace_id, resume_id=resume.id)
         self.assertEqual(len(logs), 2)
         self.assertEqual([log["node"] for log in logs], ["UPLOAD", "SPLIT"])
+
+
+class ResumeSearchTests(TestCase):
+    """阶段 3：简历语义检索（模式 A 整句 / 模式 B Skill-AND），mock 检索与 rerank 不调真实模型"""
+
+    def setUp(self):
+        self.workspace_id = "workspace-search"
+        self.user = User.objects.create(
+            username="search-" + uuid.uuid7().hex[:8], nick_name="search", password="p", role="ADMIN"
+        )
+        self.model = Model.objects.create(
+            id=uuid.uuid7(), name="bge-search", status="SUCCESS", model_type="EMBEDDING",
+            model_name="BAAI/bge-large-zh-v1.5", provider="model_openai_provider",
+            credential="{}", meta={}, workspace_id="default",
+        )
+        # 简历知识库
+        KnowledgeFolder.objects.get_or_create(
+            id="default", defaults={"name": "default", "workspace_id": "default"}
+        )
+        self.knowledge = Knowledge.objects.create(
+            id=uuid.uuid7(), workspace_id=self.workspace_id, name="简历语义索引",
+            desc="", embedding_model_id=str(self.model.id), type=KnowledgeType.BASE.value,
+            scope=KnowledgeScope.WORKSPACE.value, user_id=self.user.id,
+        )
+        self.candidate = Candidate.objects.create(
+            workspace_id=self.workspace_id, user_id=self.user.id, name="李冠光",
+            skills=["java", "python"], highest_degree="硕士",
+        )
+        self.document = Document.objects.create(
+            id=uuid.uuid7(), knowledge_id=self.knowledge.id, name="李冠光.docx",
+            char_length=10, user_id=self.user.id,
+        )
+        self.resume = ResumeFile.objects.create(
+            workspace_id=self.workspace_id, file_name="李冠光.docx", extension="docx",
+            file_path="/tmp/x.docx", file_size=1, sha256="sha-" + uuid.uuid7().hex,
+            source_channel="OTHER", status=ResumeStatus.SUCCESS, user_id=self.user.id,
+            candidate=self.candidate, document_id=self.document.id,
+        )
+
+    def _paragraph(self, content="熟悉 Java 后端开发", title="工作经历"):
+        return Paragraph.objects.create(
+            id=uuid.uuid7(), document_id=self.document.id, knowledge_id=self.knowledge.id,
+            content=content, title=title, status="SUCCESS",
+        )
+
+    def _embedding(self, paragraph, similarity=0.9):
+        return Embedding.objects.create(
+            id=uuid.uuid7(), document_id=self.document.id, paragraph_id=paragraph.id,
+            knowledge_id=self.knowledge.id, embedding=[0.1] * 8,
+            search_vector=SearchVector(Value("java")), is_active=True,
+        )
+
+    def _fake_embedding_model(self):
+        fake = Mock()
+        fake.embed_query.return_value = [0.1] * 8
+        return fake
+
+    def _fake_rerank(self, order=None, raise_exc=False):
+        fake = Mock()
+        if raise_exc:
+            fake.rerank.side_effect = Exception("rerank down")
+        else:
+            order = order if order is not None else list(range(3))
+            fake.rerank.return_value = [{"index": i, "relevance_score": 0.9 - i * 0.1} for i in order]
+        return fake
+
+    def test_search_validation(self):
+        from hr.services.resume_search import search_resumes
+        with self.assertRaises(Exception):
+            search_resumes(self.workspace_id, "")
+        with self.assertRaises(Exception):
+            search_resumes(self.workspace_id, "x" * 3000)
+        with self.assertRaises(Exception):
+            search_resumes(self.workspace_id, "ok", mode="bad")
+
+    def test_phrase_mode_calls_dual_and_aggregates(self):
+        from hr.services.resume_search import search_resumes
+        paragraph = self._paragraph()
+        self._embedding(paragraph)
+        with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()), \
+                patch("hr.services.resume_search.EmbeddingSearch") as m_emb, \
+                patch("hr.services.resume_search.KeywordsSearch") as m_key:
+            m_emb.return_value.handle.return_value = [{"paragraph_id": str(paragraph.id), "similarity": 0.9}]
+            m_key.return_value.handle.return_value = [{"paragraph_id": str(paragraph.id), "similarity": 0.5}]
+            result = search_resumes(self.workspace_id, "java 开发", mode="phrase",
+                                    hr_role="VIEWER", user_id=self.user.id)
+        self.assertEqual(len(result["items"]), 1)
+        item = result["items"][0]
+        self.assertEqual(item["candidate"]["name"], "李冠光")
+        self.assertIn("****", item["candidate"]["phone"]) if item["candidate"].get("phone") else None
+        self.assertEqual(item["document_id"], str(self.document.id))
+        self.assertIn("Java", item["paragraphs"][0]["content"])
+        self.assertTrue(result["meta"]["recall"]["dense"] >= 1)
+
+    def test_rerank_applied_and_meta(self):
+        from hr.services.resume_search import search_resumes
+        paragraph = self._paragraph()
+        self._embedding(paragraph)
+        with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()), \
+                patch("hr.services.resume_search.EmbeddingSearch") as m_emb, \
+                patch("hr.services.resume_search.KeywordsSearch") as m_key:
+            m_emb.return_value.handle.return_value = [{"paragraph_id": str(paragraph.id), "similarity": 0.9}]
+            m_key.return_value.handle.return_value = []
+            result = search_resumes(self.workspace_id, "java", mode="phrase",
+                                    rerank_model=self._fake_rerank(), user_id=self.user.id)
+        self.assertTrue(result["meta"]["rerank"]["enabled"])
+        self.assertFalse(result["meta"]["rerank"]["failed"])
+        self.assertEqual(result["meta"]["search_type"], "hybrid_rrf_reranked")
+
+    def test_rerank_failure_falls_back(self):
+        from hr.services.resume_search import search_resumes
+        paragraph = self._paragraph()
+        self._embedding(paragraph)
+        with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()), \
+                patch("hr.services.resume_search.EmbeddingSearch") as m_emb, \
+                patch("hr.services.resume_search.KeywordsSearch") as m_key:
+            m_emb.return_value.handle.return_value = [{"paragraph_id": str(paragraph.id), "similarity": 0.9}]
+            m_key.return_value.handle.return_value = []
+            result = search_resumes(self.workspace_id, "java", mode="phrase",
+                                    rerank_model=self._fake_rerank(raise_exc=True), user_id=self.user.id)
+        self.assertTrue(result["meta"]["rerank"]["failed"])
+        self.assertEqual(result["meta"]["search_type"], "hybrid_rrf_fallback")
+        self.assertEqual(len(result["items"]), 1)  # 仍返回结果
+
+    def test_aggregation_merges_multiple_paragraphs(self):
+        from hr.services.resume_search import search_resumes
+        p1 = self._paragraph("Java 后端")
+        p2 = self._paragraph("Python 数据分析")
+        self._embedding(p1)
+        self._embedding(p2)
+        with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()), \
+                patch("hr.services.resume_search.EmbeddingSearch") as m_emb, \
+                patch("hr.services.resume_search.KeywordsSearch") as m_key:
+            m_emb.return_value.handle.return_value = [
+                {"paragraph_id": str(p1.id), "similarity": 0.9},
+                {"paragraph_id": str(p2.id), "similarity": 0.8},
+            ]
+            m_key.return_value.handle.return_value = []
+            result = search_resumes(self.workspace_id, "java", mode="phrase")
+        self.assertEqual(len(result["items"]), 1)  # 同一简历合并
+        self.assertEqual(len(result["items"][0]["paragraphs"]), 2)
+
+    def test_empty_result(self):
+        from hr.services.resume_search import search_resumes
+        with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()), \
+                patch("hr.services.resume_search.EmbeddingSearch") as m_emb, \
+                patch("hr.services.resume_search.KeywordsSearch") as m_key:
+            m_emb.return_value.handle.return_value = []
+            m_key.return_value.handle.return_value = []
+            result = search_resumes(self.workspace_id, "nothing")
+        self.assertEqual(result["items"], [])
+        self.assertEqual(result["meta"]["search_type"], "empty")
+
+    def test_skill_and_mode_ordered(self):
+        """模式 B：技能有序 → 命中向量字典序 → 命中靠前技能优先"""
+        from hr.services.resume_search import search_resumes
+        # 两个候选人：A 命中 java+python（前两位），B 只命中 java
+        p_a1 = self._paragraph("Java 开发")
+        p_a2 = self._paragraph("Python 开发")
+        self._embedding(p_a1)
+        self._embedding(p_a2)
+        candidate_b = Candidate.objects.create(
+            workspace_id=self.workspace_id, user_id=self.user.id, name="候选B", skills=["java"]
+        )
+        doc_b = Document.objects.create(
+            id=uuid.uuid7(), knowledge_id=self.knowledge.id, name="B.docx", char_length=5, user_id=self.user.id,
+        )
+        ResumeFile.objects.create(
+            workspace_id=self.workspace_id, file_name="B.docx", extension="docx",
+            file_path="/tmp/b.docx", file_size=1, sha256="sha-" + uuid.uuid7().hex,
+            source_channel="OTHER", status=ResumeStatus.SUCCESS, user_id=self.user.id,
+            candidate=candidate_b, document_id=doc_b.id,
+        )
+        p_b = Paragraph.objects.create(
+            id=uuid.uuid7(), document_id=doc_b.id, knowledge_id=self.knowledge.id, content="Java 后端", title="经历",
+        )
+        # fake LLM 返回有序技能
+        fake_llm = Mock()
+        fake_llm.invoke.return_value = type("R", (), {"content": '{"skills": ["java", "python"]}'})()
+        side_effect = [
+            [{"paragraph_id": str(p_a1.id), "similarity": 0.9}, {"paragraph_id": str(p_b.id), "similarity": 0.8}],  # java dense
+            [{"paragraph_id": str(p_a2.id), "similarity": 0.85}],  # python dense
+        ]
+        with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()), \
+                patch("hr.services.resume_search.EmbeddingSearch") as m_emb, \
+                patch("hr.services.resume_search.KeywordsSearch") as m_key:
+            m_emb.return_value.handle.side_effect = side_effect
+            m_key.return_value.handle.return_value = []
+            result = search_resumes(self.workspace_id, "会 java python 的人", mode="skills",
+                                    llm_model=fake_llm, user_id=self.user.id)
+        self.assertEqual(result["meta"]["mode"], "skills")
+        self.assertEqual(result["meta"]["search_type"], "skill_ordered")
+        names = [item["candidate"]["name"] for item in result["items"]]
+        # A 命中 [1,1] > B 命中 [1,0] → A 在前
+        self.assertEqual(names[0], "李冠光")
+        self.assertEqual(result["items"][0]["score"]["hit_count"], 2)
+        self.assertIn("候选B", names)
+
+    def test_skill_parse_failure_falls_back_to_phrase(self):
+        from hr.services.resume_search import search_resumes
+        paragraph = self._paragraph("Java 开发")
+        self._embedding(paragraph)
+        fake_llm = Mock()
+        fake_llm.invoke.side_effect = Exception("llm down")
+        with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()), \
+                patch("hr.services.resume_search.EmbeddingSearch") as m_emb, \
+                patch("hr.services.resume_search.KeywordsSearch") as m_key:
+            m_emb.return_value.handle.return_value = [{"paragraph_id": str(paragraph.id), "similarity": 0.9}]
+            m_key.return_value.handle.return_value = []
+            result = search_resumes(self.workspace_id, "java 开发", mode="auto",
+                                    llm_model=fake_llm, user_id=self.user.id)
+        self.assertEqual(result["meta"]["mode"], "phrase")
+        self.assertEqual(len(result["items"]), 1)
+
+    def test_orphan_paragraph_no_candidate(self):
+        """孤儿段落（无简历关联）→ 返回段落级结果不崩溃"""
+        from hr.services.resume_search import search_resumes
+        orphan_doc = Document.objects.create(
+            id=uuid.uuid7(), knowledge_id=self.knowledge.id, name="orphan", char_length=5, user_id=self.user.id,
+        )
+        p = Paragraph.objects.create(
+            id=uuid.uuid7(), document_id=orphan_doc.id, knowledge_id=self.knowledge.id, content="技能描述", title="x",
+        )
+        self._embedding(p)
+        with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()), \
+                patch("hr.services.resume_search.EmbeddingSearch") as m_emb, \
+                patch("hr.services.resume_search.KeywordsSearch") as m_key:
+            m_emb.return_value.handle.return_value = [{"paragraph_id": str(p.id), "similarity": 0.9}]
+            m_key.return_value.handle.return_value = []
+            result = search_resumes(self.workspace_id, "技能", mode="phrase")
+        self.assertEqual(len(result["items"]), 1)
+        self.assertIsNone(result["items"][0]["candidate"])
+        self.assertEqual(result["meta"]["aggregation"]["dropped_orphan_paragraphs"], 0)
+
+    def test_search_audit_written_without_query(self):
+        from hr.services.resume_search import search_resumes
+        paragraph = self._paragraph()
+        self._embedding(paragraph)
+        with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()), \
+                patch("hr.services.resume_search.EmbeddingSearch") as m_emb, \
+                patch("hr.services.resume_search.KeywordsSearch") as m_key:
+            m_emb.return_value.handle.return_value = [{"paragraph_id": str(paragraph.id), "similarity": 0.9}]
+            m_key.return_value.handle.return_value = []
+            search_resumes(self.workspace_id, "java 开发", mode="phrase", user_id=self.user.id)
+        from hr.models import HrAuditLog
+        log = HrAuditLog.objects.filter(workspace_id=self.workspace_id, action="SEARCH").first()
+        self.assertIsNotNone(log)
+        self.assertNotIn("java", str(log.detail))  # 查询原文不入审计
+

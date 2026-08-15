@@ -35,7 +35,9 @@ class OpenAIChatModel(MaxKBBaseModel, BaseChatOpenAI):
         if 'sensenova' in model_name:
             # SenseNova 6.8 默认输出 reasoning 推理流，会耗尽 max_tokens 导致 content 为空；
             # 切片/结构化任务不需要推理，禁用之（OpenAI 兼容 extra body 透传）。
-            optional_params.setdefault('model_kwargs', {})['thinking'] = {'type': 'disabled'}
+            # 注意必须用 extra_body 而非 model_kwargs：model_kwargs 会展开为顶层参数，
+            # 被 openai SDK 当作 create() 的具名参数而报错（实测 TypeError）。
+            optional_params.setdefault('extra_body', {})['thinking'] = {'type': 'disabled'}
         chat_open_ai = OpenAIChatModel(
             model=model_name,
             openai_api_base=model_credential.get('api_base'),

@@ -322,6 +322,7 @@ class HrConfig(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
     workspace_id = models.CharField(max_length=64, unique=True)
     llm_model_id = models.CharField(max_length=128)
+    rerank_model_id = models.CharField(max_length=128, blank=True, default="", verbose_name="重排序模型id")
     handoff_target_type = models.CharField(
         max_length=16, choices=HandoffTargetType.choices, default=HandoffTargetType.CHECKLIST
     )
@@ -386,6 +387,7 @@ class HrAuditAction(models.TextChoices):
     GRANT_ACCESS = "GRANT_ACCESS", "Grant access"
     REVOKE_ACCESS = "REVOKE_ACCESS", "Revoke access"
     EXPORT = "EXPORT", "Export"
+    SEARCH = "SEARCH", "Resume semantic search"
     ACCESS_DENIED = "ACCESS_DENIED", "Access denied"
 
 

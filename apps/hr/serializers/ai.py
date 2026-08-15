@@ -33,7 +33,10 @@ class AiService:
 
     def get_config(self):
         config = HrConfig.objects.filter(workspace_id=self.workspace_id).first()
-        return {"llm_model_id": config.llm_model_id if config else None}
+        return {
+            "llm_model_id": config.llm_model_id if config else None,
+            "rerank_model_id": config.rerank_model_id if config and config.rerank_model_id else None,
+        }
 
     def save_config(self, data):
         self._require_manage()
@@ -47,25 +50,62 @@ class AiService:
             raise AppApiException(400, "模型不存在或不可用") from exc
         if model.model_type != _MODEL_TYPE_LLM:
             raise AppApiException(400, "请选择 LLM 类型模型")
-        config, _ = HrConfig.objects.update_or_create(
-            workspace_id=self.workspace_id, defaults={"llm_model_id": model_id}
-        )
-        return {"llm_model_id": config.llm_model_id}
+        defaults = {"llm_model_id": model_id}
+        rerank_model_id = data.get("rerank_model_id")
+        if isinstance(rerank_model_id, str) and rerank_model_id.strip():
+            rerank_model_id = rerank_model_id.strip()
+            try:
+                rerank_model = get_model_by_id(rerank_model_id, self.workspace_id)
+            except Exception as exc:
+                raise AppApiException(400, "重排序模型不存在或不可用") from exc
+            if rerank_model.model_type != "RERANKER":
+                raise AppApiException(400, "请选择 RERANKER 类型模型")
+            defaults["rerank_model_id"] = rerank_model_id
+        else:
+            defaults["rerank_model_id"] = ""
+        config, _ = HrConfig.objects.update_or_create(workspace_id=self.workspace_id, defaults=defaults)
+        return {
+            "llm_model_id": config.llm_model_id,
+            "rerank_model_id": config.rerank_model_id if config.rerank_model_id else None,
+        }
 
     def _model(self):
-        config = HrConfig.objects.filter(workspace_id=self.workspace_id).first()
-        if config is None:
+        model = self._model_or_none()
+        if model is None:
             raise AppApiException(400, "请先在 AI 设置中选择模型")
+        return model
+
+    def _model_or_none(self):
+        """LLM 模型实例；未配置/异常返回 None（检索降级用）。"""
+        config = HrConfig.objects.filter(workspace_id=self.workspace_id).first()
+        if config is None or not config.llm_model_id:
+            return None
         try:
             model = get_model_by_id(config.llm_model_id, self.workspace_id)
-        except Exception as exc:
-            raise AppApiException(400, "请先在 AI 设置中选择模型") from exc
+        except Exception:
+            return None
         if model.model_type != _MODEL_TYPE_LLM:
-            raise AppApiException(400, "请选择 LLM 类型模型")
+            return None
         try:
             return get_model_instance_by_model_workspace_id(config.llm_model_id, self.workspace_id)
-        except Exception as exc:
-            raise AppApiException(400, "请先在 AI 设置中选择模型") from exc
+        except Exception:
+            return None
+
+    def _rerank_model_or_none(self):
+        """RERANKER 模型实例；未配置/异常返回 None（检索降级为 RRF 排序）。"""
+        config = HrConfig.objects.filter(workspace_id=self.workspace_id).first()
+        if config is None or not config.rerank_model_id:
+            return None
+        try:
+            model = get_model_by_id(config.rerank_model_id, self.workspace_id)
+        except Exception:
+            return None
+        if model.model_type != "RERANKER":
+            return None
+        try:
+            return get_model_instance_by_model_workspace_id(config.rerank_model_id, self.workspace_id)
+        except Exception:
+            return None
 
     def parse_search(self, query):
         self._require_operator()
