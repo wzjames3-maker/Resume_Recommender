@@ -39,6 +39,7 @@ def chat_fn(prompt):
         model="sensenova-6.8-flash-lite",
         messages=[{"role": "user", "content": prompt}],
         temperature=0.1, max_tokens=2000,
+        extra_body={"thinking": {"type": "disabled"}},
     )
     return resp.choices[0].message.content
 

@@ -32,6 +32,10 @@ class OpenAIChatModel(MaxKBBaseModel, BaseChatOpenAI):
         streaming = model_kwargs.get('streaming', True)
         if 'o1' in model_name:
             streaming = False
+        if 'sensenova' in model_name:
+            # SenseNova 6.8 默认输出 reasoning 推理流，会耗尽 max_tokens 导致 content 为空；
+            # 切片/结构化任务不需要推理，禁用之（OpenAI 兼容 extra body 透传）。
+            optional_params.setdefault('model_kwargs', {})['thinking'] = {'type': 'disabled'}
         chat_open_ai = OpenAIChatModel(
             model=model_name,
             openai_api_base=model_credential.get('api_base'),
