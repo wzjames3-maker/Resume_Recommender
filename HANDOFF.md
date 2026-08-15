@@ -57,7 +57,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 | `README-hr.md` | 各期验收记录（一期到 A 阶段，含测试数演进） |
 | `docs/superpowers/specs/2026-08-13-*.md` | 二至七期规格（简历/搜索匹配/AI/异步/合并） |
 
-## 3. 已完成（当前测试基线：四 app + ops 287/287 PASS，HR 271）
+## 3. 已完成（当前测试基线：四 app + ops 301/301 PASS，HR 285）
 
 ### 3.1 PRD 七期（基础能力）
 
@@ -116,7 +116,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 | 完整面试协作 | **v1 已交付（2026-08-15）**：面试官用户化（interviewer_user_id）、最小可见（我的面试仅本人 + 无 PII 字段）、反馈截止（feedback_deadline + is_overdue）、反馈可追溯（feedback_submitted_at + INTERVIEW_FEEDBACK 审计）、前端「我的面试」页面；见 specs/2026-08-15-hr-interview-collaboration-design.md。剩余：自动提醒、面试官可见简历等（未排期） |
 | Offer 工件 | **已交付（2026-08-15）**：独立实体（hr_offer）+ 版本自增 + 审批（approval_status/approver）+ 金额/币种（Decimal）+ 状态机 DRAFT→SENT→ACCEPTED/REJECTED/WITHDRAWN + 接受自动流转 HIRED + 附件上传/下载权限（VIEWER 不可下载）+ 5 个 OFFER_* 审计动作；见 specs/2026-08-15-hr-offer-design.md |
 | 入职交接 | **已交付（2026-08-15）**：OnboardingHandoff 按指派唯一（幂等）+ 固定清单 payload（含联系方式）+ CHECKLIST/WEBHOOK 目标（urllib 同步投递，零新依赖）+ 失败可重试（仅 FAILED）+ HANDOFF 审计 + 交接页面与配置接口；见 specs/2026-08-15-hr-onboarding-handoff-design.md。异步化投递（Celery）与真实 HRIS 适配器未排期 |
-| 批量导入 | CSV 导入 + 失败/疑似重复报告 |
+| 批量导入 | **已交付（2026-08-15）**：CSV（UTF-8/BOM）逐行校验导入（ADMIN），失败行跳过并报原因、文件内/库内疑似重复标注（仍创建）、汇总+明细报告、模板下载、IMPORT 审计 + 逐条 CREATE 审计；≤200 行/≤2MB；见 specs/2026-08-15-hr-csv-import-design.md。**至此 B 阶段（面试协作/Offer/入职交接/批量导入）全部完成** |
 
 ### 5.3 C 阶段：语义检索与智能优化
 
@@ -126,7 +126,7 @@ Embedding 语义召回、可解释匹配、人工反馈、索引与候选人生�
 
 - 面试官已支持用户化（interviewer_user_id，UUID 未建外键，项目惯例）；文本字段保留为显示名/临时外部面试官；负责人存 user_id（UUID）未建外键
 - 恢复误拒绝记录到 note（`[restore] <原因>`），未建独立字段
-- 导出为固定白名单（不含联系方式）；批量导入未做
+- 导出为固定白名单（不含联系方式）；批量导入已交付（ADMIN、CSV、≤200 行、逐行校验+重复标注），简历文件随 CSV 导入与字段映射未做
 - TTL 每日调度，清理延迟最多约 24h
 - 候选人「更正请求」由编辑+审计承接，无独立审批流
 - 未关联简历允许存在（TTL 兜底）；`ResumeFile.candidate` 为 SET_NULL
@@ -136,7 +136,7 @@ Embedding 语义召回、可解释匹配、人工反馈、索引与候选人生�
 ## 7. 提交流程与账本
 
 - 每期：docs 规格提交 → docs 实现计划提交 → 实现（TDD）→ 全量验收 → 审查 → 修复
-- 测试数演进：23→31→39→47→76→86→107→141→183→207→215（HR）→227（四 app）→231（四 app + ops 4，2026-08-15）→240（+候选恢复 9，2026-08-15）→255（+面试协作 15，2026-08-15）→287（+Offer/交接 32，2026-08-15）
+- 测试数演进：23→31→39→47→76→86→107→141→183→207→215（HR）→227（四 app）→231（四 app + ops 4，2026-08-15）→240（+候选恢复 9，2026-08-15）→255（+面试协作 15，2026-08-15）→287（+Offer/交接 32，2026-08-15）→301（+批量导入 14，2026-08-15，B 阶段完成）
 - 规格/计划/验收文档路径规范：`docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`、`docs/superpowers/plans/`、`docs/superpowers/audits/YYYY-MM-DD-<topic>-baseline.md`
 - 提交信息：`feat(人事)/fix(人事)/docs(人事)/test(人事): 中文描述`
 
