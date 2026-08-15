@@ -14,6 +14,7 @@ from .recruitment import (
     ResumeAPI,
     ResumeBatchStatusAPI,
     ResumeDetailAPI,
+    ResumeFlowLogAPI,
     ResumeListAPI,
 )
 from .ai import HrAIConfigAPI, HrSearchParseAPI, HrSkillExtractAPI
@@ -43,6 +44,7 @@ __all__ = [
     "ResumeAPI",
     "ResumeBatchStatusAPI",
     "ResumeDetailAPI",
+    "ResumeFlowLogAPI",
     "ResumeListAPI",
     "HrAIConfigAPI",
     "HrSearchParseAPI",

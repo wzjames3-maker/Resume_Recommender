@@ -16,6 +16,7 @@ from knowledge.serializers.knowledge import KnowledgeSerializer
 from knowledge.task.embedding import delete_embedding_by_document
 from models_provider.models import Model
 
+from hr.services.flow_log import log_flow
 from hr.services.resume_splitter import split_resume_text
 
 _KNOWLEDGE_NAME = "简历语义索引"
@@ -56,14 +57,25 @@ def get_or_create_resume_knowledge(workspace_id, user_id):
     return get_resume_knowledge(workspace_id)
 
 
-def index_resume(workspace_id, user_id, resume, text, chat_fn):
+def index_resume(workspace_id, user_id, resume, text, chat_fn, stats=None):
     """
     简历入库：清洗已在 split_resume_text 内完成 → 切片 → 建 Document/Paragraph → 触发向量化。
+    :param stats: 可选 dict，透传 split_resume_text 的 path/llm_calls（供流转日志）
     :return: document_id
     :raises: 切片失败（ValueError）/ 知识库或模型缺失（AppApiException）
     """
     knowledge = get_or_create_resume_knowledge(workspace_id, user_id)
-    chunks = split_resume_text(text, chat_fn)
+    chunks = split_resume_text(text, chat_fn, stats=stats)
+    log_flow(
+        workspace_id, "SPLIT", resume_id=resume.id,
+        detail={
+            "path": (stats or {}).get("path", "?"),
+            "llm_calls": (stats or {}).get("llm_calls", 0),
+            "chunks": len(chunks),
+            "lengths": [len(chunk["content"]) for chunk in chunks],
+            "pii_masked": sum(1 for chunk in chunks if "[已脱敏]" in chunk["content"]),
+        },
+    )
     if resume.document_id:
         _delete_document(str(resume.document_id))
     serializer = DocumentSerializers.Create(data={"knowledge_id": str(knowledge.id), "user_id": str(user_id)})

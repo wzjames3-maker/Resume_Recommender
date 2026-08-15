@@ -333,6 +333,28 @@ class HrConfig(models.Model):
         db_table = "hr_config"
 
 
+
+
+
+class ResumeFlowLog(models.Model):
+    """简历数据流转日志：记录每个处理节点的流转数据（可追溯/可审计）。"""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
+    workspace_id = models.CharField(max_length=64, db_index=True)
+    resume_id = models.UUIDField(null=True, blank=True, db_index=True)
+    candidate_id = models.UUIDField(null=True, blank=True)
+    document_id = models.UUIDField(null=True, blank=True)
+    node = models.CharField(max_length=32, db_index=True)
+    status = models.CharField(max_length=16, default="SUCCESS")
+    detail = models.JSONField(default=dict)
+    error_message = models.TextField(blank=True, default="")
+    create_time = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "hr_resume_flow_log"
+        indexes = [models.Index(fields=["workspace_id", "resume_id", "create_time"], name="hr_resume_flow_ws_rs_time_idx")]
+
+
 class HrRole(models.TextChoices):
     VIEWER = "VIEWER", "Viewer"
     OPERATOR = "OPERATOR", "Operator"

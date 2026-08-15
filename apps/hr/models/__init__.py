@@ -27,6 +27,7 @@ from .recruitment import (
     RelationType,
     ResumeChannel,
     ResumeFile,
+    ResumeFlowLog,
     ResumeStatus,
     TerminationReason,
 )
@@ -60,6 +61,7 @@ __all__ = [
     "RelationType",
     "ResumeChannel",
     "ResumeFile",
+    "ResumeFlowLog",
     "ResumeStatus",
     "TerminationReason",
 ]

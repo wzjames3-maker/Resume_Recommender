@@ -167,13 +167,14 @@ def _smart_fallback(lines):
     return [{"title": "", "content": paragraph} for paragraph in smart_split_paragraph(text, _MAX_CHUNK_LENGTH)]
 
 
-def split_resume_text(text, chat_fn, max_retries=1):
+def split_resume_text(text, chat_fn, max_retries=1, stats=None):
     """
     简历切片主入口。
 
     :param text: 简历提取原文（docx/txt 提取结果）
     :param chat_fn: (prompt: str) -> str，LLM 调用函数（模型适配器或测试 stub）
     :param max_retries: LLM 输出校验失败后的重试次数
+    :param stats: 可选 dict，若传入则填充 {"path": "llm|rules|smart", "llm_calls": n} 供流转日志使用
     :return: [{title, content}]，content 已做 PII 掩码
     :raises ValueError: 清洗后文本过短或全部路径失败
     """
@@ -184,19 +185,30 @@ def split_resume_text(text, chat_fn, max_retries=1):
     numbered_text = "\n".join(f"{index + 1}  {line}" for index, line in enumerate(lines))
     prompt = _PROMPT_TEMPLATE.format(numbered_text=numbered_text)
     last_error = None
+    llm_calls = 0
     for _ in range(max_retries + 1):
+        llm_calls += 1
         try:
             raw = chat_fn(prompt)
             chunks = _parse_chunks(raw)
             if _validate(chunks, lines):
+                if stats is not None:
+                    stats["path"] = "llm"
+                    stats["llm_calls"] = llm_calls
                 return [{**row, "content": mask_pii(row["content"])} for row in _resolve(chunks, lines)]
         except Exception as exc:
             last_error = exc
     for fallback in (split_resume_rules(lines),):
         if fallback and _validate(fallback, lines, max_length=_MAX_CHUNK_LENGTH):
+            if stats is not None:
+                stats["path"] = "rules"
+                stats["llm_calls"] = llm_calls
             return [{**row, "content": mask_pii(row["content"])} for row in _resolve(fallback, lines)]
     # smart 兜底：按字符切分（不依赖行号，拼接==原文由 smart_split_paragraph 性质保证）
     smart = _smart_fallback(lines)
     if smart:
+        if stats is not None:
+            stats["path"] = "smart"
+            stats["llm_calls"] = llm_calls
         return [{"title": row["title"], "content": mask_pii(row["content"])} for row in smart]
     raise ValueError(f"简历切片失败: {last_error}")

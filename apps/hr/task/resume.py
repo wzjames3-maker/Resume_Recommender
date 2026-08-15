@@ -1,5 +1,8 @@
 # coding=utf-8
+import time
 from datetime import timedelta
+
+from django.db.models import QuerySet
 
 import uuid_utils.compat as uuid
 from celery_once import QueueOnce
@@ -8,9 +11,12 @@ from django.utils import timezone
 from celery.signals import worker_ready
 
 from hr.models import Candidate, HrConfig, ResumeFile, ResumeStatus
+from knowledge.models import Document, Paragraph
 from hr.services.audit import write_audit_log
+from hr.services.flow_log import log_flow
 from hr.services.resume_index import index_resume
 from hr.services.resume_parser import extract_text_from_docx, extract_text_from_txt, parse_resume_text
+from hr.services.resume_splitter import sanitize_resume_text
 from models_provider.tools import get_model_instance_by_model_workspace_id
 from hr.services.storage import get_storage
 from ops import celery_app
@@ -63,6 +69,10 @@ def parse_resume_task(resume_id):
             text = extract_text_from_docx(local_path)
         else:
             text = extract_text_from_txt(local_path)
+        log_flow(
+            resume.workspace_id, "EXTRACT", resume_id=resume.id,
+            detail={"length": len(text), "lines": text.count("\n") + 1, "source": resume.extension},
+        )
         parsed = parse_resume_text(text)
         with transaction.atomic():
             candidate = Candidate.objects.create(
@@ -105,16 +115,38 @@ def _llm_chat_fn(workspace_id):
 def _index_resume(resume, text):
     """
     简历语义索引（清洗→切片→建文档→向量化）。失败只记录 error_message，不阻塞候选人建档。
+    每个节点写流转日志（ResumeFlowLog）。
     """
     chat_fn = _llm_chat_fn(resume.workspace_id)
     if chat_fn is None:
+        log_flow(resume.workspace_id, "SPLIT", status="FAILED", resume_id=resume.id,
+                 error_message="HR AI 模型未配置，无法切片")
         resume.error_message = "语义索引失败: HR AI 模型未配置"
         resume.save(update_fields=["error_message", "update_time"])
         return
     try:
-        index_resume(resume.workspace_id, resume.user_id or _SYSTEM_USER_ID, resume, text, chat_fn)
+        cleaned = sanitize_resume_text(text)
+        log_flow(
+            resume.workspace_id, "SANITIZE", resume_id=resume.id,
+            detail={"before": len(text), "after": len(cleaned)},
+        )
+        stats = {}
+        started = time.time()
+        document_id = index_resume(resume.workspace_id, resume.user_id or _SYSTEM_USER_ID, resume, cleaned, chat_fn, stats=stats)
+        document = QuerySet(Document).filter(id=document_id).first()
+        log_flow(
+            resume.workspace_id, "DOCUMENT", resume_id=resume.id, document_id=document_id,
+            detail={
+                "path": stats.get("path", "?"),
+                "llm_calls": stats.get("llm_calls", 0),
+                "paragraphs": QuerySet(Paragraph).filter(document_id=document_id).count() if document else 0,
+                "knowledge_id": str(document.knowledge_id) if document else None,
+                "elapsed_ms": int((time.time() - started) * 1000),
+            },
+        )
         resume.error_message = ""
         resume.save(update_fields=["error_message", "update_time"])
     except Exception as exc:
+        log_flow(resume.workspace_id, "SPLIT", status="FAILED", resume_id=resume.id, error_message=str(exc))
         resume.error_message = f"语义索引失败: {exc}"
         resume.save(update_fields=["error_message", "update_time"])

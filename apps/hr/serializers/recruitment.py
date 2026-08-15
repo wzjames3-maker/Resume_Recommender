@@ -28,6 +28,7 @@ from hr.models import (
     ResumeStatus,
     TerminationReason,
 )
+from hr.services.flow_log import log_flow
 from hr.services.resume_index import delete_resume_index, set_resume_index_active
 from hr.services.resume_parser import extract_text_from_docx, extract_text_from_txt
 from hr.services.audit import write_audit_log
@@ -539,6 +540,8 @@ class RecruitmentService:
         candidate.save(update_fields=["status", "update_time"])
         for resume in ResumeFile.objects.filter(workspace_id=self.workspace_id, candidate=candidate):
             set_resume_index_active(resume, False)
+            log_flow(self.workspace_id, "LIFECYCLE", resume_id=resume.id, document_id=resume.document_id,
+                     detail={"action": "archive", "is_active": False})
         write_audit_log(self.workspace_id, self.user_id, "ARCHIVE", "CANDIDATE", candidate.id)
         return self._candidate_output(candidate)
 
@@ -553,6 +556,8 @@ class RecruitmentService:
         candidate.save(update_fields=["status", "update_time"])
         for resume in ResumeFile.objects.filter(workspace_id=self.workspace_id, candidate=candidate):
             set_resume_index_active(resume, True)
+            log_flow(self.workspace_id, "LIFECYCLE", resume_id=resume.id, document_id=resume.document_id,
+                     detail={"action": "restore", "is_active": True})
         write_audit_log(self.workspace_id, self.user_id, "RESTORE", "CANDIDATE", candidate.id)
         return self._candidate_output(candidate)
 
@@ -574,6 +579,8 @@ class RecruitmentService:
         storage = get_storage()
         for resume in ResumeFile.objects.filter(workspace_id=self.workspace_id, candidate=candidate):
             delete_resume_index(resume)
+            log_flow(self.workspace_id, "LIFECYCLE", resume_id=resume.id,
+                     detail={"action": "delete", "document_id": str(resume.document_id) if resume.document_id else None})
             file_delete_failed = False
             if resume.file_path and storage.exists(resume.file_path):
                 try:
@@ -928,6 +935,9 @@ class RecruitmentService:
             sha256 = digest.hexdigest()
             existing = ResumeFile.objects.filter(workspace_id=self.workspace_id, sha256=sha256).first()
             if existing:
+                log_flow(self.workspace_id, "UPLOAD", resume_id=existing.id,
+                         detail={"file_name": file_name, "file_size": size, "sha256": sha256,
+                                  "extension": extension, "duplicate": True})
                 records.append({
                     "resume_id": str(existing.id),
                     "file_name": existing.file_name,
@@ -948,6 +958,9 @@ class RecruitmentService:
                 file_path=stored, file_size=size, sha256=sha256,
                 source_channel=source_channel, status=ResumeStatus.PENDING, user_id=self.user_id,
             )
+            log_flow(self.workspace_id, "UPLOAD", resume_id=resume.id,
+                     detail={"file_name": file_name, "file_size": size, "sha256": sha256,
+                             "extension": extension, "duplicate": False})
             try:
                 parse_resume_task.delay(str(resume.id))
                 status = ResumeStatus.PENDING

@@ -298,3 +298,16 @@ class ResumeBatchStatusAPI(APIView):
         if len(resume_ids) > 200:
             raise AppApiException(400, "too many ids")
         return result.success(_service(request, workspace_id).batch_resume_status(resume_ids))
+
+
+
+class ResumeFlowLogAPI(APIView):
+    """简历数据流转日志查询"""
+
+    authentication_classes = [TokenAuth]
+
+    @hr_access_required
+    def get(self, request, workspace_id, resume_id):
+        from hr.services.flow_log import list_flow_logs
+
+        return result.success(list_flow_logs(workspace_id, resume_id=resume_id))

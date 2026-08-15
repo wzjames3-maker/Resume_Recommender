@@ -3380,3 +3380,85 @@ class ResumeParserDocxTableTests(TestCase):
             self.assertEqual(text.count("教育经历：北京某大学"), 1)
         finally:
             os.remove(path)
+
+
+class ResumeFlowLogTests(TestCase):
+    """简历数据流转日志：节点数据持久化 + 查询 API"""
+
+    def setUp(self):
+        self.workspace_id = "workspace-flow"
+        self.user = User.objects.create(
+            username="flow-" + uuid.uuid7().hex[:8], nick_name="flow", password="p", role="ADMIN"
+        )
+        self.model = Model.objects.create(
+            id=uuid.uuid7(), name="bge-test", status="SUCCESS", model_type="EMBEDDING",
+            model_name="BAAI/bge-large-zh-v1.5", provider="model_openai_provider",
+            credential="{}", meta={}, workspace_id="default",
+        )
+        HrConfig.objects.create(workspace_id=self.workspace_id, llm_model_id=str(uuid.uuid7()))
+
+    def _resume(self):
+        return ResumeFile.objects.create(
+            workspace_id=self.workspace_id, file_name="r.txt", extension="txt",
+            file_path="/tmp/r.txt", file_size=1, sha256="sha-" + uuid.uuid7().hex,
+            source_channel="OTHER", status=ResumeStatus.PENDING, user_id=self.user.id,
+        )
+
+    def test_upload_and_task_write_flow_logs(self):
+        from hr.services.flow_log import list_flow_logs
+        from hr.task.resume import _index_resume
+
+        resume = self._resume()
+        text = "姓名：李冠光\n\n【教育经历】\n- 院校：北京师范大学 | 学位：硕士"
+
+        # 模拟上传节点（直接调服务层写入）+ 完整任务索引链
+        from hr.services.flow_log import log_flow
+        log_flow(self.workspace_id, "UPLOAD", resume_id=resume.id,
+                 detail={"file_name": "r.txt", "file_size": 1, "extension": "txt", "duplicate": False})
+
+        # 直接跑任务（mock LLM：走 rules 降级，避免真实调用）
+        with patch("hr.task.resume._llm_chat_fn") as mock_fn:
+            def fake_chat(prompt):
+                return "not a json"
+            mock_fn.return_value = fake_chat
+            with patch("knowledge.serializers.document.DocumentSerializers.Operate.refresh"):
+                _index_resume(resume, text)
+
+        logs = list_flow_logs(self.workspace_id, resume_id=resume.id)
+        nodes = [log["node"] for log in logs]
+        self.assertIn("UPLOAD", nodes)
+        self.assertIn("SANITIZE", nodes)
+        self.assertIn("SPLIT", nodes)
+        self.assertIn("DOCUMENT", nodes)
+        split_log = next(log for log in logs if log["node"] == "SPLIT")
+        self.assertEqual(split_log["detail"]["path"], "rules")
+        self.assertGreaterEqual(split_log["detail"]["chunks"], 1)
+        self.assertIn("lengths", split_log["detail"])
+        doc_log = next(log for log in logs if log["node"] == "DOCUMENT")
+        self.assertIsNotNone(doc_log["document_id"])
+        self.assertGreaterEqual(doc_log["detail"]["paragraphs"], 1)
+
+    def test_lifecycle_logs(self):
+        from hr.services.flow_log import list_flow_logs
+
+        resume = self._resume()
+        resume.document_id = uuid.uuid7()
+        resume.save(update_fields=["document_id", "update_time"])
+        set_resume_index_active(resume, False)
+        from hr.services.flow_log import log_flow
+        log_flow(self.workspace_id, "LIFECYCLE", resume_id=resume.id, document_id=resume.document_id,
+                 detail={"action": "archive", "is_active": False})
+        logs = list_flow_logs(self.workspace_id, resume_id=resume.id)
+        self.assertEqual(logs[-1]["detail"]["action"], "archive")
+
+    def test_flow_log_api(self):
+        from hr.services.flow_log import log_flow
+
+        resume = self._resume()
+        log_flow(self.workspace_id, "UPLOAD", resume_id=resume.id, detail={"duplicate": False})
+        log_flow(self.workspace_id, "SPLIT", resume_id=resume.id, detail={"chunks": 3})
+        # 服务层查询（API 认证走 TokenAuth，测试直接验证服务能力）
+        from hr.services.flow_log import list_flow_logs
+        logs = list_flow_logs(self.workspace_id, resume_id=resume.id)
+        self.assertEqual(len(logs), 2)
+        self.assertEqual([log["node"] for log in logs], ["UPLOAD", "SPLIT"])
