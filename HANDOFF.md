@@ -122,10 +122,10 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 
 **试点进展（2026-08-15，外部模型接入已完成）**：OpenAI 兼容 Provider 注册 LLM `sensenova-6.8-flash-lite`（SenseNova）、Embedding `BAAI/bge-large-zh-v1.5` + Rerank `BAAI/bge-reranker-v2-m3`（SiliconFlow）；RERANKER 模型类型补齐（model/rerank.py + credential/rerank.py，top_n 默认 3）。真实模型端到端验证（`installer/real_model_smoke.py`，`RUN_REAL_MODEL=1` 门控 + 渐进档位 1|2|3）：S1（5 份简历）17/17、S2（30 份）向量化 30/30 + 问答引用；实体查询 recall@5=3/8 低于结构化基线（佐证实体检索走结构化）、自然语言查询召回合理。密钥走环境变量（`.env.example` 有占位）。规格/审计：`docs/superpowers/specs/2026-08-15-external-model-pilot-design.md`、`docs/superpowers/audits/2026-08-15-external-model-pilot.md`。
 
-**设计定稿（2026-08-15）**：端到端综合方案 docs/superpowers/specs/2026-08-15-end-to-end-pipeline-combined-design.md（**唯一权威**，§6 含切片协议 v4：LLM 边界标注 + 条目级 + 禁止改写 + PII 过滤）；实施计划 docs/superpowers/plans/2026-08-15-c-stage-resume-rag.md（**执行依据**）；GitHub 调研 docs/superpowers/audits/2026-08-15-chunking-landscape.md；真实数据审查 docs/superpowers/audits/2026-08-15-design-reality-check.md（输入按 PRD 锁定 docx/txt，无 OCR/表格；数据集合成为压力测试语料）。
+**设计定稿（2026-08-15）**：端到端综合方案 docs/superpowers/specs/2026-08-15-end-to-end-pipeline-combined-design.md（**唯一权威**，§6 含切片协议 v4：LLM 边界标注 + 条目级 + 禁止改写 + PII 过滤）；实施计划 docs/superpowers/plans/2026-08-15-c-stage-resume-rag.md（**执行依据**）；GitHub 调研 docs/superpowers/audits/2026-08-15-chunking-landscape.md；真实数据审查 docs/superpowers/audits/2026-08-15-design-reality-check.md（输入按 PRD 锁定 docx/txt；docx 表格排版与 OCR 分号流已支持——见下方实现进展；数据集合成为压力测试语料）。
 
 **C 阶段实现进展（2026-08-15）**：
-- ✅ 阶段 1（切片器）：sanitize_resume_text() + ResumeSplitter（LLM 行号边界标注 + L2 校验 + L3 规则/smart 降级 + PII 掩码），单测 9 例；真实模型冒烟 10/10 保真、0 异常（提交 19637e8）；
+- ✅ 阶段 1（切片器）：sanitize_resume_text() + ResumeSplitter（LLM 行号边界标注 + L2 校验 + L3 规则/smart 降级 + PII 掩码），单测 11 例（19637e8 初版 9 例 + e1c16e3 超长单行/超长段降级 2 例）；真实模型冒烟 10/10 保真、0 异常；
 - ✅ 阶段 2（打通入库）：ResumeFile.document_id（迁移 0013）+ hr/services/resume_index.py（简历知识库幂等创建/入库/删除/启停用）+ parse_resume_task 自动索引（失败不阻塞建档）+ 生命周期同步（删除/合并清文档、归档/恢复切 is_active）+ 状态接口暴露 document_id；单测 5 例；端到端冒烟通过（上传 3 份 → LLM 切片 → 向量化 SUCCESS → 检索命中"幕墙系统设计" 0.665）（提交 ce8f065/1486cac）；
 - ✅ 数据流转日志：ResumeFlowLog（迁移 0014/0015）+ 流转日志 API GET /workspace/{ws}/hr/resumes/{id}/flow-logs + UPLOAD/EXTRACT/SANITIZE/SPLIT/DOCUMENT/LIFECYCLE 六节点持久化；SPLIT 节点 detail 含每个 chunk 完整内容（title/content/length/pii），EXTRACT/SANITIZE 保留全文，失败节点记 status=FAILED+error_message；单测 3 例（提交 b70f9d2/5043340）；
 - ✅ docx 表格排版简历提取：extract_text_from_docx 补表格单元格遍历（合并单元格按 _tc 对象去重，修复 id() 复用陷阱）；数据集真实 docx（表格排版、paragraphs 为空）全流程验证 8 段 → 检索命中 0.758（提交 a72b2b9）；
@@ -156,7 +156,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 ## 7. 提交流程与账本
 
 - 每期：docs 规格提交 → docs 实现计划提交 → 实现（TDD）→ 全量验收 → 审查 → 修复
-- 测试数演进：23→31→39→47→76→86→107（一期至七期，四 app 口径）→141→183→207→215（A 阶段，切 HR 单 app 口径）→227（四 app = HR 215 + 内核 12）→231（+ops 4）→240（+候选恢复 9）→255（+面试协作 15）→287（+Offer/交接 32）→301（+批量导入 14，B 阶段完成，2026-08-15）→336（C 阶段收尾，6c022e4 文档同步基线）→**342（HR 308 + 内核 34，2026-08-15 实测：HR 全量 308/308、四 app + ops 342/342，含切片器 9、入库 5、docx 表格 2、流转日志 3 等 C 阶段新增）**
+- 测试数演进：23→31→39→47→76→86→107（一期至七期，四 app 口径）→141→183→207→215（A 阶段，切 HR 单 app 口径）→227（四 app = HR 215 + 内核 12）→231（+ops 4）→240（+候选恢复 9）→255（+面试协作 15）→287（+Offer/交接 32）→301（+批量导入 14，B 阶段完成，2026-08-15）→336（C 阶段收尾，6c022e4 文档同步基线，HR 302）→**342（HR 308 + 内核 34，2026-08-15 实测：HR 全量 308/308、四 app + ops 342/342，336 后新增 6 例 = 切片器超长降级 2 + docx 表格 1 + 流转日志 3）**
 - 规格/计划/验收文档路径规范：`docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`、`docs/superpowers/plans/`、`docs/superpowers/audits/YYYY-MM-DD-<topic>-baseline.md`
 - 提交信息：`feat(人事)/fix(人事)/docs(人事)/test(人事): 中文描述`
 

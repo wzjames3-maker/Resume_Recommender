@@ -161,7 +161,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
 
 ## C 阶段语义索引（2026-08-15 验收补充）
 
-- 切片器：`sanitize_resume_text()`（含 OCR 分号流自动转行：分号 ≥5 且基本无换行时转行式文本，使 LLM 行号边界协议可用）+ ResumeSplitter（LLM 行号边界标注主干 + L2 校验[越界/重叠/覆盖/500 字上限] + L3 规则/smart 降级 + PII 掩码），单测 9 例（apps/hr/services/resume_splitter.py）。
+- 切片器：`sanitize_resume_text()`（含 OCR 分号流自动转行：分号 ≥5 且基本无换行时转行式文本，使 LLM 行号边界协议可用）+ ResumeSplitter（LLM 行号边界标注主干 + L2 校验[越界/重叠/覆盖/500 字上限] + L3 规则/smart 降级 + PII 掩码），单测 11 例（apps/hr/services/resume_splitter.py，含超长单行/超长段降级用例）。
 - 入库打通：`ResumeFile.document_id`（迁移 0013）+ hr/services/resume_index.py（简历知识库幂等创建/入库/删除/启停用）；`parse_resume_task` 解析成功后自动「清洗→LLM 切片→建 Document/Paragraph→向量化」，失败不阻塞建档；候选人删除/合并清文档向量、归档/恢复同步 is_active。
 - 数据流转日志：ResumeFlowLog（迁移 0014/0015）+ 查询 API `GET /workspace/{ws}/hr/resumes/{id}/flow-logs`；UPLOAD/EXTRACT/SANITIZE/SPLIT/DOCUMENT/LIFECYCLE 六节点，SPLIT 记录每个 chunk 完整内容（title/content/length/pii）、EXTRACT/SANITIZE 保留全文，可审计逐节点数据。
 - docx 表格排版简历：extract_text_from_docx 遍历段落+表格单元格（合并单元格去重）；数据集真实表格简历端到端 8 段 → 检索命中 0.758。
