@@ -3344,3 +3344,39 @@ class ResumeIndexTests(TestCase):
         self.assertFalse(Document.objects.get(id=doc_id).is_active)
         set_resume_index_active(resume, True)
         self.assertTrue(Document.objects.get(id=doc_id).is_active)
+
+
+class ResumeParserDocxTableTests(TestCase):
+    """docx 表格排版简历提取（数据集 sample 实测场景：内容全在表格里）"""
+
+    @staticmethod
+    def _make_table_docx(path):
+        from docx import Document
+
+        doc = Document()
+        doc.add_paragraph("姓名：张三")
+        table = doc.add_table(rows=3, cols=2)
+        table.cell(0, 0).text = "工作经历"
+        table.cell(0, 1).text = "2020-2023 某科技公司 工程师"
+        table.cell(1, 0).text = "职责"
+        table.cell(1, 1).text = "负责系统开发与维护"
+        # 合并单元格（行 2 整行合并 → 去重验证）
+        merged = table.cell(2, 0).merge(table.cell(2, 1))
+        merged.text = "教育经历：北京某大学 本科"
+        doc.save(path)
+
+    def test_extract_docx_paragraphs_and_tables(self):
+        from hr.services.resume_parser import extract_text_from_docx
+
+        path = os.path.join(tempfile.gettempdir(), "resume_table_test.docx")
+        self._make_table_docx(path)
+        try:
+            text = extract_text_from_docx(path)
+            self.assertIn("姓名：张三", text)
+            self.assertIn("某科技公司", text)
+            self.assertIn("负责系统开发与维护", text)
+            self.assertIn("北京某大学", text)
+            # 合并单元格只出现一次
+            self.assertEqual(text.count("教育经历：北京某大学"), 1)
+        finally:
+            os.remove(path)

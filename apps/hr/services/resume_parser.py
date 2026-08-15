@@ -64,10 +64,22 @@ def parse_resume_text(text):
 
 
 def extract_text_from_docx(file_path):
+    """
+    提取 docx 文本：正文段落 + 表格单元格（合并单元格去重，按行序拼接）。
+    实测真实简历（数据集 sample）为表格排版，仅 document.paragraphs 会丢失全部内容。
+    """
     from docx import Document
 
     document = Document(file_path)
-    return "\n".join(paragraph.text for paragraph in document.paragraphs)
+    parts = [paragraph.text for paragraph in document.paragraphs if paragraph.text.strip()]
+    seen_cells = set()
+    for table in document.tables:
+        for row in table.rows:
+            for cell in row.cells:
+                if cell.text.strip() and cell._tc not in seen_cells:
+                    seen_cells.add(cell._tc)
+                    parts.append(cell.text.strip())
+    return "\n".join(parts)
 
 
 def extract_text_from_txt(file_path):

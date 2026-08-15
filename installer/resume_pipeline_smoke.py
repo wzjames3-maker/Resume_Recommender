@@ -32,7 +32,8 @@ WORKSPACE = "default"
 USERNAME = os.environ.get("REAL_MODEL_USER", "smoke-admin")
 PASSWORD = os.environ.get("REAL_MODEL_PASSWORD", "Smoke@123")
 CORPUS_DIR = os.path.join(ROOT, "testdata", "generated", "resumes")
-COUNT = int(sys.argv[1]) if len(sys.argv) > 1 else 3
+COUNT = int(sys.argv[1]) if len(sys.argv) > 1 and sys.argv[1].isdigit() else 3
+MIME = {"docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document", "txt": "text/plain"}
 HTTP_TIMEOUT = 60
 
 
@@ -97,14 +98,19 @@ def main():
                        {"llm_model_id": str(llm_model.id)}, token=token)
     print("HR AI 配置:", status, body if status == 200 else body)
 
-    # 3) 上传简历（每份一次请求，multipart 单文件）
-    names = sorted(f for f in os.listdir(CORPUS_DIR) if f.endswith(".txt"))[:COUNT]
+    # 3) 上传简历（每份一次请求，multipart 单文件；支持命令行指定文件路径）
+    if len(sys.argv) > 1 and sys.argv[1].lower().endswith((".txt", ".docx")) and os.path.exists(sys.argv[1]):
+        paths = sys.argv[1:]
+    else:
+        paths = [os.path.join(CORPUS_DIR, f) for f in sorted(os.listdir(CORPUS_DIR)) if f.endswith(".txt")][:COUNT]
     records = []
-    for name in names:
-        with open(os.path.join(CORPUS_DIR, name), "rb") as handle:
+    for path in paths:
+        name = os.path.basename(path)
+        ext = name.rsplit(".", 1)[-1].lower()
+        with open(path, "rb") as handle:
             content = handle.read()
         status, body = api("POST", "/admin/api/workspace/%s/hr/candidates/resumes" % WORKSPACE,
-                           files={"files": (name, content, "text/plain"), "source_channel": "OTHER"}, token=token)
+                           files={"files": (name, content, MIME.get(ext, "application/octet-stream")), "source_channel": "OTHER"}, token=token)
         if status != 200:
             print("上传失败:", name, status, body)
             return 2
