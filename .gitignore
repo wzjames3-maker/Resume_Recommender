@@ -193,5 +193,8 @@ apps/models_provider/impl/tencent_model_provider/credential/stt.py
 apps/models_provider/impl/tencent_model_provider/model/stt.py
 tmp/
 config.yml
+# 本地测试语料（飞桨简历数据集 2.9GB 不入库）
+/数据集/
+/testdata/generated/
 .SANDBOX_BANNED_HOSTS
 copilot-instructions.md
