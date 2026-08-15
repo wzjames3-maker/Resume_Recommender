@@ -24,8 +24,15 @@
 
 ## 2. 检索管线 v2（定稿）
 
+**查询理解前置（新增）**：入口先做**查询分解**——LLM 解析用户查询为技能列表（复用 ai_parser 的 _SEARCH_PROMPT_TEMPLATE：逐项列出、不得合并复合词）：
+- "会 java python fastapi agent rag 的人" → skills = [java, python, fastapi, agent, rag]
+- 解析失败/无技能 → 视为整句查询（走模式 A）
+- 技能数 = 1 → 走模式 A（单技能与整句等价）
+- 技能数 ≥ 2 → 走**模式 B：技能复合检索（Skill-AND）**
+
+### 模式 A：整句检索（单意图/无技能查询）
+
 ```
-POST /hr/resumes/search
   → ① 校验 + 权限（hr_access_required；VIEWER 结果脱敏）
   → ② 取简历知识库（无 → 400 简历语义索引尚未建立）
   → ③ 一次 embedding（query → 向量；get_embedding_model_by_knowledge_id）
@@ -44,9 +51,34 @@ POST /hr/resumes/search
   → ⑨ 输出 items + meta（全链路追踪）+ SEARCH 审计（查询原文不入库）
 ```
 
+### 模式 B：技能复合检索（Skill-AND，多技能 AND 查询）
+
+```python
+# "会 java python fastapi agent rag 的人" 的检索方式：
+# 不是整句向量化（会把 5 个技能混成一个向量、丢失 AND 约束），而是：
+# 1) LLM 查询分解 → skills = [java, python, fastapi, agent, rag]（复用 ai_parser 的 _SEARCH_PROMPT_TEMPLATE）
+# 2) 结构化路（并行）：Candidate.skills 含全部技能的候选人 → AND 精确过滤（已有组合搜索能力）
+#    命中即"铁证"，直接列为候选，技能命中数 = len(skills)
+# 3) 语义路（并行）：对每个技能**单独** embedding + 双路召回 + RRF（同模式 A ④⑤，k=5 → 5 次 embed）
+#    每个技能各自返回该技能最相关的段落 top(m) —— 技能是短词，单技能查询更精准
+# 4) 简历级 AND 聚合（核心）：按 document_id 聚合技能命中矩阵
+#    hits[resume][skill] = 该技能在该简历任意段落中的最高分（> 阈值即"命中该技能"）
+#    resume.score = 加权总分；按 (命中技能数 desc, 加权总分 desc) 排序
+# 5) 渐进放宽：全部命中不足 top_k → 放宽到命中 k-1, k-2 …（meta.skill_relaxed 记录放宽到几）
+# 6) Rerank 精排 top_k（对命中 ≥ 放宽线的候选段落）
+```
+
+**为什么技能要单独检索而不是整句**：整句 "java python fastapi agent rag" 的 embedding 是一个混合向量——
+- 语义上"java 工程师"和"会 java 的人"分布不同，混合向量对任一技能都不精准；
+- 简历 A 只提 java、简历 B 只提 python，整句检索可能把两者都排在前面，但**没有一份简历同时满足 AND**；
+- 技能单独检索 + 简历级聚合后，"5 项全命中"的简历自然排最前，部分命中的靠后——AND 语义显式成立。
+
+**结构化路与语义路的关系**：结构化路（Candidate.skills AND）命中的候选人 = 精确满足，权重最高；语义路捕获"技能写在正文但没进结构化字段"（如 fastapi/agent/rag 常在项目描述里）的简历。两路按技能命中数统一排序。
+
 **降级链（渐进可用，每级都可独立关闭）**：rerank → RRF 融合 → dense 单路 → 空结果+meta
-- rerank 未配置：跳过 ⑦，RRF 排序直出
+- rerank 未配置：跳过精排，聚合排序直出
 - 关键词路失败（Termbase 缺失等）：dense 单路 + meta.sparse_failed=true
+- 技能解析失败（LLM 不可用）：退化模式 A（整句检索）
 - 知识库无文档：空 items（200）
 
 ## 3. API 设计
@@ -60,7 +92,7 @@ POST /hr/resumes/search
   "top_k": 5,          // 最终返回条数，默认 5，clamp [1, 20]
   "recall_k": 15,      // 候选放大召回段数，默认 = top_k*3，clamp [5, 60]
   "similarity": 0.2,   // 阈值（dense 路 similarity 下限），默认 0.2，clamp [0, 2]
-  "mode": "auto"       // auto | hybrid | dense（dense 供对比评测用）
+  "mode": "auto"       // auto(自动分解:技能≥2→Skill-AND,否则整句) | hybrid | dense | phrase(强制整句) | skills(强制技能分解)
 }
 ```
 
@@ -131,8 +163,11 @@ def _rerank(query, fused, rerank_model, top_n) -> tuple[list, bool]:
 def _aggregate(paragraphs, resume_map) -> list[SearchResult]:
     """Small-to-Big + 简历聚合：0.7*max + 0.3*avg；同简历合并；孤儿段落仍返回 resume 级。"""
 
-def _mask_for_role(candidate, hr_role) -> dict:
-    """VIEWER 脱敏 phone/email；OPERATOR/ADMIN 原样。"""
+def _parse_skills(query, llm_model) -> list[str]:
+    """LLM 查询分解为技能列表（复用 ai_parser._SEARCH_PROMPT_TEMPLATE）；失败返回 []（退模式 A）。"""
+
+def _search_skill_and(skills, structured_hits, knowledge, embedding_model, candidate_k, similarity, top_k):
+    """模式 B 主干：每技能单独双路召回 → RRF → 简历级 AND 聚合 → 渐进放宽 → rerank。"""
 ```
 
 复用点（不改内核）：
@@ -158,11 +193,16 @@ def _mask_for_role(candidate, hr_role) -> dict:
 | SEARCH 审计 | 动作记录、query 原文不在 detail |
 | 参数校验 | query 缺失/超长/mode 非法/top_k 越界 400 |
 | mode=dense | 只走 dense 路（评测用） |
+| 模式 B：查询分解（mock LLM 返回 5 技能） | 走 Skill-AND、结构化路+语义路都调用 |
+| 模式 B：技能命中矩阵聚合 | 全命中排前、部分命中靠后、加权总分正确 |
+| 模式 B：渐进放宽 | 全命中不足 top_k → 放宽 k-1，meta.skill_relaxed 记录 |
+| 模式 B：技能解析失败 | 退化模式 A 整句检索，meta.mode=phrase |
+| 模式 B：结构化路命中 | Candidate.skills 全含 → 权重最高排前 |
 
 ### 5.2 真实模型冒烟（installer/resume_search_smoke.py，渐进）
 
 1. 入库 5~10 份数据集简历（复用 resume_pipeline_smoke.py 或直接 SQL 造数）
-2. 4 个查询：实体型"有幕墙系统设计经验"、技能型"熟悉 Python 和 Django"、自然语言型"有销售管理经验的候选人"、复合型"3 年以上财务主管经验"
+2. 5 个查询：实体型"有幕墙系统设计经验"、技能型"熟悉 Python 和 Django"、自然语言型"有销售管理经验的候选人"、复合型"3 年以上财务主管经验"、**技能复合型"会 java python fastapi agent rag 的人"（模式 B：分解为 5 技能 → 各自检索 → AND 聚合）**
 3. 每查询打印：dense top5 / sparse top5 / RRF top5 / rerank top5 排序对比 + 命中候选人 + meta
 4. 验收：rerank 排序与 RRF 差异可见；meta 字段完整；降级路径可手动触发验证
 
@@ -170,7 +210,7 @@ def _mask_for_role(candidate, hr_role) -> dict:
 
 - 语料：数据集 30 份简历入库（向量化）
 - 锚点查询 10~15 个（实体型 5~7 + 自然语言型 5~8，从简历内容反向构造，标注目标简历）
-- 对比：结构化基线（组合搜索 recall@5）vs dense-only vs RRF 融合 vs RRF+rerank
+- 对比：结构化基线（组合搜索 recall@5）vs dense-only vs RRF 融合 vs RRF+rerank vs **Skill-AND（模式 B，技能复合查询）**
 - 指标：recall@5（各模式）、rerank 后 recall@3、Top-1 准确率、MRR、平均排序位置
 - 结论：RRF 是否优于单 dense、rerank 是否再提升、语义是否优于结构化基线（PRD 完成定义）
 
@@ -188,7 +228,7 @@ def _mask_for_role(candidate, hr_role) -> dict:
 
 | 项 | 量 |
 |---|---|
-| Embedding（查询向量） | ~40 次（10~15 查询 × 1 + 冒烟/对比，每查询只 embed 1 次——双路共用） |
+| Embedding（查询向量） | ~60 次（模式 A 每查询 1 次；模式 B 每技能 1 次（技能数 ≤ 10 封顶，如 5 技能=5 次）；评测 + 冒烟合计） |
 | Rerank（/rerank 端点） | ~15 次（每查询 1 次） |
 | LLM | 0（仅可选增强 B/C/D 时） |
 | SQL | 零新增（复用 embedding_search/keywords_search.sql） |
