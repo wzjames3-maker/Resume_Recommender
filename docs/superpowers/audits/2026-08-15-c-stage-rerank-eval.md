@@ -27,7 +27,7 @@
 
 1. **RRF+rerank 全面最优，达成 PRD 完成定义**：recall@5=0.92、MRR=0.785，显著优于结构化基线（0.00）与单路 dense（0.513）。rerank 把"平面设计"目标从 RRF 第 2 提到第 1、"幕墙"等保持 Top-1，并清理了低相关候选（rerank 分 0 的排后）。
 2. **RRF 双路融合优于单 dense**（MRR 0.513→0.579，recall@3 0.58→0.67）：sparse 关键词路（jieba→tsvector）对实体词（新媒体/平面设计/会计）有精确命中，与 dense 语义互补。
-3. **Skill-AND 技能复合**：recall@3=0.75、MRR 0.604（含 rerank 精排，2026-08-16 补齐设计步骤 6）。12 个锚点中仅 3 个（Unity/楼面经理/外联）被 LLM 解析为多技能走模式 B，其余为单复合技能走模式 A——评测集多数查询并非多技能场景，Skill-AND 优势未充分体现；单测已验证模式 B rerank 通路（skill_ordered_reranked），真实多技能查询（"会 java python fastapi agent rag 的人"）上技能分解价值在数据集 30 份压力测试中已验证。
+3. **Skill-AND 技能复合**：recall@3=0.75、MRR 0.604（含 rerank 精排，2026-08-16 补齐设计步骤 6）。12 个锚点中仅 3 个（Unity/楼面经理/外联）被 LLM 解析为多技能走模式 B，其余为单复合技能走模式 A——评测集多数查询并非多技能场景，Skill-AND 优势未充分体现；模式 B rerank 通路已由单测与 HTTP 验收验证（skill_ordered_reranked，"会 java python fastapi agent rag 的人"5 技能分解正确）；在真实多技能异质语料上的优势需更大标注集验证。
 4. **结构化基线 0.00**：该语料 Candidate.skills 规则解析为空（技能在正文未进结构化字段）——恰好证明简历正文语义检索的价值（结构化检索对此类简历完全失效）。
 5. **rerank 成本**：每查询 1 次 /rerank 调用（top_n=5），12 查询共 12 次，远低于配额。
 

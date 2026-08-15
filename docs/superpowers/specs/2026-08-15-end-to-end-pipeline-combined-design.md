@@ -92,6 +92,8 @@
 2. 阶段 2：打通入库链路（含生命周期同步）
 3. 阶段 3：rerank 接入 + Small-to-Big + 可选增强
 
+> **执行状态（2026-08-16）**：阶段 1/2/3 均已交付，C 阶段完成定义达成（PRD §9.2）——量化对比见 audits/2026-08-15-c-stage-rerank-eval.md；实施记录见 plans/2026-08-15-c-stage-resume-rag.md 与 HANDOFF §5.3。
+
 > 关联文档：实施计划 ../plans/2026-08-15-c-stage-resume-rag.md；链路流程图 2026-08-15-resume-upload-split-embed-flow.md（辅助）；调研 ../audits/2026-08-15-chunking-landscape.md；审查 ../audits/2026-08-15-design-reality-check.md
 
 
