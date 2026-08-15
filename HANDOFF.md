@@ -28,7 +28,7 @@ export MAXKB_CONFIG_TYPE=ENV \
   MAXKB_REDIS_DB=0 MAXKB_REDIS_MAX_CONNECTIONS=10
 
 uv run python apps/manage.py test hr.tests --keepdb            # HR 全量
-uv run python apps/manage.py test hr.tests application.tests knowledge.tests models_provider.tests --keepdb  # 四 app 全量
+uv run python apps/manage.py test hr.tests application.tests knowledge.tests models_provider.tests ops.tests --keepdb  # 四 app + ops 全量
 uv run python apps/manage.py makemigrations --check --dry-run  # 迁移漂移检查
 uv run python apps/manage.py migrate --check                   # 未应用迁移检查
 uv run ruff check apps/hr/
@@ -57,7 +57,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 | `README-hr.md` | 各期验收记录（一期到 A 阶段，含测试数演进） |
 | `docs/superpowers/specs/2026-08-13-*.md` | 二至七期规格（简历/搜索匹配/AI/异步/合并） |
 
-## 3. 已完成（当前测试基线：四 app 227/227 PASS，HR 215）
+## 3. 已完成（当前测试基线：四 app + ops 231/231 PASS，HR 215）
 
 ### 3.1 PRD 七期（基础能力）
 
@@ -103,7 +103,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 
 ### 5.1 部署环境验证（A 阶段关闭前提，处理真实 PII 前必须完成）
 
-- Celery worker+beat 真实调度：**heartbeat.py 硬编码 `/opt/maxkb-app/tmp`**（本机无权限创建导致 worker 起不来；可改为 `MAXKB_WORKER_TMP` 环境变量兼容默认路径）。TTL 清理 beat 任务（`hr-cleanup-orphan-resumes`）在 `apps/hr/task/resume.py` 的 `worker_ready` 信号中注册（勿改回 apps.py ready——那会在应用加载时访问数据库，导致测试库模板克隆被连接占用而失败，见提交 `fe42c65`）
+- Celery worker+beat 真实调度：**heartbeat.py 硬编码 `/opt/maxkb-app/tmp`** → 已修复（2026-08-15）：探针目录改为 `MAXKB_WORKER_TMP` 环境变量覆盖、默认值不变（向后兼容）；新增 `apps/ops/tests.py` 4 用例，全量 231/231。本机起 worker 时 export `MAXKB_WORKER_TMP=$HOME/maxkb-tmp` 即可。TTL 清理 beat 任务（`hr-cleanup-orphan-resumes`）在 `apps/hr/task/resume.py` 的 `worker_ready` 信号中注册（勿改回 apps.py ready——那会在应用加载时访问数据库，导致测试库模板克隆被连接占用而失败，见提交 `fe42c65`）
 - 对象存储私有化（当前简历在本地 `data/resume/`）
 - TLS、数据库/备份静态加密、密钥管理
 - 日志/监控脱敏人工检查
@@ -135,7 +135,7 @@ Embedding 语义召回、可解释匹配、人工反馈、索引与候选人生�
 ## 7. 提交流程与账本
 
 - 每期：docs 规格提交 → docs 实现计划提交 → 实现（TDD）→ 全量验收 → 审查 → 修复
-- 测试数演进：23→31→39→47→76→86→107→141→183→207→215（HR）→227（四 app）
+- 测试数演进：23→31→39→47→76→86→107→141→183→207→215（HR）→227（四 app）→231（四 app + ops 4，2026-08-15）
 - 规格/计划/验收文档路径规范：`docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`、`docs/superpowers/plans/`、`docs/superpowers/audits/YYYY-MM-DD-<topic>-baseline.md`
 - 提交信息：`feat(人事)/fix(人事)/docs(人事)/test(人事): 中文描述`
 
