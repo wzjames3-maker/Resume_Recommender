@@ -9,6 +9,7 @@
       <el-button v-if="isHrOperator" type="primary" plain @click="openResumeUpload()">上传简历</el-button>
       <el-button v-if="isHrAdmin" plain @click="aiSettingVisible = true">AI 设置</el-button>
       <el-button v-if="isHrAdmin" plain :loading="exporting" @click="exportCandidates">导出</el-button>
+      <el-button v-if="isHrAdmin" plain @click="importDialogVisible = true">批量导入</el-button>
       <input ref="resumeInputRef" type="file" multiple accept=".docx,.txt" class="hidden-input" @change="handleResumeFiles" />
     </div>
 
@@ -160,6 +161,46 @@
       </template>
     </el-dialog>
 
+    <el-dialog v-model="importDialogVisible" title="批量导入候选人" width="720px">
+      <div class="mb-16">
+        <el-button link type="primary" @click="downloadImportTemplate">下载 CSV 模板</el-button>
+        <span class="ml-8 color-secondary">UTF-8 编码，最多 200 行，必填列：name</span>
+      </div>
+      <el-upload
+        drag
+        accept=".csv"
+        :auto-upload="false"
+        :limit="1"
+        :on-change="handleImportFile"
+        :on-remove="() => (importFile = null)"
+      >
+        <div class="el-upload__text">拖拽 CSV 到此处，或<em>点击选择文件</em></div>
+      </el-upload>
+      <div v-if="importReport" class="mt-16">
+        <div class="mb-8">
+          <el-tag type="success" class="mr-8">成功 {{ importReport.success }}</el-tag>
+          <el-tag type="warning" class="mr-8">疑似重复 {{ importReport.duplicates }}</el-tag>
+          <el-tag type="danger">失败 {{ importReport.failed }}</el-tag>
+        </div>
+        <el-table :data="importReport.records" size="small" max-height="260">
+          <el-table-column prop="row_no" label="行号" width="60" />
+          <el-table-column prop="name" label="姓名" min-width="100" />
+          <el-table-column label="结果" width="100">
+            <template #default="{ row }">
+              <el-tag :type="row.status === 'created' ? 'success' : row.status === 'duplicate' ? 'warning' : 'danger'" size="small">
+                {{ row.status === 'created' ? '已创建' : row.status === 'duplicate' ? '疑似重复' : '失败' }}
+              </el-tag>
+            </template>
+          </el-table-column>
+          <el-table-column prop="reason" label="原因" min-width="200" show-overflow-tooltip />
+        </el-table>
+      </div>
+      <template #footer>
+        <el-button @click="importDialogVisible = false">关闭</el-button>
+        <el-button type="primary" :disabled="!importFile" :loading="importing" @click="submitImport">开始导入</el-button>
+      </template>
+    </el-dialog>
+
     <el-dialog v-model="uploadDialogVisible" title="上传简历" width="520px">
       <el-form label-width="96px">
         <el-form-item label="来源渠道">
@@ -263,7 +304,8 @@ import AppTable from '@/components/app-table/index.vue'
 import AiSettingDialog from '@/views/hr/components/AiSettingDialog.vue'
 import HrApi from '@/api/hr/recruitment'
 import AuthorizationApi from '@/api/system/resource-authorization'
-import type { Candidate, CandidateDetail, ConsentStatus, ContactPreference, Job, RelationType, ResumeChannel, ResumeFile, ResumeUploadResult } from '@/api/type/hr'
+import type { UploadFile } from 'element-plus'
+import type { Candidate, CandidateDetail, ConsentStatus, ContactPreference, ImportReport, Job, RelationType, ResumeChannel, ResumeFile, ResumeUploadResult } from '@/api/type/hr'
 import useStore from '@/stores'
 import { MsgConfirm, MsgError, MsgSuccess } from '@/utils/message'
 
@@ -521,6 +563,35 @@ function exportCandidates() {
     .catch(() => {})
     .finally(() => {
       exporting.value = false
+    })
+}
+
+const importDialogVisible = ref(false)
+const importing = ref(false)
+const importFile = ref<File | null>(null)
+const importReport = ref<ImportReport | null>(null)
+
+function handleImportFile(file: UploadFile) {
+  importFile.value = file.raw || null
+  importReport.value = null
+}
+
+function downloadImportTemplate() {
+  HrApi.downloadImportTemplate()
+}
+
+function submitImport() {
+  if (!importFile.value) return
+  importing.value = true
+  HrApi.importCandidates(importFile.value)
+    .then((response) => {
+      importReport.value = response.data
+      MsgSuccess('导入完成')
+      refresh()
+    })
+    .catch(() => {})
+    .finally(() => {
+      importing.value = false
     })
 }
 

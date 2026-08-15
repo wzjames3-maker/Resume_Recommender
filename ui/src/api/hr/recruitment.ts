@@ -14,6 +14,7 @@ import type {
   HrConfig,
   HrRole,
   HandoffRecord,
+  ImportReport,
   Interview,
   Job,
   JobCloseReason,
@@ -60,6 +61,15 @@ const deleteCandidate = (candidateId: string) =>
 
 const exportCandidates = (filters: Record<string, unknown>) =>
   exportFilePost('candidates.csv', `${prefix.value}/export/candidates`, {}, { filters })
+
+const importCandidates = (file: File) => {
+  const formData = new FormData()
+  formData.append('file', file)
+  return post(`${prefix.value}/import/candidates`, formData) as Promise<Result<ImportReport>>
+}
+
+const downloadImportTemplate = () =>
+  exportFile('candidates_import_template.csv', `${prefix.value}/import/candidates/template`, {}, undefined)
 
 const getJobs = (page: pageRequest, params?: Record<string, unknown>) =>
   get(`${prefix.value}/jobs/${page.current_page}/${page.page_size}`, params) as Promise<Result<PageResult<Job>>>
@@ -225,6 +235,8 @@ export default {
   downloadResume,
   exportCandidates,
   extractSkills,
+  importCandidates,
+  downloadImportTemplate,
   getAccess,
   getAiConfig,
   getAuditLogs,

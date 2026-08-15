@@ -123,6 +123,22 @@ export interface Offer {
   update_time: string
 }
 
+export interface ImportRecord {
+  row_no: number
+  name: string
+  status: 'created' | 'duplicate' | 'failed'
+  reason?: string
+  candidate_id?: string
+}
+
+export interface ImportReport {
+  total: number
+  success: number
+  failed: number
+  duplicates: number
+  records: ImportRecord[]
+}
+
 export interface HandoffRecord {
   id: string
   assignment_id: string
