@@ -30,7 +30,7 @@ from django.db import models, transaction
 from django.db.models import Q, QuerySet
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _
-from knowledge.models import Knowledge
+from knowledge.models import Knowledge, KnowledgeScope
 from knowledge.serializers.common import BatchMoveSerializer, BatchSerializer
 from knowledge.serializers.knowledge import KnowledgeModelSerializer, KnowledgeSerializer
 from maxkb.conf import PROJECT_DIR
@@ -433,6 +433,7 @@ class ApplicationSerializer(serializers.Serializer):
         ).auth_resource(str(r.get("id")))
         return r
 
+    @staticmethod
     def to_application_knowledge_mapping(application_id: str, knowledge_id: str):
         return ResourceMapping(
             id=uuid.uuid7(),
@@ -489,6 +490,7 @@ class ApplicationOperateSerializer(serializers.Serializer):
         QuerySet(Application).filter(id=application_id).delete()
         return True
 
+    @staticmethod
     def reset_application_version(application_version, application):
         update_field_dict = {
             "application_name": "name",
@@ -716,7 +718,6 @@ class ApplicationOperateSerializer(serializers.Serializer):
             "knowledge_list": knowledge_list,
         }
 
-    @staticmethod
     def list_knowledge(self, with_valid=True):
         if with_valid:
             self.is_valid(raise_exception=True)

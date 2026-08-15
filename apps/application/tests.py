@@ -117,6 +117,139 @@ class ApplicationCreateValidationTests(TestCase):
         serializer.is_valid(user_id=uuid.uuid7(), raise_exception=True)
 
 
+class ApplicationInsertMappingTests(TestCase):
+    def setUp(self):
+        ApplicationFolder.objects.create(id="default", name="root", workspace_id="default")
+        from knowledge.models import KnowledgeFolder
+        KnowledgeFolder.objects.create(id="default", name="root", workspace_id="default")
+
+    def test_insert_simple_creates_application_and_access_token(self):
+        from application.models import ApplicationAccessToken
+        from application.serializers.application import ApplicationSerializer
+        from system_manage.models import AuthTargetType, WorkspaceUserResourcePermission
+        from users.models import User
+
+        user = User.objects.create(username="app-insert-test", nick_name="t", role="ADMIN")
+        payload = {
+            "name": "insert-test-app",
+            "desc": "",
+            "folder_id": "default",
+            "model_id": None,
+            "dialogue_number": 0,
+            "prologue": "",
+            "knowledge_id_list": [],
+            "knowledge_setting": {
+                "top_n": 3,
+                "similarity": 0.6,
+                "max_paragraph_char_number": 5000,
+                "search_mode": "embedding",
+                "no_references_setting": {"status": "ai_questioning", "value": "{question}"},
+            },
+            "model_setting": {
+                "prompt": "prompt",
+                "system": "",
+                "no_references_prompt": "{question}",
+                "reasoning_content_enable": False,
+            },
+            "problem_optimization": False,
+            "problem_optimization_prompt": "optimize",
+            "type": "SIMPLE",
+        }
+        result = ApplicationSerializer(
+            data={"workspace_id": "default", "user_id": str(user.id)}
+        ).insert(payload)
+        app = Application.objects.get(id=result["id"])
+        self.assertEqual(app.name, "insert-test-app")
+        self.assertTrue(ApplicationAccessToken.objects.filter(application_id=app.id).exists())
+        self.assertTrue(
+            WorkspaceUserResourcePermission.objects.filter(target=str(app.id), user_id=user.id).exists()
+        )
+
+    def test_insert_simple_creates_knowledge_mapping(self):
+        from application.serializers.application import ApplicationSerializer
+        from knowledge.models import Knowledge
+        from system_manage.models.resource_mapping import ResourceMapping
+        from users.models import User
+
+        user = User.objects.create(username="app-insert-mapping-test", nick_name="t", role="ADMIN")
+        from models_provider.models import Model
+        knowledge = Knowledge.objects.create(
+            id=uuid.uuid7(), name="kb", desc="", workspace_id="default", user_id=user.id
+        )
+        payload = {
+            "name": "insert-mapping-test-app",
+            "desc": "",
+            "folder_id": "default",
+            "model_id": None,
+            "dialogue_number": 0,
+            "prologue": "",
+            "knowledge_id_list": [str(knowledge.id)],
+            "knowledge_setting": {
+                "top_n": 3,
+                "similarity": 0.6,
+                "max_paragraph_char_number": 5000,
+                "search_mode": "embedding",
+                "no_references_setting": {"status": "ai_questioning", "value": "{question}"},
+            },
+            "model_setting": {
+                "prompt": "prompt",
+                "system": "",
+                "no_references_prompt": "{question}",
+                "reasoning_content_enable": False,
+            },
+            "problem_optimization": False,
+            "problem_optimization_prompt": "optimize",
+            "type": "SIMPLE",
+        }
+        result = ApplicationSerializer(
+            data={"workspace_id": "default", "user_id": str(user.id)}
+        ).insert(payload)
+        mapping = ResourceMapping.objects.filter(source_id=result["id"], source_type="APPLICATION").first()
+        self.assertIsNotNone(mapping)
+        self.assertEqual(mapping.target_id, str(knowledge.id))
+
+    def test_publish_creates_application_version(self):
+        from application.models import ApplicationAccessToken, ApplicationVersion
+        from application.serializers.application import ApplicationOperateSerializer, ApplicationSerializer
+        from users.models import User
+
+        user = User.objects.create(username="app-publish-test", nick_name="t", role="ADMIN")
+        payload = {
+            "name": "publish-test-app",
+            "desc": "",
+            "folder_id": "default",
+            "model_id": None,
+            "dialogue_number": 0,
+            "prologue": "",
+            "knowledge_id_list": [],
+            "knowledge_setting": {
+                "top_n": 3,
+                "similarity": 0.6,
+                "max_paragraph_char_number": 5000,
+                "search_mode": "embedding",
+                "no_references_setting": {"status": "ai_questioning", "value": "{question}"},
+            },
+            "model_setting": {
+                "prompt": "prompt",
+                "system": "",
+                "no_references_prompt": "{question}",
+                "reasoning_content_enable": False,
+            },
+            "problem_optimization": False,
+            "problem_optimization_prompt": "optimize",
+            "type": "SIMPLE",
+        }
+        result = ApplicationSerializer(
+            data={"workspace_id": "default", "user_id": str(user.id)}
+        ).insert(payload)
+        ApplicationOperateSerializer(
+            data={"application_id": result["id"], "user_id": str(user.id), "workspace_id": "default"}
+        ).publish({})
+        app = Application.objects.get(id=result["id"])
+        self.assertTrue(app.is_publish)
+        self.assertEqual(ApplicationVersion.objects.filter(application_id=app.id).count(), 1)
+
+
 class TriggerJobCleanupTests(SimpleTestCase):
     @patch("django_apscheduler.models.DjangoJob.objects")
     def test_cleanup_filters_trigger_prefix_only(self, mock_objects):
