@@ -306,6 +306,7 @@ class ResumeFile(models.Model):
     status = models.CharField(max_length=16, choices=ResumeStatus.choices, default=ResumeStatus.PENDING)
     error_message = models.TextField(blank=True, default="")
     candidate = models.ForeignKey(Candidate, on_delete=models.SET_NULL, null=True, blank=True)
+    document_id = models.UUIDField(null=True, blank=True, verbose_name="语义索引文档id")
     user_id = models.UUIDField(null=True, blank=True)
     create_time = models.DateTimeField(auto_now_add=True)
     update_time = models.DateTimeField(auto_now=True)

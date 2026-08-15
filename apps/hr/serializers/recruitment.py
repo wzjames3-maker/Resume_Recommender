@@ -28,6 +28,7 @@ from hr.models import (
     ResumeStatus,
     TerminationReason,
 )
+from hr.services.resume_index import delete_resume_index, set_resume_index_active
 from hr.services.resume_parser import extract_text_from_docx, extract_text_from_txt
 from hr.services.audit import write_audit_log
 from hr.services.storage import get_storage
@@ -536,6 +537,8 @@ class RecruitmentService:
             raise AppApiException(400, "Candidate has an active assignment")
         candidate.status = CandidateStatus.ARCHIVED
         candidate.save(update_fields=["status", "update_time"])
+        for resume in ResumeFile.objects.filter(workspace_id=self.workspace_id, candidate=candidate):
+            set_resume_index_active(resume, False)
         write_audit_log(self.workspace_id, self.user_id, "ARCHIVE", "CANDIDATE", candidate.id)
         return self._candidate_output(candidate)
 
@@ -548,6 +551,8 @@ class RecruitmentService:
             raise AppApiException(400, "Candidate is not archived")
         candidate.status = CandidateStatus.ACTIVE
         candidate.save(update_fields=["status", "update_time"])
+        for resume in ResumeFile.objects.filter(workspace_id=self.workspace_id, candidate=candidate):
+            set_resume_index_active(resume, True)
         write_audit_log(self.workspace_id, self.user_id, "RESTORE", "CANDIDATE", candidate.id)
         return self._candidate_output(candidate)
 
@@ -568,6 +573,7 @@ class RecruitmentService:
             raise AppApiException(400, "Candidate is hired, cannot delete")
         storage = get_storage()
         for resume in ResumeFile.objects.filter(workspace_id=self.workspace_id, candidate=candidate):
+            delete_resume_index(resume)
             file_delete_failed = False
             if resume.file_path and storage.exists(resume.file_path):
                 try:

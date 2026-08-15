@@ -36,6 +36,9 @@ from hr.serializers.import_service import ImportService
 from hr.serializers.offer import OfferService, OnboardingService
 from hr.serializers.recruitment import CANDIDATE_EXPORT_FIELDS, RecruitmentService
 from hr.services.ai_parser import extract_skills, parse_search_conditions
+from hr.services.resume_index import delete_resume_index, get_or_create_resume_knowledge, index_resume, set_resume_index_active
+from knowledge.models import Document, Paragraph
+from models_provider.models import Model
 from hr.services.resume_parser import parse_resume_text
 from users.models import User
 
@@ -3234,3 +3237,89 @@ class ResumeSplitterTests(SimpleTestCase):
 
         with self.assertRaises(ValueError):
             split_resume_text("太短", self._stub("{}"))
+
+
+class ResumeIndexTests(TestCase):
+    """C 阶段打通：简历知识库 + 入库索引 + 生命周期同步"""
+
+    def setUp(self):
+        self.workspace_id = "workspace-idx"
+        self.user = User.objects.create(
+            username="idx-" + uuid.uuid7().hex[:8], nick_name="idx", password="p", role="ADMIN"
+        )
+        self.user_id = self.user.id
+        self.model = Model.objects.create(
+            id=uuid.uuid7(), name="bge-test", status="SUCCESS", model_type="EMBEDDING",
+            model_name="BAAI/bge-large-zh-v1.5", provider="model_openai_provider",
+            credential="{}", meta={}, workspace_id="default",
+        )
+
+    def _resume(self):
+        return ResumeFile.objects.create(
+            workspace_id=self.workspace_id, file_name="r.txt", extension="txt",
+            file_path="/tmp/r.txt", file_size=1, sha256="sha-" + uuid.uuid7().hex,
+            source_channel="OTHER", status=ResumeStatus.PENDING, user_id=self.user_id,
+        )
+
+    def _stub_chat(self):
+        payload = (
+            '{"chunks": ['
+            '{"title": "基本信息", "start_line": 1, "end_line": 1},'
+            '{"title": "教育经历-北京师范大学", "start_line": 3, "end_line": 4}'
+            "]}"
+        )
+        return lambda prompt: payload
+
+    @patch("knowledge.serializers.knowledge.embedding_by_knowledge.delay")
+    def test_get_or_create_resume_knowledge_idempotent(self, mock_delay):
+        k1 = get_or_create_resume_knowledge(self.workspace_id, self.user_id)
+        k2 = get_or_create_resume_knowledge(self.workspace_id, self.user_id)
+        self.assertEqual(k1.id, k2.id)
+        self.assertEqual(k1.name, "简历语义索引")
+        self.assertEqual(str(k1.embedding_model_id), str(self.model.id))
+        self.assertEqual(k1.workspace_id, self.workspace_id)
+
+    @patch("knowledge.serializers.document.DocumentSerializers.Operate.refresh")
+    @patch("knowledge.serializers.knowledge.embedding_by_knowledge.delay")
+    def test_index_resume_creates_document_and_paragraphs(self, mock_delay, mock_refresh):
+        resume = self._resume()
+        text = "姓名：李冠光\n\n【教育经历】\n- 院校：北京师范大学 | 学位：硕士"
+        doc_id = index_resume(self.workspace_id, self.user_id, resume, text, self._stub_chat())
+        self.assertTrue(doc_id)
+        resume.refresh_from_db()
+        self.assertEqual(str(resume.document_id), doc_id)
+        document = Document.objects.get(id=doc_id)
+        self.assertEqual(document.name, "r.txt")
+        self.assertEqual(document.knowledge_id, get_or_create_resume_knowledge(self.workspace_id, self.user_id).id)
+        self.assertEqual(Paragraph.objects.filter(document_id=doc_id).count(), 2)
+        mock_refresh.assert_called()  # 向量化被触发
+
+    @patch("knowledge.serializers.document.DocumentSerializers.Operate.refresh")
+    def test_index_resume_replaces_old_document(self, mock_refresh):
+        resume = self._resume()
+        text = "姓名：李冠光\n\n【教育经历】\n- 院校：北京师范大学 | 学位：硕士"
+        doc_id_1 = index_resume(self.workspace_id, self.user_id, resume, text, self._stub_chat())
+        doc_id_2 = index_resume(self.workspace_id, self.user_id, resume, text, self._stub_chat())
+        self.assertNotEqual(doc_id_1, doc_id_2)
+        self.assertFalse(Document.objects.filter(id=doc_id_1).exists())
+        self.assertTrue(Document.objects.filter(id=doc_id_2).exists())
+
+    @patch("knowledge.serializers.document.DocumentSerializers.Operate.refresh")
+    def test_delete_resume_index_removes_document(self, mock_refresh):
+        resume = self._resume()
+        text = "姓名：李冠光\n\n【教育经历】\n- 院校：北京师范大学 | 学位：硕士"
+        doc_id = index_resume(self.workspace_id, self.user_id, resume, text, self._stub_chat())
+        delete_resume_index(resume)
+        self.assertFalse(Document.objects.filter(id=doc_id).exists())
+        resume.refresh_from_db()
+        self.assertIsNone(resume.document_id)
+
+    @patch("knowledge.serializers.document.DocumentSerializers.Operate.refresh")
+    def test_set_resume_index_active_toggles_document(self, mock_refresh):
+        resume = self._resume()
+        text = "姓名：李冠光\n\n【教育经历】\n- 院校：北京师范大学 | 学位：硕士"
+        doc_id = index_resume(self.workspace_id, self.user_id, resume, text, self._stub_chat())
+        set_resume_index_active(resume, False)
+        self.assertFalse(Document.objects.get(id=doc_id).is_active)
+        set_resume_index_active(resume, True)
+        self.assertTrue(Document.objects.get(id=doc_id).is_active)
