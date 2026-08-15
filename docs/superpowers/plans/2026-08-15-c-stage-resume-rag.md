@@ -36,7 +36,7 @@
 
 | 任务 | 内容 | 验收 |
 |---|---|---|
-| 3.1 | **HR 简历语义检索服务**（新）：hr/services/resume_search.py——search_resumes(workspace_id, query, top_k=5)：取简历知识库 → embedding 模型 → vector.hit_test(blend, top_number=10) → 取 RERANKER 模型实例 → rerank(query, [段落], top_n=top_k) → 段落→document_id→ResumeFile/Candidate 回溯；**无 rerank 模型时自动降级 blend top_k**（渐进降级）。**具体设计见 specs/2026-08-15-hr-resume-search-design.md**（API/服务/测试/预算定稿） | 单测（mock 检索/rerank，不调真实模型）；新 API POST /workspace/{ws}/hr/resumes/search（hr_access_required）；真实模型冒烟：数据集简历入库后自然语言查询验证 rerank 排序 |
+| 3.1 | **HR 简历语义检索服务**（新，设计 v2）：hr/services/resume_search.py——一次 embed → 双路独立召回（dense=EmbeddingSearch + sparse=KeywordsSearch，candidate_k=top_k×3）→ Python RRF(k=60) 融合 → list_paragraph 补全 → bge-reranker-v2-m3 精排 top_k → Small-to-Big + 简历聚合打分（0.7×max+0.3×avg）→ items+meta 全链路追踪；降级链 rerank→RRF→dense→空。**具体设计见 specs/2026-08-15-hr-resume-search-design.md（v2，吸收 7 个开源项目检索模式）** | 单测（mock 两路检索/rerank，不调真实模型）；新 API POST /workspace/{ws}/hr/resumes/search（hr_access_required）；真实模型冒烟：四类查询验证 rerank 排序与 meta 完整性 |
 | 3.2 | **Small-to-Big 回溯**：命中段落 → document_id → 简历全文/候选人（姓名/职位/经历摘要）随结果返回；引用展示含上下文 | 返回结构含 candidate/resume/paragraph/score/rank；单测覆盖多段落命中同一简历去重 |
 | 3.3 | **量化对比报告**（PRD §9.2 完成定义）：试点标注集（数据集 30 份 + 锚点查询 10~15 个：实体型"有幕墙设计经验" + 自然语言型职责描述）→ 对比结构化基线（组合搜索）vs blend top10 vs rerank top5 | 指标：recall@5（三路对比）、rerank 后 recall@3、Top-K 相关性；报告落盘 docs/superpowers/audits/2026-08-15-c-stage-rerank-eval.md |
 | 3.4 | （可选，按评测收益决策）blend 融合改 RRF（k=60）/ 画像向量路 A / RAG Fusion 子查询 / LLM title 摘要 | 各按评测收益决策 |
