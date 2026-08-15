@@ -95,8 +95,9 @@ def dev():
 
 
 if __name__ == '__main__':
-    os.environ['HF_HOME'] = '/opt/maxkb-app/model/base'
-    os.environ['TMPDIR'] = '/opt/maxkb-app/tmp'
+    # 默认路径可通过环境变量覆盖（本机开发无 /opt/maxkb-app 权限时）
+    os.environ.setdefault('HF_HOME', '/opt/maxkb-app/model/base')
+    os.environ.setdefault('TMPDIR', '/opt/maxkb-app/tmp')
     parser = argparse.ArgumentParser(
         description="""
            qabot service control tools;
