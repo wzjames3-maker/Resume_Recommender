@@ -126,7 +126,7 @@ class ApplicationInsertMappingTests(TestCase):
     def test_insert_simple_creates_application_and_access_token(self):
         from application.models import ApplicationAccessToken
         from application.serializers.application import ApplicationSerializer
-        from system_manage.models import AuthTargetType, WorkspaceUserResourcePermission
+        from system_manage.models import WorkspaceUserResourcePermission
         from users.models import User
 
         user = User.objects.create(username="app-insert-test", nick_name="t", role="ADMIN")
@@ -172,7 +172,6 @@ class ApplicationInsertMappingTests(TestCase):
         from users.models import User
 
         user = User.objects.create(username="app-insert-mapping-test", nick_name="t", role="ADMIN")
-        from models_provider.models import Model
         knowledge = Knowledge.objects.create(
             id=uuid.uuid7(), name="kb", desc="", workspace_id="default", user_id=user.id
         )
@@ -209,7 +208,7 @@ class ApplicationInsertMappingTests(TestCase):
         self.assertEqual(mapping.target_id, str(knowledge.id))
 
     def test_publish_creates_application_version(self):
-        from application.models import ApplicationAccessToken, ApplicationVersion
+        from application.models import ApplicationVersion
         from application.serializers.application import ApplicationOperateSerializer, ApplicationSerializer
         from users.models import User
 

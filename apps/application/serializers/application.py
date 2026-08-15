@@ -8,23 +8,19 @@
 """
 
 import hashlib
-import json
 import os
 import re
-from typing import Dict, List
+from typing import Dict
 
 import uuid_utils.compat as uuid
 from application.models.application import Application, ApplicationFolder, ApplicationTypeChoices, ApplicationVersion
 from application.models.application_access_token import ApplicationAccessToken
 from application.serializers.common import update_resource_mapping_by_application
-from common import result
 from common.cache_data.application_access_token_cache import del_application_access_token
 from common.database_model_manage.database_model_manage import DatabaseModelManage
 from common.db.search import native_page_search, native_search
 from common.exception.app_exception import AppApiException
-from common.field.common import UploadedFileField
-from common.utils.common import _remove_empty_lines, get_file_content
-from common.utils.logger import maxkb_logger
+from common.utils.common import get_file_content
 from django.core import validators
 from django.db import models, transaction
 from django.db.models import Q, QuerySet
@@ -35,15 +31,14 @@ from knowledge.serializers.common import BatchMoveSerializer, BatchSerializer
 from knowledge.serializers.knowledge import KnowledgeModelSerializer, KnowledgeSerializer
 from maxkb.conf import PROJECT_DIR
 from models_provider.models import Model
-from models_provider.tools import get_model_instance_by_model_workspace_id
-from rest_framework import serializers, status
+from rest_framework import serializers
 from rest_framework.utils.formatting import lazy_format
 from system_manage.models import AuthTargetType, WorkspaceUserResourcePermission
 from system_manage.models.resource_mapping import ResourceMapping
 from system_manage.serializers.resource_mapping_serializers import ResourceMappingSerializer
 from system_manage.serializers.user_resource_permission import UserResourcePermissionSerializer
 from users.models import User
-from users.serializers.user import is_workspace_manage, is_workspace_manage_permission_read
+from users.serializers.user import is_workspace_manage_permission_read
 
 class ApplicationSerializerModel(serializers.ModelSerializer):
     class Meta:
