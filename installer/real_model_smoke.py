@@ -43,7 +43,7 @@ DATASET_JSON = os.path.join(ROOT, "数据集", "train.json")
 CORPUS_DIR = os.path.join(ROOT, "testdata", "generated", "resumes")
 REPORT_DIR = os.path.join(ROOT, "logs", "real_model_pilot")
 WEB = os.environ.get("REAL_MODEL_WEB", "http://127.0.0.1:8080")
-WORKSPACE = os.environ.get("REAL_MODEL_WORKSPACE", "workspace-smoke")
+WORKSPACE = os.environ.get("REAL_MODEL_WORKSPACE", "default")
 USERNAME = os.environ.get("REAL_MODEL_USER", "smoke-admin")
 PASSWORD = os.environ.get("REAL_MODEL_PASSWORD", "Smoke@123")
 SENSENOVA_BASE = "https://token.sensenova.cn/v1"
@@ -67,14 +67,20 @@ def api(method, path, data=None, token=None, files=None):
     if files is not None:
         boundary = "----maxkb-smoke-%d" % int(time.time() * 1000)
         parts = []
-        for field, (filename, content, content_type) in files.items():
+        for field, value in files.items():
             parts.append(("--" + boundary).encode())
-            parts.append(
-                ("Content-Disposition: form-data; name=\"%s\"; filename=\"%s\"" % (field, filename)).encode()
-            )
-            parts.append(("Content-Type: %s" % content_type).encode())
-            parts.append(b"")
-            parts.append(content)
+            if isinstance(value, tuple):
+                filename, content, content_type = value
+                parts.append(
+                    ("Content-Disposition: form-data; name=\"%s\"; filename=\"%s\"" % (field, filename)).encode()
+                )
+                parts.append(("Content-Type: %s" % content_type).encode())
+                parts.append(b"")
+                parts.append(content)
+            else:
+                parts.append(("Content-Disposition: form-data; name=\"%s\"" % field).encode())
+                parts.append(b"")
+                parts.append(str(value).encode("utf-8"))
         parts.append(("--" + boundary + "--").encode())
         body = b"\r\n".join(parts)
         headers["Content-Type"] = "multipart/form-data; boundary=" + boundary
@@ -192,7 +198,7 @@ def build_corpus(size):
 
 
 def ensure_model(token, name, model_type, model_name, api_base, api_key, params_form=None):
-    status, body = api("GET", "/admin/api/model/%s?name=%s" % (WORKSPACE, urllib.parse.quote(name)), token=token)
+    status, body = api("GET", "/admin/api/workspace/%s/model?name=%s" % (WORKSPACE, urllib.parse.quote(name)), token=token)
     existing = None
     if status == 200 and isinstance(body.get("data"), list):
         for item in body["data"]:
@@ -210,7 +216,7 @@ def ensure_model(token, name, model_type, model_name, api_base, api_key, params_
         "credential": {"api_base": api_base, "api_key": api_key},
         "model_params_form": params_form or [],
     }
-    status, body = api("POST", "/admin/api/model/%s" % WORKSPACE, payload, token=token)
+    status, body = api("POST", "/admin/api/workspace/%s/model" % WORKSPACE, payload, token=token)
     if status != 200:
         raise RuntimeError("创建模型 %s 失败: %s %s" % (name, status, body))
     model_id = body["data"]["id"]
@@ -230,7 +236,7 @@ def ensure_knowledge(token, name, embedding_model_id):
         print("知识库已存在:", name, existing.get("id"))
         return existing["id"]
     status, body = api(
-        "POST", "/admin/api/workspace/%s/knowledge" % WORKSPACE,
+        "POST", "/admin/api/workspace/%s/knowledge/base" % WORKSPACE,
         {"name": name, "folder_id": WORKSPACE, "desc": "简历语义检索试点（脱敏语料）", "embedding_model_id": embedding_model_id},
         token=token,
     )
@@ -251,20 +257,42 @@ def upload_documents(token, knowledge_id, files):
             continue
         with open(os.path.join(CORPUS_DIR, filename), "rb") as f:
             content = f.read()
+        # 第一步：服务端分段
+        status, body = api(
+            "POST", "/admin/api/workspace/%s/knowledge/%s/document/split" % (WORKSPACE, knowledge_id),
+            token=token,
+            files={"file": (filename, content, "text/plain"), "limit": 500, "with_filter": "true"},
+        )
+        split_list = body.get("data") if status == 200 else None
+        if not isinstance(split_list, list) or len(split_list) == 0:
+            REPORT["errors"].append("分段失败 %s: %s %s" % (filename, status, body))
+            print("FAIL 分段", filename, status, str(body)[:200])
+            continue
+        item = split_list[0]
+        paragraphs = [
+            {"content": p.get("content"), "title": p.get("title") or "", "problem_list": []}
+            for p in (item.get("content") or []) if p.get("content")
+        ]
+        if not paragraphs:
+            REPORT["errors"].append("分段为空 %s" % filename)
+            print("FAIL 分段为空", filename)
+            continue
+        # 第二步：创建文档（含段落，触发向量化任务）
         status, body = api(
             "POST", "/admin/api/workspace/%s/knowledge/%s/document" % (WORKSPACE, knowledge_id),
+            {"name": filename, "source_file_id": item.get("source_file_id"), "paragraphs": paragraphs},
             token=token,
-            files={"file": (filename, content, "text/plain")},
         )
         if status == 200:
             uploaded.append(filename)
+            print("上传成功:", filename, "段落", len(paragraphs))
         else:
             detail = body.get("detail") if isinstance(body, dict) else str(body)
             if "exist" in str(detail).lower() or "重复" in str(detail):
                 skipped.append(filename)
             else:
-                REPORT["errors"].append("上传文档失败 %s: %s %s" % (filename, status, detail))
-                print("FAIL 上传文档", filename, status, detail)
+                REPORT["errors"].append("创建文档失败 %s: %s %s" % (filename, status, detail))
+                print("FAIL 创建文档", filename, status, str(body)[:200])
     return uploaded, skipped
 
 
@@ -305,16 +333,25 @@ def hit_test(token, knowledge_id, query, top_number=5):
 
 
 def build_queries(knowledge_id, count):
+    import re
     docs = list(QuerySet(Document).filter(knowledge_id=knowledge_id).order_by("create_time")[:count])
     queries = []
-    skills = ["Java", "Python", "Go", "前端", "数据分析", "机器学习", "数据库", "云计算", "测试", "产品", "算法", "运维", "设计"]
+    skills = ["Java", "Python", "Go", "前端", "数据分析", "机器学习", "数据库", "云计算", "测试", "算法", "运维", "设计", "C++", "PHP", "Android", "iOS"]
     for doc in docs:
-        paragraph = QuerySet(Paragraph).filter(document_id=doc.id, is_active=True).order_by("position").first()
-        if paragraph is None:
-            continue
-        text = paragraph.content
+        paragraphs = QuerySet(Paragraph).filter(document_id=doc.id, is_active=True).order_by("position")
+        text = "\n".join(p.content for p in paragraphs)
+        # 优先用强标识符构造查询：毕业院校 > 技能 > 职务
+        school_match = re.search(r"院校：(.+?)(?:\||\n|$)", text)
         skill = next((kw for kw in skills if kw in text), None)
-        query = "擅长%s的候选人简历" % skill if skill else "负责%s的工程师简历" % doc.name[:12]
+        duty_match = re.search(r"职务：(.+?)(?:\||\n|$)", text)
+        if school_match and school_match.group(1).strip() not in ("", "无"):
+            query = "%s毕业的候选人简历" % school_match.group(1).strip()
+        elif skill:
+            query = "擅长%s的候选人简历" % skill
+        elif duty_match:
+            query = "从事%s工作的候选人简历" % duty_match.group(1).strip()
+        else:
+            continue
         queries.append({"query": query, "expected": doc.name})
     return queries
 
@@ -341,8 +378,8 @@ def main():
     check("语料准备", len(files) == size)
 
     llm_id = ensure_model(token, "sensenova-6.8-flash-lite", "LLM", "sensenova-6.8-flash-lite", SENSENOVA_BASE, sensenova_key)
-    embedding_id = ensure_model(token, "bge-large-zh-v1.5", "EMBEDDING", "BAAI/bge-large-zh-v1.5", SILICONFLOW_BASE, siliconflow_key,
-                                [{"field": "dimensions", "default_value": 1024}])
+    # 注意：SiliconFlow 不支持 dimensions 参数（OpenAI 兼容差异），bge-large-zh-v1.5 固定 1024 维
+    embedding_id = ensure_model(token, "bge-large-zh-v1.5", "EMBEDDING", "BAAI/bge-large-zh-v1.5", SILICONFLOW_BASE, siliconflow_key)
     rerank_id = ensure_model(token, "bge-reranker-v2-m3", "RERANKER", "BAAI/bge-reranker-v2-m3", SILICONFLOW_BASE, siliconflow_key,
                              [{"field": "top_n", "default_value": 3}])
     check("三个外部模型创建/校验", bool(llm_id and embedding_id and rerank_id))
@@ -354,6 +391,17 @@ def main():
     uploaded, skipped = upload_documents(token, knowledge_id, files)
     check("文档上传", len(uploaded) + len(skipped) == len(files), "上传%d 跳过%d" % (len(uploaded), len(skipped)))
 
+    # 已有文档但向量化未完成（重跑/上次失败）时重新触发向量化任务
+    from celery_once import AlreadyQueued
+    from knowledge.task.embedding import embedding_by_document as embedding_by_document_task  # noqa: F401
+    for doc in QuerySet(Document).filter(knowledge_id=knowledge_id):
+        if Status(doc.status)[TaskType.EMBEDDING] in (State.FAILURE, State.REVOKE, State.REVOKED):
+            try:
+                embedding_by_document_task.delay(str(doc.id), embedding_id)
+            except AlreadyQueued:
+                pass
+    print("向量化任务触发完成，等待执行...")
+
     success, failed = wait_embedding(knowledge_id, len(files), stage)
     check("向量化完成", success == len(files) and not failed, "成功%d/%d 失败:%s" % (success, len(files), failed[:5]))
     if success == 0:
@@ -361,12 +409,22 @@ def main():
         sys.exit(3)
 
     queries = build_queries(knowledge_id, query_count)
+    # 自然语言查询对照（语义检索主场，无固定期望，仅记录 top5 供评估）
+    if stage == "2":
+        queries.extend([
+            {"query": "有多年后端开发经验且熟悉数据库的候选人", "expected": None},
+            {"query": "负责过互联网产品运营和用户增长的候选人", "expected": None},
+            {"query": "有数据分析与机器学习项目经验的候选人", "expected": None},
+        ])
     for item in queries:
         results = hit_test(token, knowledge_id, item["query"], top_number=5)
         names = [str(r.get("document_name") or r.get("name") or "") for r in results]
-        hit = item["expected"] in names
+        hit = item["expected"] is not None and item["expected"] in names
         REPORT["queries"].append({"query": item["query"], "expected": item["expected"], "top5": names[:5], "hit": hit})
-        check("命中测试[%s]" % item["query"][:18], hit, "期望=%s top1=%s" % (item["expected"], names[:1]))
+        if item["expected"] is None:
+            print("INFO 语义查询[%s] top5=%s" % (item["query"][:20], names[:5]))
+        else:
+            check("命中测试[%s]" % item["query"][:18], hit, "期望=%s top1=%s" % (item["expected"], names[:1]))
 
     rerank_compare(knowledge_id, rerank_id, queries[: min(3, len(queries))])
 
@@ -424,7 +482,7 @@ def chat_verify(token, llm_model_id, knowledge_id, stage):
                 "no_references_setting": {"status": "ai_questioning", "value": "知识库未命中，请直接回答：{question}"},
             },
             "model_setting": {
-                "prompt": "请基于知识库内容回答，如无相关内容请明确说明。",
+                "prompt": "请基于以下知识库内容回答用户问题，如果知识库没有相关内容请明确说明。\n\n知识库内容：\n{data}\n\n问题：{question}",
                 "system": "",
                 "no_references_prompt": "{question}",
                 "reasoning_content_enable": False,
@@ -440,13 +498,52 @@ def chat_verify(token, llm_model_id, knowledge_id, stage):
             return
         application_id = body["data"]["id"]
     check("应用创建/复用", bool(application_id))
+    # 发布应用（chat 链路要求已发布）
+    status, body = api("PUT", "/admin/api/workspace/%s/application/%s/publish" % (WORKSPACE, application_id), {}, token=token)
+    if status != 200:
+        REPORT["errors"].append("应用发布失败: %s %s" % (status, body))
+        check("应用发布", False, str(body)[:200])
+        return
+    check("应用发布", True)
+    # 应用 access_token（chat 链路使用 ChatTokenAuth）
+    from application.models import ApplicationAccessToken
+    access_token = QuerySet(ApplicationAccessToken).filter(application_id=application_id).first()
+    if access_token is None:
+        REPORT["errors"].append("应用 access_token 不存在")
+        check("问答链路（LLM 引用）", False, "access_token 不存在")
+        return
+    access_token = access_token.access_token
+    # 匿名认证（ChatTokenAuth 会话）
+    status, body = api("POST", "/chat/api/auth/anonymous", {"access_token": access_token})
+    chat_token = body.get("data") if status == 200 else None
+    if isinstance(chat_token, dict):
+        chat_token = chat_token.get("token")
+    check("匿名认证", bool(chat_token))
+    if not chat_token:
+        REPORT["errors"].append("匿名认证失败: %s %s" % (status, body))
+        check("问答链路（LLM 引用）", False, str(body)[:200])
+        return
+    # 打开会话
+    status, body = api("GET", "/chat/api/open", token=chat_token)
+    chat_id = body.get("data") if status == 200 else None
+    check("打开会话", bool(chat_id))
+    if not chat_id:
+        REPORT["errors"].append("打开会话失败: %s %s" % (status, body))
+        check("问答链路（LLM 引用）", False, str(body)[:200])
+        return
     query = REPORT["queries"][0]["query"] if REPORT["queries"] else "有Java经验的候选人简历"
-    status, body = api("POST", "/admin/api/workspace/%s/application/%s/chat" % (WORKSPACE, application_id),
-                       {"message": query, "stream": False, "re_chat": False, "chat_record_id": None}, token=token)
+    status, body = api("POST", "/chat/api/chat_message/%s" % chat_id,
+                       {"message": query, "stream": False, "re_chat": False, "chat_record_id": None}, token=chat_token)
     data = body.get("data") if isinstance(body, dict) else None
     if status == 200 and isinstance(data, dict):
         answer = data.get("answer_text") or data.get("content") or ""
-        citation = data.get("citation_list") or data.get("paragraph_list") or []
+        # 精简内核 chat 响应不含 citation_list，引用从 ChatRecord.search_step 读取
+        citation = []
+        from application.models import ChatRecord
+        chat_record = QuerySet(ChatRecord).filter(chat_id=chat_id).order_by("-create_time").first()
+        if chat_record is not None:
+            search_step = (chat_record.details or {}).get("search_step") or {}
+            citation = search_step.get("paragraph_list") or []
         REPORT["chat"].append({"query": query, "answer": answer[:200], "citation_count": len(citation)})
         check("问答链路（LLM 引用）", bool(answer) and len(citation) > 0, "回答%d字 引用%d条" % (len(answer), len(citation)))
     else:
