@@ -29,7 +29,7 @@ from hr.models import (
     OnboardingHandoff,
 )
 from hr.services.audit import write_audit_log
-from maxkb.const import PROJECT_DIR
+from hr.services.storage import get_storage
 
 _OFFER_TRANSITIONS = {
     OfferStatus.DRAFT: {OfferStatus.SENT},
@@ -265,23 +265,22 @@ class OfferService:
     def get_offer(self, offer_id):
         return self._offer_output(self._offer(offer_id))
 
-    def _attachment_dir(self):
-        directory = os.path.join(PROJECT_DIR, "data", "offer", self.workspace_id)
-        os.makedirs(directory, exist_ok=True)
-        return directory
+    @staticmethod
+    def _attachment_key(workspace_id, offer_id, extension):
+        return os.path.join("offer", workspace_id, f"{offer_id}.{extension}")
 
     def upload_offer_attachment(self, offer_id, file_path, file_name):
         self._require_manage()
         offer = self._offer(offer_id)
-        if offer.attachment_path and os.path.exists(offer.attachment_path):
+        if offer.attachment_path:
             try:
-                os.remove(offer.attachment_path)
+                get_storage().delete(offer.attachment_path)
             except OSError:
                 pass
         extension = os.path.splitext(file_name)[1].lstrip(".").lower() or "pdf"
-        stored = os.path.join(self._attachment_dir(), f"{offer.id}.{extension}")
-        with open(file_path, "rb") as source, open(stored, "wb") as target:
-            target.write(source.read())
+        stored = get_storage().save(
+            self._attachment_key(self.workspace_id, offer.id, extension), file_path
+        )
         offer.attachment_name = file_name
         offer.attachment_path = stored
         offer.save(update_fields=["attachment_name", "attachment_path", "update_time"])
@@ -294,9 +293,9 @@ class OfferService:
     def remove_offer_attachment(self, offer_id):
         self._require_manage()
         offer = self._offer(offer_id)
-        if offer.attachment_path and os.path.exists(offer.attachment_path):
+        if offer.attachment_path:
             try:
-                os.remove(offer.attachment_path)
+                get_storage().delete(offer.attachment_path)
             except OSError:
                 pass
         offer.attachment_name = ""
@@ -311,9 +310,9 @@ class OfferService:
     def offer_attachment_file(self, offer_id):
         self._require_operator()
         offer = self._offer(offer_id)
-        if not offer.attachment_path or not os.path.exists(offer.attachment_path):
+        if not offer.attachment_path or not get_storage().exists(offer.attachment_path):
             raise NotFound404(404, "File not found")
-        return offer.attachment_path, offer.attachment_name
+        return get_storage().open(offer.attachment_path), offer.attachment_name
 
 
 class OnboardingService:

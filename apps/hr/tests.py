@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError, transaction
-from django.test import TestCase
+from django.test import SimpleTestCase, TestCase
 from django.utils import timezone
 from rest_framework.test import APIClient
 import uuid_utils.compat as uuid
@@ -2369,7 +2369,10 @@ class CleanupOrphanResumeTaskTests(TestCase):
 
     def test_reports_resume_file_removal_failure(self):
         resume = self._resume(days_old=31)
-        with patch("hr.task.resume.os.remove", side_effect=OSError("permission denied")):
+        from hr.services.storage import LocalStorage
+        failing = LocalStorage()
+        failing.delete = lambda key: (_ for _ in ()).throw(OSError("permission denied"))
+        with patch("hr.task.resume.get_storage", return_value=failing):
             cleanup_orphan_resumes.run()
         self.assertFalse(ResumeFile.objects.filter(id=resume.id).exists())
         self.assertTrue(
@@ -2477,6 +2480,50 @@ class CandidateLifecycleRouteTests(_HrApiBase):
         self.assertEqual(len(rows), 1)
         self.assertTrue(rows[0]["name"].startswith("'=HYPERLINK"))
         self.assertFalse(rows[0]["name"].startswith("="))
+
+class StorageBackendTests(SimpleTestCase):
+    """对象存储抽象：本地后端往返与后端选择"""
+
+    def setUp(self):
+        from hr.services.storage import reset_storage_for_tests
+        reset_storage_for_tests()
+
+    def tearDown(self):
+        from hr.services.storage import reset_storage_for_tests
+        reset_storage_for_tests()
+
+    def test_local_storage_roundtrip(self):
+        from hr.services.storage import LocalStorage
+        with tempfile.TemporaryDirectory() as root:
+            storage = LocalStorage(root=root)
+            source = os.path.join(tempfile.gettempdir(), "src-" + uuid.uuid7().hex + ".txt")
+            with open(source, "w") as handle:
+                handle.write("hello storage")
+            key = os.path.join("resume", "workspace-a", "sha1.txt")
+            storage.save(key, source)
+            self.assertTrue(storage.exists(key))
+            opened = storage.open(key)
+            with open(opened) as handle:
+                self.assertEqual(handle.read(), "hello storage")
+            storage.delete(key)
+            self.assertFalse(storage.exists(key))
+
+    def test_get_storage_defaults_to_local(self):
+        from hr.services.storage import get_storage, LocalStorage
+        with patch.dict(os.environ, {}, clear=True):
+            self.assertIsInstance(get_storage(), LocalStorage)
+
+    def test_get_storage_s3_selected_by_env(self):
+        from hr.services.storage import get_storage, reset_storage_for_tests
+        with patch.dict(os.environ, {"MAXKB_STORAGE_BACKEND": "s3"}, clear=False):
+            reset_storage_for_tests()
+            try:
+                with patch("hr.services.storage.S3Storage") as mock_class:
+                    get_storage()
+                    mock_class.assert_called_once()
+            finally:
+                reset_storage_for_tests()
+
 
 class ImportServiceTests(TestCase):
     """B4: CSV 批量导入候选人：逐行校验、疑似重复、审计与报告"""

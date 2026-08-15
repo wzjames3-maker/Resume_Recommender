@@ -1,5 +1,4 @@
 # coding=utf-8
-import os
 from datetime import timedelta
 
 import uuid_utils.compat as uuid
@@ -11,6 +10,7 @@ from celery.signals import worker_ready
 from hr.models import Candidate, ResumeFile, ResumeStatus
 from hr.services.audit import write_audit_log
 from hr.services.resume_parser import extract_text_from_docx, extract_text_from_txt, parse_resume_text
+from hr.services.storage import get_storage
 from ops import celery_app
 
 _SYSTEM_USER_ID = uuid.UUID(int=0)
@@ -35,9 +35,9 @@ def cleanup_orphan_resumes():
     resumes = ResumeFile.objects.filter(candidate__isnull=True, create_time__lt=cutoff)
     for resume in resumes:
         file_delete_failed = False
-        if resume.file_path and os.path.exists(resume.file_path):
+        if resume.file_path and get_storage().exists(resume.file_path):
             try:
-                os.remove(resume.file_path)
+                get_storage().delete(resume.file_path)
             except OSError:
                 file_delete_failed = True
         detail = "TTL cleanup: orphan resume older than 30 days"
@@ -56,10 +56,11 @@ def parse_resume_task(resume_id):
     if resume is None:
         return
     try:
+        local_path = get_storage().open(resume.file_path)
         if resume.extension == "docx":
-            text = extract_text_from_docx(resume.file_path)
+            text = extract_text_from_docx(local_path)
         else:
-            text = extract_text_from_txt(resume.file_path)
+            text = extract_text_from_txt(local_path)
         parsed = parse_resume_text(text)
         with transaction.atomic():
             candidate = Candidate.objects.create(

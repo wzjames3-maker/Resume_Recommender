@@ -1,6 +1,5 @@
 import hashlib
 import os
-import shutil
 from datetime import datetime
 
 import uuid_utils.compat as uuid
@@ -31,8 +30,8 @@ from hr.models import (
 )
 from hr.services.resume_parser import extract_text_from_docx, extract_text_from_txt
 from hr.services.audit import write_audit_log
+from hr.services.storage import get_storage
 from hr.task.resume import parse_resume_task
-from maxkb.const import PROJECT_DIR
 from users.models.user import User
 from users.serializers.user import UserManageSerializer
 
@@ -567,11 +566,12 @@ class RecruitmentService:
             status=AssignmentStatus.HIRED,
         ).exists():
             raise AppApiException(400, "Candidate is hired, cannot delete")
+        storage = get_storage()
         for resume in ResumeFile.objects.filter(workspace_id=self.workspace_id, candidate=candidate):
             file_delete_failed = False
-            if resume.file_path and os.path.exists(resume.file_path):
+            if resume.file_path and storage.exists(resume.file_path):
                 try:
-                    os.remove(resume.file_path)
+                    storage.delete(resume.file_path)
                 except OSError:
                     file_delete_failed = True
             write_audit_log(
@@ -883,10 +883,9 @@ class RecruitmentService:
             write_audit_log(self.workspace_id, self.user_id, "ASSIGNMENT_TRANSITION", "ASSIGNMENT", assignment.id)
         return self._assignment_output(assignment)
 
-    def _resume_dir(self):
-        directory = os.path.join(PROJECT_DIR, "data", "resume", self.workspace_id)
-        os.makedirs(directory, exist_ok=True)
-        return directory
+    @staticmethod
+    def _resume_key(workspace_id, sha256, extension):
+        return os.path.join("resume", workspace_id, f"{sha256}.{extension}")
 
     @staticmethod
     def _resume_output(resume):
@@ -932,8 +931,10 @@ class RecruitmentService:
                     "error_message": existing.error_message,
                 })
                 continue
-            stored = os.path.join(self._resume_dir(), f"{sha256}.{extension}")
-            shutil.move(file_path, stored)
+            stored = get_storage().save(
+                self._resume_key(self.workspace_id, sha256, extension), file_path
+            )
+            os.remove(file_path)
             resume = ResumeFile.objects.create(
                 workspace_id=self.workspace_id, file_name=file_name, extension=extension,
                 file_path=stored, file_size=size, sha256=sha256,
@@ -976,6 +977,11 @@ class RecruitmentService:
         resume = ResumeFile.objects.filter(id=resume_id, workspace_id=self.workspace_id).first()
         if resume is None:
             raise NotFound404(404, "Resource not found")
+        if resume.file_path:
+            try:
+                get_storage().delete(resume.file_path)
+            except OSError:
+                pass
         resume.delete()
         write_audit_log(self.workspace_id, self.user_id, "RESUME_DELETE", "RESUME", resume_id)
         return True
@@ -989,25 +995,26 @@ class RecruitmentService:
     def download_resume(self, resume_id):
         self._require_operator()
         resume = self._resume_file(resume_id)
-        if not os.path.exists(resume.file_path):
+        if not resume.file_path or not get_storage().exists(resume.file_path):
             raise NotFound404(404, "File not found")
         content_type = {
             "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             "txt": "text/plain",
         }.get(resume.extension.lower(), "application/octet-stream")
         write_audit_log(self.workspace_id, self.user_id, "RESUME_DOWNLOAD", "RESUME", resume_id)
-        return resume.file_path, resume.file_name, content_type
+        return get_storage().open(resume.file_path), resume.file_name, content_type
 
     def resume_content(self, resume_id):
         self._require_operator()
         resume = self._resume_file(resume_id)
-        if not os.path.exists(resume.file_path):
+        if not resume.file_path or not get_storage().exists(resume.file_path):
             raise NotFound404(404, "File not found")
+        local_path = get_storage().open(resume.file_path)
         try:
             if resume.extension.lower() == "docx":
-                text = extract_text_from_docx(resume.file_path)
+                text = extract_text_from_docx(local_path)
             else:
-                text = extract_text_from_txt(resume.file_path)
+                text = extract_text_from_txt(local_path)
         except Exception as exc:
             raise AppApiException(400, "简历内容提取失败") from exc
         return {"content": text}
