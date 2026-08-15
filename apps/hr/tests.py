@@ -6,6 +6,7 @@ from datetime import timedelta
 from types import SimpleNamespace
 from unittest.mock import patch
 
+from django.core.files.uploadedfile import SimpleUploadedFile
 from django.db import IntegrityError, transaction
 from django.test import TestCase
 from django.utils import timezone
@@ -31,6 +32,7 @@ from hr.models import (
 from hr.services.audit import write_audit_log
 from hr.task.resume import cleanup_orphan_resumes, parse_resume_task
 from hr.serializers.ai import AiService
+from hr.serializers.import_service import ImportService
 from hr.serializers.offer import OfferService, OnboardingService
 from hr.serializers.recruitment import CANDIDATE_EXPORT_FIELDS, RecruitmentService
 from hr.services.ai_parser import extract_skills, parse_search_conditions
@@ -2475,6 +2477,175 @@ class CandidateLifecycleRouteTests(_HrApiBase):
         self.assertEqual(len(rows), 1)
         self.assertTrue(rows[0]["name"].startswith("'=HYPERLINK"))
         self.assertFalse(rows[0]["name"].startswith("="))
+
+class ImportServiceTests(TestCase):
+    """B4: CSV 批量导入候选人：逐行校验、疑似重复、审计与报告"""
+
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.service = ImportService(workspace_id="workspace-a", user_id=self.user_id, hr_role="ADMIN")
+        self.recruitment = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, hr_role="ADMIN")
+        self.existing = Candidate.objects.create(
+            name="Alice", workspace_id="workspace-a", phone="13800000000", email="alice@example.com"
+        )
+
+    def _csv_file(self, rows, header=None):
+        header = header or [
+            "name", "phone", "email", "current_city", "target_city", "highest_degree",
+            "years_experience", "skills", "source_type", "source_detail", "collected_at",
+            "consent_status", "consent_version", "contact_preference", "source", "note",
+        ]
+        import csv as _csv
+        import io as _io
+        buffer = _io.StringIO()
+        writer = _csv.writer(buffer)
+        writer.writerow(header)
+        for row in rows:
+            writer.writerow(row)
+        return buffer.getvalue()
+
+    def test_import_creates_candidates_with_full_fields(self):
+        content = self._csv_file([
+            ["Bob", "13911111111", "bob@example.com", "上海", "北京", "本科", "5", "Python,Django",
+             "REFERRAL", "内推", "2026-08-01T10:00:00Z", "CONSENTED", "v1", "EMAIL", "猎头", "备注"],
+        ])
+        report = self.service.import_candidates_csv(content)
+        self.assertEqual(report["total"], 1)
+        self.assertEqual(report["success"], 1)
+        self.assertEqual(report["failed"], 0)
+        candidate = Candidate.objects.get(name="Bob", workspace_id="workspace-a")
+        self.assertEqual(candidate.phone, "13911111111")
+        self.assertEqual(candidate.skills, ["Python", "Django"])
+        self.assertEqual(candidate.source_type, "REFERRAL")
+        self.assertEqual(candidate.consent_status, "CONSENTED")
+        self.assertEqual(candidate.contact_preference, "EMAIL")
+
+    def test_import_requires_name_header(self):
+        content = self._csv_file([["Bob", "13911111111"]], header=["full_name", "phone"])
+        with self.assertRaisesRegex(AppApiException, "name"):
+            self.service.import_candidates_csv(content)
+
+    def test_import_skips_invalid_enum_row_with_reason(self):
+        content = self._csv_file([
+            ["Bob", "13911111111", "", "", "", "", "", "", "NOPE", "", "", "", "", "", "", ""],
+            ["Cara", "13922222222"],
+        ])
+        report = self.service.import_candidates_csv(content)
+        self.assertEqual(report["success"], 1)
+        self.assertEqual(report["failed"], 1)
+        failed = next(record for record in report["records"] if record["status"] == "failed")
+        self.assertEqual(failed["row_no"], 2)
+        self.assertIn("source_type", failed["reason"])
+
+    def test_import_skips_missing_name_row(self):
+        content = self._csv_file([
+            ["", "13911111111"],
+            ["Cara", "13922222222"],
+        ])
+        report = self.service.import_candidates_csv(content)
+        self.assertEqual(report["success"], 1)
+        self.assertEqual(report["failed"], 1)
+
+    def test_import_parses_skills_with_chinese_separators(self):
+        content = self._csv_file([["Bob", "13911111111", "", "", "", "", "", "Python、Django；Go,"]])
+        report = self.service.import_candidates_csv(content)
+        candidate = Candidate.objects.get(name="Bob", workspace_id="workspace-a")
+        self.assertEqual(sorted(candidate.skills), ["Django", "Go", "Python"])
+        self.assertEqual(report["success"], 1)
+
+    def test_import_reports_invalid_years_experience(self):
+        content = self._csv_file([["Bob", "13911111111", "", "", "", "", "abc"]])
+        report = self.service.import_candidates_csv(content)
+        self.assertEqual(report["success"], 0)
+        self.assertEqual(report["failed"], 1)
+        self.assertIn("years_experience", report["records"][0]["reason"])
+
+    def test_import_marks_duplicate_within_file_but_creates(self):
+        content = self._csv_file([
+            ["Bob", "13911111111"],
+            ["Bob2", "13911111111"],
+        ])
+        report = self.service.import_candidates_csv(content)
+        self.assertEqual(report["success"], 1)
+        self.assertEqual(report["duplicates"], 1)
+        duplicated = next(record for record in report["records"] if record["status"] == "duplicate")
+        self.assertEqual(duplicated["row_no"], 3)
+        self.assertEqual(Candidate.objects.filter(workspace_id="workspace-a").count(), 3)  # existing + 2 imported
+
+    def test_import_marks_duplicate_with_existing_candidate(self):
+        content = self._csv_file([["Bob", "13800000000", "bob@example.com"]])
+        report = self.service.import_candidates_csv(content)
+        self.assertEqual(report["duplicates"], 1)
+        self.assertEqual(Candidate.objects.filter(name="Bob", workspace_id="workspace-a").count(), 1)
+
+    def test_import_writes_import_and_create_audit(self):
+        content = self._csv_file([["Bob", "13911111111"], ["Cara", "13922222222"]])
+        self.service.import_candidates_csv(content)
+        import_log = HrAuditLog.objects.filter(
+            workspace_id="workspace-a", user_id=self.user_id, action="IMPORT", object_type="CANDIDATE"
+        ).first()
+        self.assertIsNotNone(import_log)
+        self.assertIn("success=2", import_log.detail)
+        self.assertIn("failed=0", import_log.detail)
+        self.assertEqual(
+            HrAuditLog.objects.filter(
+                workspace_id="workspace-a", action="CREATE", object_type="CANDIDATE"
+            ).count(), 2
+        )
+
+    def test_import_rejects_over_two_hundred_rows(self):
+        rows = [["Bob{}".format(i), "139{}".format(str(i).zfill(8))] for i in range(201)]
+        with self.assertRaisesRegex(AppApiException, "200"):
+            self.service.import_candidates_csv(self._csv_file(rows))
+
+    def test_import_template_contains_headers(self):
+        header, sample = self.service.import_template()
+        self.assertIn("name", header)
+        self.assertIn("phone", header)
+
+
+class ImportApiTests(_HrApiBase):
+    """B4 路由：导入上传（ADMIN）、模板下载、权限"""
+
+    def setUp(self):
+        self.admin = self._user("hr-admin", "HR Admin")
+        self.operator = self._user("hr-operator", "HR Operator")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.admin.id, role="ADMIN")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.operator.id, role="OPERATOR")
+
+    def test_admin_import_returns_report(self):
+        content = "name,phone\nBob,13911111111\nCara,13922222222\n"
+        upload = SimpleUploadedFile("candidates.csv", content.encode("utf-8"), content_type="text/csv")
+        response = self._client(self.admin).post(
+            "/admin/api/workspace/workspace-a/hr/import/candidates", {"file": upload}, format="multipart"
+        )
+        self.assertEqual(response.status_code, 200)
+        report = response.json()["data"]
+        self.assertEqual(report["success"], 2)
+        self.assertEqual(Candidate.objects.filter(workspace_id="workspace-a").count(), 2)
+
+    def test_operator_import_gets_403(self):
+        content = "name,phone\nBob,13911111111\n"
+        upload = SimpleUploadedFile("candidates.csv", content.encode("utf-8"), content_type="text/csv")
+        response = self._client(self.operator).post(
+            "/admin/api/workspace/workspace-a/hr/import/candidates", {"file": upload}, format="multipart"
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertTrue(
+            HrAuditLog.objects.filter(
+                workspace_id="workspace-a", user_id=self.operator.id, action="ACCESS_DENIED", result="DENIED"
+            ).exists()
+        )
+
+    def test_template_download_contains_headers(self):
+        response = self._client(self.admin).get(
+            "/admin/api/workspace/workspace-a/hr/import/candidates/template"
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.content.decode("utf-8")
+        self.assertIn("name", body)
+        self.assertIn("phone", body)
+
 
 class OfferServiceTests(TestCase):
     """B2: Offer 工件状态机、版本、审批、附件与权限"""

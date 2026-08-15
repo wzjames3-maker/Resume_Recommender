@@ -358,6 +358,7 @@ class HrAuditAction(models.TextChoices):
     OFFER_WITHDRAW = "OFFER_WITHDRAW", "Offer withdraw"
     OFFER_APPROVE = "OFFER_APPROVE", "Offer approve"
     HANDOFF = "HANDOFF", "Handoff"
+    IMPORT = "IMPORT", "Import"
     MERGE = "MERGE", "Merge"
     GRANT_ACCESS = "GRANT_ACCESS", "Grant access"
     REVOKE_ACCESS = "REVOKE_ACCESS", "Revoke access"
