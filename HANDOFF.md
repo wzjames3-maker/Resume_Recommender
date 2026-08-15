@@ -57,7 +57,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 | `README-hr.md` | 各期验收记录（一期到 A 阶段，含测试数演进） |
 | `docs/superpowers/specs/2026-08-13-*.md` | 二至七期规格（简历/搜索匹配/AI/异步/合并） |
 
-## 3. 已完成（当前测试基线：四 app + ops 342/342 PASS，HR 308）
+## 3. 已完成（当前测试基线：四 app + ops 355/355 PASS，HR 321）
 
 ### 3.1 PRD 七期（基础能力）
 
@@ -130,13 +130,14 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 - ✅ 数据流转日志：ResumeFlowLog（迁移 0014/0015）+ 流转日志 API GET /workspace/{ws}/hr/resumes/{id}/flow-logs + UPLOAD/EXTRACT/SANITIZE/SPLIT/DOCUMENT/LIFECYCLE 六节点持久化；SPLIT 节点 detail 含每个 chunk 完整内容（title/content/length/pii），EXTRACT/SANITIZE 保留全文，失败节点记 status=FAILED+error_message；单测 3 例（提交 b70f9d2/5043340）；
 - ✅ docx 表格排版简历提取：extract_text_from_docx 补表格单元格遍历（合并单元格按 _tc 对象去重，修复 id() 复用陷阱）；数据集真实 docx（表格排版、paragraphs 为空）全流程验证 8 段 → 检索命中 0.758（提交 a72b2b9）；
 - ✅ 数据集 30 份切片压力测试 + 两处生产修复（提交 af4c52a）：(1) **SenseNova 6.8 模型行为变化**——默认输出 reasoning 推理流耗尽 max_tokens 致 content 为空、LLM 路径 0% 命中；OpenAI 兼容适配器对 sensenova 透传 model_kwargs={"thinking": {"type": "disabled"}}，实测 106 tokens 完成切片、LLM 路径恢复 29/30；(2) **OCR 分号流**（PaddleOCR 单行"简历；；；姓名；…"输出）使行号边界协议失效——sanitize_resume_text 增加分号流自动转行（分号 ≥5 且基本无换行时触发，正常多行文本不受影响）。测试结果：30/30 成功、29/30 LLM 路径、30/30 内容无改写（保真度量=非空白序列一致）、PII 26/30 掩码（4 份样本本身无 PII）、全部 ≤500 字、耗时 95s。新脚本 installer/resume_splitter_dataset30.py（可复跑，报告 installer/dataset30_report.json）；
-- ✅ 阶段 3.1（检索服务，2026-08-16）：HR 简历语义检索服务（一次 embed → dense+sparse 双路独立召回 → Python RRF(k=60) 融合 → bge-reranker-v2-m3 精排 → Small-to-Big 简历聚合；模式 B Skill-AND 技能复合：LLM 有序技能分解 → 按序逐技能双路召回 → 命中向量字典序 → 顺位放宽）；POST /workspace/{ws}/hr/resumes/search（hr_access_required，VIEWER 脱敏）；HrConfig.rerank_model_id + SEARCH 审计（查询原文不入库）；单测 12 例，全量 354/354（提交 f1cd4ae）。实施中修复：sparse 长查询 AND 漏召回（jieba 截断前 4 词）、sparse 阈值误过滤（内部阈值 0.01）、rerank index 映射错位、rerank 排序被 rrf 聚合覆盖（_para_score 优先 rerank 分）、模式 B 固定阈值无区分度（相对阈值 max(0.2, top×0.75)）；
+- ✅ 阶段 3.1（检索服务，2026-08-16）：HR 简历语义检索服务（一次 embed → dense+sparse 双路独立召回 → Python RRF(k=60) 融合 → bge-reranker-v2-m3 精排 → Small-to-Big 简历聚合；模式 B Skill-AND 技能复合：LLM 有序技能分解 → 按序逐技能双路召回 → 命中向量字典序 → 顺位放宽 → rerank 精排（skill_ordered_reranked，2026-08-16 补齐设计步骤 6））；POST /workspace/{ws}/hr/resumes/search（hr_access_required，VIEWER 脱敏）；HrConfig.rerank_model_id + SEARCH 审计（查询原文不入库）；单测 13 例（提交 f1cd4ae + 08430c1）。实施中修复：sparse 长查询 AND 漏召回（jieba 截断前 4 词）、sparse 阈值误过滤（内部阈值 0.01）、rerank index 映射错位、rerank 排序被 rrf 聚合覆盖（_para_score 优先 rerank 分）、模式 B 固定命中阈值无区分度（相对阈值 max(0.2, top×0.75)）；
 - ✅ 阶段 3.3（量化对比，2026-08-16）：31 份简历语料 + 12 锚点查询 × 5 模式——**RRF+rerank recall@5=0.92 / recall@3=0.83 / Top-1=0.75 / MRR=0.785**，优于 dense-only（0.75/0.513）、RRF（0.75/0.579）、Skill-AND（0.75/0.604），**结构化基线 0.00**（语料 skills 字段为空，正文语义检索价值凸显）；报告落盘 audits/2026-08-15-c-stage-rerank-eval.md。**C 阶段完成定义达成（PRD §9.2）**；
+- ✅ 阶段 3 收尾（2026-08-16，提交 08430c1）：模式 B 接入 rerank + 文档同步（README-hr/plans 阶段 3 已完成）+ **HTTP 端到端验收**（真实 web：登录 → 检索 API 模式 A/B 均 200，空 query/非法 mode 返回 {code:400} 业务码，无 token 401，SEARCH 审计落库且查询原文不入库）。全量 355/355；
 - ⏳ 可选增强（3.4，按评测收益决策）：路由分级 / 画像重排 / RAG Fusion / title 摘要 / docx 变体集，均未触发（评测显示 rerank 已足够）。
 
 另：人工反馈、更大标注集量化对比、档位 3（200 份）仍后置。docx 格式变体评测集（plans 1.3）并入阶段 3 检索评测。**注意**：冒烟中修复了应用创建/发布链路的 3 个裁剪期 bug（96afbd0），application.tests 现有 10 用例。
 
-**运行要点**：web `python main.py dev`；celery `PATH=.venv/bin:$PATH MAXKB_WORKER_TMP=/tmp/maxkb-worker python main.py dev celery`；冒烟 `RUN_REAL_MODEL=1 REAL_MODEL_STAGE=1 SENSENOVA_API_KEY=... SILICONFLOW_API_KEY=... python installer/real_model_smoke.py`。冒烟用户 `smoke-admin`（ADMIN 角色，密码 Smoke@123，仅本机）；模型/知识库/应用 API 只认 `default` 工作区（HR 模块才用自定义 workspace + HrAccess）。
+**运行要点**：web `python main.py dev`；celery `PATH=.venv/bin:$PATH MAXKB_WORKER_TMP=/tmp/maxkb-worker python main.py dev celery`；冒烟 `RUN_REAL_MODEL=1 REAL_MODEL_STAGE=1 SENSENOVA_API_KEY=... SILICONFLOW_API_KEY=... python installer/real_model_smoke.py`；检索冒烟/评测 `SENSENOVA_API_KEY=... python installer/resume_search_smoke.py`、`python installer/resume_search_eval.py`（语料入库 `python installer/resume_ingest_30.py`，幂等）。冒烟用户 `smoke-admin`（ADMIN 角色，密码 Smoke@123，仅本机）；模型/知识库/应用 API 只认 `default` 工作区（HR 模块才用自定义 workspace + HrAccess）。
 
 ## 5.4 已修复的核心层 bug（2026-08-15，冒烟暴露）
 
@@ -158,7 +159,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 ## 7. 提交流程与账本
 
 - 每期：docs 规格提交 → docs 实现计划提交 → 实现（TDD）→ 全量验收 → 审查 → 修复
-- 测试数演进：23→31→39→47→76→86→107（一期至七期，四 app 口径）→141→183→207→215（A 阶段，切 HR 单 app 口径）→227（四 app = HR 215 + 内核 12）→231（+ops 4）→240（+候选恢复 9）→255（+面试协作 15）→287（+Offer/交接 32）→301（+批量导入 14，B 阶段完成，2026-08-15）→336（C 阶段收尾，6c022e4 文档同步基线，HR 302）→**342（HR 308 + 内核 34，2026-08-15 实测：HR 全量 308/308、四 app + ops 342/342，336 后新增 6 例 = 切片器超长降级 2 + docx 表格 1 + 流转日志 3）**
+- 测试数演进：23→31→39→47→76→86→107（一期至七期，四 app 口径）→141→183→207→215（A 阶段，切 HR 单 app 口径）→227（四 app = HR 215 + 内核 12）→231（+ops 4）→240（+候选恢复 9）→255（+面试协作 15）→287（+Offer/交接 32）→301（+批量导入 14，B 阶段完成，2026-08-15）→336（C 阶段收尾，6c022e4 文档同步基线，HR 302）→342（HR 308 + 内核 34，2026-08-15：切片器超长降级 2 + docx 表格 1 + 流转日志 3）→**355（HR 321 + 内核 34，2026-08-16 实测：四 app + ops 355/355，342 后新增 13 例 = ResumeSearchTests 11 + AiService 配置扩展 2）**
 - 规格/计划/验收文档路径规范：`docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`、`docs/superpowers/plans/`、`docs/superpowers/audits/YYYY-MM-DD-<topic>-baseline.md`
 - 提交信息：`feat(人事)/fix(人事)/docs(人事)/test(人事): 中文描述`
 
