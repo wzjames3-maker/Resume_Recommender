@@ -189,6 +189,9 @@ class Interview(models.Model):
     assignment = models.ForeignKey(CandidateAssignment, on_delete=models.CASCADE)
     round_no = models.PositiveSmallIntegerField()
     interviewer = models.CharField(max_length=64, blank=True, default="")
+    interviewer_user_id = models.UUIDField(null=True, blank=True)
+    feedback_deadline = models.DateTimeField(null=True, blank=True)
+    feedback_submitted_at = models.DateTimeField(null=True, blank=True)
     scheduled_at = models.DateTimeField(null=True, blank=True)
     status = models.CharField(max_length=16, choices=InterviewStatus.choices, default=InterviewStatus.PENDING)
     feedback = models.TextField(blank=True, default="")
@@ -259,6 +262,7 @@ class HrAuditAction(models.TextChoices):
     RESUME_UPLOAD = "RESUME_UPLOAD", "Resume upload"
     RESUME_DOWNLOAD = "RESUME_DOWNLOAD", "Resume download"
     RESUME_DELETE = "RESUME_DELETE", "Resume delete"
+    INTERVIEW_FEEDBACK = "INTERVIEW_FEEDBACK", "Interview feedback"
     MERGE = "MERGE", "Merge"
     GRANT_ACCESS = "GRANT_ACCESS", "Grant access"
     REVOKE_ACCESS = "REVOKE_ACCESS", "Revoke access"

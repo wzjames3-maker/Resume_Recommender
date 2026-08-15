@@ -526,6 +526,132 @@ class InterviewServiceTests(TestCase):
             self.service.update_interview(foreign.id, {"status": "PASSED"})
 
 
+class InterviewerCollaborationTests(TestCase):
+    """B1: 面试官用户化、最小可见、反馈截止与可追溯"""
+
+    def setUp(self):
+        self.admin_id = uuid.uuid7()
+        self.interviewer = User.objects.create(
+            username="interviewer-1", nick_name="面试官甲", password="p", role="USER"
+        )
+        self.other = User.objects.create(
+            username="interviewer-2", nick_name="面试官乙", password="p", role="USER"
+        )
+        self.admin = RecruitmentService(workspace_id="workspace-a", user_id=self.admin_id, hr_role="ADMIN")
+        self.interviewer_service = RecruitmentService(
+            workspace_id="workspace-a", user_id=self.interviewer.id, hr_role=None
+        )
+        self.candidate = Candidate.objects.create(name="Bob", workspace_id="workspace-a")
+        self.job = Job.objects.create(name="Engineer", workspace_id="workspace-a", headcount=1)
+        self.assignment_id = self.admin.create_assignment(self.job.id, self.candidate.id, {})["id"]
+
+    def test_create_interview_saves_interviewer_user_and_deadline(self):
+        interview = self.admin.create_interview(self.assignment_id, {
+            "interviewer_user_id": str(self.interviewer.id),
+            "feedback_deadline": "2026-08-20T10:00:00Z",
+        })
+        self.assertEqual(interview["interviewer_user_id"], str(self.interviewer.id))
+        self.assertEqual(interview["interviewer"], "面试官甲")
+        row = Interview.objects.get(id=interview["id"])
+        self.assertEqual(row.interviewer_user_id, self.interviewer.id)
+        self.assertIsNotNone(row.feedback_deadline)
+
+    def test_create_interview_rejects_non_member_interviewer(self):
+        stranger = User.objects.create(
+            username="sys-admin", nick_name="系统管理员", password="p", role="ADMIN"
+        )
+        with self.assertRaisesRegex(AppApiException, "workspace member"):
+            self.admin.create_interview(self.assignment_id, {"interviewer_user_id": str(stranger.id)})
+
+    def test_create_interview_rejects_invalid_interviewer_uuid(self):
+        with self.assertRaisesRegex(AppApiException, "interviewer_user_id is invalid"):
+            self.admin.create_interview(self.assignment_id, {"interviewer_user_id": "not-a-uuid"})
+
+    def test_list_my_interviews_only_returns_mine(self):
+        mine = self.admin.create_interview(self.assignment_id, {
+            "interviewer_user_id": str(self.interviewer.id),
+        })
+        self.admin.create_interview(self.assignment_id, {
+            "interviewer_user_id": str(self.other.id),
+        })
+        result = self.interviewer_service.list_my_interviews()
+        self.assertEqual([item["interview_id"] for item in result], [mine["id"]])
+        self.assertEqual(result[0]["candidate_name"], "Bob")
+        self.assertEqual(result[0]["job_name"], "Engineer")
+        self.assertIs(result[0]["is_overdue"], False)
+        self.assertNotIn("phone", result[0])
+        self.assertNotIn("email", result[0])
+
+    def test_my_interviews_marks_overdue_when_pending_past_deadline(self):
+        interview = self.admin.create_interview(self.assignment_id, {
+            "interviewer_user_id": str(self.interviewer.id),
+            "feedback_deadline": "2020-01-01T00:00:00Z",
+        })
+        result = self.interviewer_service.list_my_interviews()
+        self.assertEqual(result[0]["interview_id"], interview["id"])
+        self.assertIs(result[0]["is_overdue"], True)
+        # 已提交反馈后不再视为逾期
+        self.interviewer_service.submit_interview_feedback(interview["id"], {"status": "PASSED", "feedback": "ok"})
+        result = self.interviewer_service.list_my_interviews()
+        self.assertIs(result[0]["is_overdue"], False)
+
+    def test_submit_feedback_saves_status_feedback_timestamp_and_audit(self):
+        interview = self.admin.create_interview(self.assignment_id, {
+            "interviewer_user_id": str(self.interviewer.id),
+        })
+        updated = self.interviewer_service.submit_interview_feedback(
+            interview["id"], {"status": "PASSED", "feedback": "表现优秀"}
+        )
+        self.assertEqual(updated["status"], "PASSED")
+        self.assertEqual(updated["feedback"], "表现优秀")
+        self.assertIsNotNone(updated["feedback_submitted_at"])
+        self.assertTrue(
+            HrAuditLog.objects.filter(
+                workspace_id="workspace-a", user_id=self.interviewer.id,
+                action="INTERVIEW_FEEDBACK", object_type="INTERVIEW", object_id=str(interview["id"]),
+            ).exists()
+        )
+
+    def test_submit_feedback_rejects_non_interviewer(self):
+        interview = self.admin.create_interview(self.assignment_id, {
+            "interviewer_user_id": str(self.other.id),
+        })
+        with self.assertRaises(NotFound404):
+            self.interviewer_service.submit_interview_feedback(interview["id"], {"status": "PASSED"})
+
+    def test_submit_feedback_rejects_invalid_status(self):
+        interview = self.admin.create_interview(self.assignment_id, {
+            "interviewer_user_id": str(self.interviewer.id),
+        })
+        with self.assertRaisesRegex(AppApiException, "status is invalid"):
+            self.interviewer_service.submit_interview_feedback(interview["id"], {"status": "CANCELLED"})
+
+    def test_submit_feedback_again_updates_and_audits(self):
+        interview = self.admin.create_interview(self.assignment_id, {
+            "interviewer_user_id": str(self.interviewer.id),
+        })
+        self.interviewer_service.submit_interview_feedback(interview["id"], {"status": "PASSED", "feedback": "v1"})
+        self.interviewer_service.submit_interview_feedback(interview["id"], {"status": "FAILED", "feedback": "v2"})
+        row = Interview.objects.get(id=interview["id"])
+        self.assertEqual(row.status, "FAILED")
+        self.assertEqual(row.feedback, "v2")
+        self.assertEqual(
+            HrAuditLog.objects.filter(
+                workspace_id="workspace-a", action="INTERVIEW_FEEDBACK", object_id=str(interview["id"]),
+            ).count(), 2
+        )
+
+    def test_update_interview_changes_interviewer_and_syncs_name(self):
+        interview = self.admin.create_interview(self.assignment_id, {})
+        updated = self.admin.update_interview(interview["id"], {
+            "interviewer_user_id": str(self.interviewer.id),
+            "feedback_deadline": "2026-08-25T09:00:00Z",
+        })
+        self.assertEqual(updated["interviewer_user_id"], str(self.interviewer.id))
+        self.assertEqual(updated["interviewer"], "面试官甲")
+        self.assertIsNotNone(updated["feedback_deadline"])
+
+
 class _StubModel:
     def __init__(self, content):
         self._content = content
@@ -2122,6 +2248,70 @@ class CandidateRestoreApiTests(_HrApiBase):
                 workspace_id="workspace-a", user_id=self.operator.id, action="ACCESS_DENIED", result="DENIED"
             ).exists()
         )
+
+
+class InterviewerMineApiTests(_HrApiBase):
+    """B1 路由：我的面试（静态段顺序/隔离）与面试官反馈提交"""
+
+    def setUp(self):
+        self.admin = self._user("hr-admin", "HR Admin")
+        self.interviewer = self._user("hr-interviewer", "面试官甲")
+        self.other = self._user("plain-member", "普通成员")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.admin.id, role="ADMIN")
+        client = self._client(self.admin)
+        candidate = Candidate.objects.create(name="Bob", workspace_id="workspace-a")
+        job = Job.objects.create(name="Engineer", workspace_id="workspace-a", headcount=1)
+        assignment_id = client.post(
+            "/admin/api/workspace/workspace-a/hr/jobs/{}/assignments".format(job.id),
+            {"candidate_id": str(candidate.id)},
+            content_type="application/json",
+        ).json()["data"]["id"]
+        self.interview_id = client.post(
+            "/admin/api/workspace/workspace-a/hr/assignments/{}/interviews".format(assignment_id),
+            {"interviewer_user_id": str(self.interviewer.id)},
+            content_type="application/json",
+        ).json()["data"]["id"]
+
+    def test_mine_returns_only_my_interviews(self):
+        response = self._client(self.interviewer).get("/admin/api/workspace/workspace-a/hr/interviews/mine")
+        self.assertEqual(response.status_code, 200)
+        records = response.json()["data"]
+        self.assertEqual([item["interview_id"] for item in records], [self.interview_id])
+        self.assertEqual(records[0]["candidate_name"], "Bob")
+        self.assertNotIn("phone", records[0])
+        self.assertNotIn("email", records[0])
+
+    def test_mine_returns_empty_for_non_interviewer(self):
+        response = self._client(self.other).get("/admin/api/workspace/workspace-a/hr/interviews/mine")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["data"], [])
+
+    def test_mine_requires_login(self):
+        response = APIClient().get("/admin/api/workspace/workspace-a/hr/interviews/mine")
+        self.assertEqual(response.status_code, 401)
+
+    def test_interviewer_submits_feedback(self):
+        response = self._client(self.interviewer).put(
+            "/admin/api/workspace/workspace-a/hr/interviews/{}/feedback".format(self.interview_id),
+            {"status": "PASSED", "feedback": "表现优秀"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["data"]["status"], "PASSED")
+        self.assertTrue(
+            HrAuditLog.objects.filter(
+                workspace_id="workspace-a", user_id=self.interviewer.id,
+                action="INTERVIEW_FEEDBACK", object_type="INTERVIEW", object_id=self.interview_id,
+            ).exists()
+        )
+
+    def test_feedback_by_non_interviewer_is_404(self):
+        response = self._client(self.other).put(
+            "/admin/api/workspace/workspace-a/hr/interviews/{}/feedback".format(self.interview_id),
+            {"status": "PASSED"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 404)
 
 
 class CleanupOrphanResumeTaskTests(TestCase):

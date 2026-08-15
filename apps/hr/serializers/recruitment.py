@@ -33,6 +33,8 @@ from hr.services.resume_parser import extract_text_from_docx, extract_text_from_
 from hr.services.audit import write_audit_log
 from hr.task.resume import parse_resume_task
 from maxkb.const import PROJECT_DIR
+from users.models.user import User
+from users.serializers.user import UserManageSerializer
 
 TERMINATION_REASON_REQUIRED_STATUSES = [
     AssignmentStatus.REJECTED,
@@ -187,6 +189,26 @@ class RecruitmentService:
             return uuid.UUID(str(value))
         except (ValueError, TypeError) as exc:
             raise AppApiException(400, "owner_id is invalid") from exc
+
+    def _interviewer_user_id(self, data):
+        value = data.get("interviewer_user_id")
+        if value in (None, ""):
+            return None
+        try:
+            user_id = uuid.UUID(str(value))
+        except (ValueError, TypeError) as exc:
+            raise AppApiException(400, "interviewer_user_id is invalid") from exc
+        member_ids = {member["id"] for member in UserManageSerializer().get_user_members(self.workspace_id)}
+        if user_id not in member_ids:
+            raise AppApiException(400, "User is not a workspace member")
+        return user_id
+
+    @staticmethod
+    def _user_nick_name(user_id):
+        if user_id is None:
+            return ""
+        user = User.objects.filter(id=user_id).only("nick_name").first()
+        return user.nick_name if user else ""
 
     @staticmethod
     def _relation_type(data):
@@ -1134,6 +1156,9 @@ class RecruitmentService:
             "assignment_id": str(interview.assignment_id),
             "round_no": interview.round_no,
             "interviewer": interview.interviewer,
+            "interviewer_user_id": str(interview.interviewer_user_id) if interview.interviewer_user_id else None,
+            "feedback_deadline": interview.feedback_deadline,
+            "feedback_submitted_at": interview.feedback_submitted_at,
             "scheduled_at": interview.scheduled_at,
             "status": interview.status,
             "feedback": interview.feedback,
@@ -1148,11 +1173,14 @@ class RecruitmentService:
             workspace_id=self.workspace_id,
             assignment=assignment,
         ).aggregate(max_round=Max("round_no"))["max_round"] or 0
+        interviewer_user_id = self._interviewer_user_id(data)
         interview = Interview.objects.create(
             workspace_id=self.workspace_id,
             assignment=assignment,
             round_no=int(data.get("round_no", max_round + 1)),
-            interviewer=self._optional_string(data, "interviewer", 64),
+            interviewer=self._optional_string(data, "interviewer", 64) or self._user_nick_name(interviewer_user_id),
+            interviewer_user_id=interviewer_user_id,
+            feedback_deadline=data.get("feedback_deadline") or None,
             scheduled_at=data.get("scheduled_at") or None,
             user_id=self.user_id,
         )
@@ -1179,7 +1207,62 @@ class RecruitmentService:
             interview.feedback = self._optional_string(data, "feedback", 4096)
         if "interviewer" in data:
             interview.interviewer = self._optional_string(data, "interviewer", 64)
+        if "interviewer_user_id" in data:
+            interviewer_user_id = self._interviewer_user_id(data)
+            interview.interviewer_user_id = interviewer_user_id
+            if data.get("interviewer") is None:
+                interview.interviewer = self._user_nick_name(interviewer_user_id)
+        if "feedback_deadline" in data:
+            interview.feedback_deadline = data["feedback_deadline"] or None
         if "scheduled_at" in data:
             interview.scheduled_at = data["scheduled_at"] or None
         interview.save()
+        return self._interview_output(interview)
+
+    def list_my_interviews(self):
+        """面试官视角：仅返回本人被指派的面试，最小字段（不含 PII/简历/技能）。"""
+        interviews = (
+            Interview.objects.filter(workspace_id=self.workspace_id, interviewer_user_id=self.user_id)
+            .select_related("assignment__job", "assignment__candidate")
+            .order_by("-scheduled_at")
+        )
+        now = timezone.now()
+        records = []
+        for interview in interviews:
+            overdue = (
+                interview.status == InterviewStatus.PENDING
+                and interview.feedback_deadline is not None
+                and interview.feedback_deadline < now
+            )
+            records.append({
+                "interview_id": str(interview.id),
+                "assignment_id": str(interview.assignment_id),
+                "round_no": interview.round_no,
+                "scheduled_at": interview.scheduled_at,
+                "status": interview.status,
+                "feedback": interview.feedback,
+                "feedback_deadline": interview.feedback_deadline,
+                "feedback_submitted_at": interview.feedback_submitted_at,
+                "is_overdue": overdue,
+                "candidate_name": interview.assignment.candidate.name,
+                "job_name": interview.assignment.job.name,
+            })
+        return records
+
+    def submit_interview_feedback(self, interview_id, data):
+        """面试官本人提交反馈；非本人一律 404；写时间戳并审计。"""
+        interview = Interview.objects.filter(id=interview_id, workspace_id=self.workspace_id).first()
+        if interview is None or interview.interviewer_user_id != self.user_id:
+            raise NotFound404(404, "Resource not found")
+        status = data.get("status")
+        if status not in (InterviewStatus.PASSED, InterviewStatus.FAILED, InterviewStatus.NO_SHOW):
+            raise AppApiException(400, "status is invalid")
+        interview.status = status
+        interview.feedback = self._optional_string(data, "feedback", 4096)
+        interview.feedback_submitted_at = timezone.now()
+        interview.save(update_fields=["status", "feedback", "feedback_submitted_at", "update_time"])
+        write_audit_log(
+            self.workspace_id, self.user_id, "INTERVIEW_FEEDBACK", "INTERVIEW", interview.id,
+            detail="{} {}".format(status, interview.feedback),
+        )
         return self._interview_output(interview)

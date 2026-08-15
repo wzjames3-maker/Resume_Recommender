@@ -266,6 +266,26 @@ class InterviewDetailAPI(APIView):
         return result.success(_service(request, workspace_id).update_interview(interview_id, request.data))
 
 
+class InterviewerMineAPI(APIView):
+    """面试官「我的面试」：仅登录即可（面试官可无 HR 授权），服务层按本人隔离。"""
+
+    authentication_classes = [TokenAuth]
+
+    def get(self, request, workspace_id):
+        return result.success(_service(request, workspace_id).list_my_interviews())
+
+
+class InterviewerFeedbackAPI(APIView):
+    """面试官提交反馈：仅登录即可，非本人一律 404。"""
+
+    authentication_classes = [TokenAuth]
+
+    def put(self, request, workspace_id, interview_id):
+        return result.success(
+            _service(request, workspace_id).submit_interview_feedback(interview_id, request.data)
+        )
+
+
 class ResumeBatchStatusAPI(APIView):
     authentication_classes = [TokenAuth]
 
