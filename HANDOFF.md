@@ -76,7 +76,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 - **A1 流程口径**：归档拦截与 HC 统计覆盖全部进行中状态；候选人详情入口
 - **A2 流程模型**：职位 `DRAFT/ON_HOLD/CLOSED`（close_reason）+owner；关联 `relation_type/channel/applied_at/owner_id/termination_reason/is_reapply` + `WITHDRAWN` 状态；服务端强制状态迁移矩阵（规格中有迁移表）；关闭职位批量收尾（PUT /jobs/{id}/close）；重新投递自动标记；误拒绝仅管理员恢复（REJECTED→PENDING_SCREEN）
 - **A3 访问控制与审计**：`HrAccess`（VIEWER/OPERATOR/ADMIN 显式授权）、`hr_access_required`/`hr_admin_required` 装饰器、VIEWER 联系方式脱敏、`HrAuditLog` 操作审计（查看/创建/流转/简历/合并/导出/授权/越权拒绝）、人事成员与审计日志页面
-- **A4 数据生命周期**：候选人合规元数据（source_type/source_detail/collected_at/consent_status/consent_version/contact_preference）；删除匿名化（DELETED 终态、PII 清空、简历联动删除，进行中/HIRED 拒绝）；未关联简历 30 天 TTL 每日 Celery 任务（`cleanup_orphan_resumes`，beat 注册在 apps/hr/apps.py ready 幂等创建）；受控白名单 CSV 导出（不含联系方式、公式注入转义）
+- **A4 数据生命周期**：候选人合规元数据（source_type/source_detail/collected_at/consent_status/consent_version/contact_preference）；删除匿名化（DELETED 终态、PII 清空、简历联动删除，进行中/HIRED 拒绝）；未关联简历 30 天 TTL 每日 Celery 任务（`cleanup_orphan_resumes`，beat 注册在 task/resume.py 的 worker_ready 信号幂等创建（勿放回 apps.py ready，见 fe42c65））；受控白名单 CSV 导出（不含联系方式、公式注入转义）
 - **A5 验收**：227/227 PASS；部署验证项已列出（见第 5 节）
 
 ### 3.3 关键实现模式（新功能必须遵循）
@@ -138,3 +138,39 @@ Embedding 语义召回、可解释匹配、人工反馈、索引与候选人生�
 - 测试数演进：23→31→39→47→76→86→107→141→183→207→215（HR）→227（四 app）
 - 规格/计划/验收文档路径规范：`docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`、`docs/superpowers/plans/`、`docs/superpowers/audits/YYYY-MM-DD-<topic>-baseline.md`
 - 提交信息：`feat(人事)/fix(人事)/docs(人事)/test(人事): 中文描述`
+
+## 8. 文档审计结论（2026-08-15，未修复仅记录）
+
+> 打包前对全部文档做了与代码事实的对照审计。以下问题**未修复**，仅记录备查。新平台接手后按此清单处理，处理前以「代码 + A 阶段规格 + 08-14 验收基线」为权威，不要以被标注的文档为准。
+
+### 8.1 会误导的事实错误（建议优先处理）
+
+| 文档 | 问题 |
+|---|---|
+| `docs/PRD.md` §9.1「当前实现边界」表 | 停留在 A 阶段前快照：「职位仅 OPEN/CLOSED」「关联无 WITHDRAWN/负责人」「权限复用工作区成员」「无审计」等，全部已被 A2/A3/A4 交付推翻；而 PRD 头部声明「以第 9 节为准」 |
+| `docs/PRD.md` §4.1 与 §8 | 「建档至少姓名+一种联系方式」「服务端必须校验联系方式」规则从未实现（代码仅必填 name），未标注为未达成 |
+| `docs/PRD.md` §7 审计门槛 | 「请求追踪标识」未实现（HrAuditLog 无 trace 字段），缺口未标注 |
+| `docs/superpowers/specs/2026-08-13-hr-resume-async-design.md` §2.7 | 断言「sha256 唯一约束未在模型层实施」——事实错误（迁移 0003 已有 DB 约束，并发重复实为 IntegrityError 未捕获 → 500） |
+| `docs/superpowers/specs/2026-08-14-hr-lifecycle-design.md` API 表 | 「编辑候选人 OPERATOR/ADMIN」与代码实际（仅 ADMIN）及 A3 矩阵矛盾 |
+| `README.md`、`README_CN.md`、`CLAUDE.md` | 大量宣称已删除能力：工作流、MCP、函数库、多模态、本地模型（CLAUDE.md 约 12 处：`dev local_model` 命令报错、双 settings 描述、flow 引擎、sandbox 运行时、多供应商列表等）；README 宣称「workflows / MCP tool-use」 |
+
+### 8.2 建议修改（可后置）
+
+| 文档 | 问题 |
+|---|---|
+| `HANDOFF.md` §7 | 测试数演进链口径混用：23→107 为四 app 口径、141→215 为 HR 单 app 口径，未标注切换且漏 99；全量应表述为「四 app 227 = HR 215 + 内核 12」 |
+| `README-hr.md` 第 76 行 | 「复用当前工作区认证与管理员权限」已过时（A3 后为 HR 显式授权） |
+| `docs/PRD.md` §6 | 「AI 复用工作区管理端权限、显式授权属 A 阶段门槛」已过时（A3 已落地） |
+| `docs/superpowers/specs/2026-08-14-hr-process-model-design.md` API 表 | `GET /assignments` 未实现（列表能力由 job/candidate 详情承载） |
+| `CONTRIBUTING.md`、`SECURITY.md` | 仍指向上游 GitHub 链接，与本 fork 流程不符 |
+| `docs/superpowers/audits/2026-08-14-hr-production-baseline.md` | 「分支 main」应为 v2 |
+
+### 8.3 真实功能缺口（文档宣称但未实现，非文档问题）
+
+| 缺口 | 说明 |
+|---|---|
+| **候选人恢复（ARCHIVED→ACTIVE）** | PRD §4.1 与 A3 能力矩阵宣称可恢复，但无路由、无方法、无前端按钮——归档后无法恢复，形成死路。RESTORE 审计动作仅用于指派误拒绝恢复 |
+
+### 8.4 历史阶段记录（非错误，可保留）
+
+一期至五期规格中的「状态只覆盖筛选阶段」「不新增审计表」「同步解析」「工作区成员权限」等，是当时正确、被后续阶段明确修订的决策记录；四期取舍「不引入审计表」已被 A3 推翻。判断优先级时以 §2 文档排序为准。
