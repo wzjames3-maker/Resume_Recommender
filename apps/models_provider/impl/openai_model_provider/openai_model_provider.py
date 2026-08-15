@@ -13,8 +13,10 @@ from models_provider.base_model_provider import IModelProvider, ModelProvideInfo
     ModelTypeConst, ModelInfoManage
 from models_provider.impl.openai_model_provider.credential.embedding import OpenAIEmbeddingCredential
 from models_provider.impl.openai_model_provider.credential.llm import OpenAILLMModelCredential
+from models_provider.impl.openai_model_provider.credential.rerank import OpenAIRerankCredential
 from models_provider.impl.openai_model_provider.model.embedding import OpenAIEmbeddingModel
 from models_provider.impl.openai_model_provider.model.llm import OpenAIChatModel
+from models_provider.impl.openai_model_provider.model.rerank import OpenAIRerankModel
 from maxkb.conf import PROJECT_DIR
 from django.utils.translation import gettext_lazy as _
 
@@ -74,7 +76,22 @@ model_info_embedding_list = [
               OpenAIEmbeddingModel),
     ModelInfo('text-embedding-3-large', '',
               ModelTypeConst.EMBEDDING, open_ai_embedding_credential,
-              OpenAIEmbeddingModel)
+              OpenAIEmbeddingModel),
+    ModelInfo('BAAI/bge-large-zh-v1.5', _('BGE large Chinese embedding, OpenAI-compatible endpoint'),
+              ModelTypeConst.EMBEDDING, open_ai_embedding_credential,
+              OpenAIEmbeddingModel),
+]
+
+# 外部 OpenAI 兼容模型（SenseNova / SiliconFlow 等，api_base 由工作区管理员配置）
+model_info_external_llm_list = [
+    ModelInfo('sensenova-6.8-flash-lite', _('SenseNova 6.8 flash lite, OpenAI-compatible endpoint'),
+              ModelTypeConst.LLM, openai_llm_model_credential, OpenAIChatModel),
+]
+
+open_ai_rerank_credential = OpenAIRerankCredential()
+model_info_rerank_list = [
+    ModelInfo('BAAI/bge-reranker-v2-m3', _('BGE reranker v2 m3, OpenAI-compatible rerank endpoint'),
+              ModelTypeConst.RERANKER, open_ai_rerank_credential, OpenAIRerankModel),
 ]
 
 model_info_manage = (
@@ -85,6 +102,8 @@ model_info_manage = (
                                          ))
     .append_model_info_list(model_info_embedding_list)
     .append_default_model_info(model_info_embedding_list[0])
+    .append_model_info_list(model_info_external_llm_list)
+    .append_model_info_list(model_info_rerank_list)
     .build()
 )
 
