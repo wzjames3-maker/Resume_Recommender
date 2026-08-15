@@ -104,10 +104,10 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 ### 5.1 部署环境验证（A 阶段关闭前提，处理真实 PII 前必须完成）
 
 - Celery worker+beat 真实调度：**heartbeat.py 硬编码 `/opt/maxkb-app/tmp`** → 已修复（2026-08-15）：探针目录改为 `MAXKB_WORKER_TMP` 环境变量覆盖、默认值不变（向后兼容）；新增 `apps/ops/tests.py` 4 用例，全量 231/231。**已真实验证（2026-08-15）**：本机 `MAXKB_WORKER_TMP=/tmp/maxkb-worker-tmp` 启动 worker 成功，`worker_ready/worker_heartbeat` 探针文件生成，beat 任务 `hr-cleanup-orphan-resumes`（每日 03:00）注册成功；31 天前孤儿简历经真实 worker 执行清理（物理文件删除 + RESUME_DELETE 审计）。**web 全链路冒烟（2026-08-15）**：真实 HTTP 跑通 登录→职位→候选人→指派→OFFER→面试→Offer 审批/发送/接受→交接 SUCCESS→CSV 导入→归档/恢复→审计（15/15 PASS）。TTL 清理 beat 任务（`hr-cleanup-orphan-resumes`）在 `apps/hr/task/resume.py` 的 `worker_ready` 信号中注册（勿改回 apps.py ready——那会在应用加载时访问数据库，导致测试库模板克隆被连接占用而失败，见提交 `fe42c65`）
-- 对象存储私有化（当前简历在本地 `data/resume/`）
-- TLS、数据库/备份静态加密、密钥管理
-- 日志/监控脱敏人工检查 → 已检查（2026-08-15）：`apps/hr` 无任何 logger/print；异常处理器只记录 `str(exc)+traceback`（不含请求体/局部变量，AppApiException 消息为业务文案）；简历文本仅用于解析、失败写 DB error_message 不落日志；附件/简历文件名带 UUID 前缀不含 PII。剩余：syslog handler 与监控标签的部署侧复核
-- 备份自然过期、租户注销与数据返还/删除流程
+- 对象存储私有化 → **已实现并本机验证（2026-08-15）**：`hr/services/storage.py` 存储抽象（`MAXKB_STORAGE_BACKEND=local|s3`，MinIO/S3 兼容，minio SDK），简历/Offer 附件/清理任务全走 StorageBackend；本地后端兼容存量绝对路径。MinIO 集成验证：上传/下载/删除往返 + 无凭据访问 403（私有读）。生产按 `MAXKB_S3_*` 配置真实对象存储即可
+- TLS、数据库/备份静态加密、密钥管理 → **本机模拟验证（2026-08-15）**：自签证书 + gunicorn `--certfile/--keyfile` HTTPS 生效（明文 HTTP 拒绝）；备份加密闭环（`installer/backup.sh`：pg_dump+gzip+AES-256+轮转，解密恢复验证数据完整）；密钥只走环境变量、不出现在日志/请求参数（`main.py` TMPDIR/HF_HOME 已改 setdefault 可覆盖）。生产部署：真实 CA/证书链、PG sslmode=require、.env 权限 600 与密钥轮换
+- 日志/监控脱敏人工检查 → **已完成（2026-08-15）**：`apps/hr` 无任何 logger/print；异常处理器只记录 `str(exc)+traceback`（不含请求体/局部变量）；简历文本仅用于解析、失败写 DB error_message 不落日志；附件/简历文件名带 UUID 前缀。**部署侧验证**：真实 PII（手机/邮箱/密码/DB 密码）跑全链路后 grep 落盘日志（maxkb.log/drf_exception/unexpected_exception）PII 命中 0、无 500 异常。剩余：syslog handler 与监控标签的部署侧复核
+- 备份自然过期、租户注销与数据返还/删除流程 → 备份轮转已实现（backup.sh 默认保留 7 份自然过期，本机验证）；租户注销/数据返还流程设计见 `docs/superpowers/specs/2026-08-15-hr-tenant-offboarding-design.md`（企业部署协议层，未编码，部署时按设计落地）
 
 ### 5.2 B 阶段：招聘协作与 Offer 交接（PRD 9.2）
 
