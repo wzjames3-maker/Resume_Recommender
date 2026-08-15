@@ -122,7 +122,14 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 
 **试点进展（2026-08-15，外部模型接入已完成）**：OpenAI 兼容 Provider 注册 LLM `sensenova-6.8-flash-lite`（SenseNova）、Embedding `BAAI/bge-large-zh-v1.5` + Rerank `BAAI/bge-reranker-v2-m3`（SiliconFlow）；RERANKER 模型类型补齐（model/rerank.py + credential/rerank.py，top_n 默认 3）。真实模型端到端验证（`installer/real_model_smoke.py`，`RUN_REAL_MODEL=1` 门控 + 渐进档位 1|2|3）：S1（5 份简历）17/17、S2（30 份）向量化 30/30 + 问答引用；实体查询 recall@5=3/8 低于结构化基线（佐证实体检索走结构化）、自然语言查询召回合理。密钥走环境变量（`.env.example` 有占位）。规格/审计：`docs/superpowers/specs/2026-08-15-external-model-pilot-design.md`、`docs/superpowers/audits/2026-08-15-external-model-pilot.md`。
 
-**剩余（未交付）**：语义索引与候选人生命周期同步、人工反馈、Rerank 接入 chat 检索流水线、更大标注集量化对比、档位 3（200 份）。**注意**：冒烟中修复了应用创建/发布链路的 3 个裁剪期 bug（96afbd0），application.tests 现有 10 用例。
+**设计定稿（2026-08-15）**：端到端综合方案 docs/superpowers/specs/2026-08-15-end-to-end-pipeline-combined-design.md（**唯一权威**，§6 含切片协议 v4：LLM 边界标注 + 条目级 + 禁止改写 + PII 过滤）；实施计划 docs/superpowers/plans/2026-08-15-c-stage-resume-rag.md（**执行依据**）；GitHub 调研 docs/superpowers/audits/2026-08-15-chunking-landscape.md；真实数据审查 docs/superpowers/audits/2026-08-15-design-reality-check.md（输入按 PRD 锁定 docx/txt，无 OCR/表格；数据集合成为压力测试语料）。
+
+**剩余（未交付，按 plans/2026-08-15-c-stage-resume-rag.md 三阶段执行）**：
+1. 阶段 1：sanitize_resume_text() 清洗 + ResumeSplitter（LLM 行号边界标注 + 校验层 + 规则降级 + PII 过滤）+ docx 格式变体评测（边界 F1/保真度）；
+2. 阶段 2：打通入库（parse_resume_task → 切片 → Document → 向量化）+ ResumeFile.document_id 关联与生命周期同步（删除/归档/合并）；
+3. 阶段 3：Rerank 接入检索管线（召回 top10 → 精排 top3~5）+ Small-to-Big 回溯 + 可选（RRF 融合优化 / 画像向量 / RAG Fusion 子查询）。
+
+另：人工反馈、更大标注集量化对比、档位 3（200 份）仍后置。**注意**：冒烟中修复了应用创建/发布链路的 3 个裁剪期 bug（96afbd0），application.tests 现有 10 用例。
 
 **运行要点**：web `python main.py dev`；celery `PATH=.venv/bin:$PATH MAXKB_WORKER_TMP=/tmp/maxkb-worker python main.py dev celery`；冒烟 `RUN_REAL_MODEL=1 REAL_MODEL_STAGE=1 SENSENOVA_API_KEY=... SILICONFLOW_API_KEY=... python installer/real_model_smoke.py`。冒烟用户 `smoke-admin`（ADMIN 角色，密码 Smoke@123，仅本机）；模型/知识库/应用 API 只认 `default` 工作区（HR 模块才用自定义 workspace + HrAccess）。
 
