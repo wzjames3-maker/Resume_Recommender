@@ -134,6 +134,14 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 - ✅ 阶段 3.3（量化对比，2026-08-16）：31 份简历语料 + 12 锚点查询 × 5 模式——**RRF+rerank recall@5=0.92 / recall@3=0.83 / Top-1=0.75 / MRR=0.785**，优于 dense-only（0.75/0.513）、RRF（0.75/0.579）、Skill-AND（0.75/0.604），**结构化基线 0.00**（语料 skills 字段为空，正文语义检索价值凸显）；报告落盘 audits/2026-08-15-c-stage-rerank-eval.md。**C 阶段完成定义达成（PRD §9.2）**；
 - ✅ 阶段 3 收尾（2026-08-16，提交 08430c1）：模式 B 接入 rerank + 文档同步（README-hr/plans 阶段 3 已完成）+ **HTTP 端到端验收**（真实 web：登录 → 检索 API 模式 A/B 均 200，空 query/非法 mode 返回 {code:400} 业务码，无 token 401，SEARCH 审计落库且查询原文不入库）。全量 355/355；
 - ⏳ 可选增强（3.4，按评测收益决策）：路由分级 / 画像重排 / RAG Fusion / title 摘要 / docx 变体集，均未触发（评测显示 rerank 已足够）。
+- ✅ **第二轮独立审查修复（2026-08-16，7 项 + 10 例回归，全量 367/367）**：
+  - **简历删除/TTL 清理联动语义索引**：delete_resume/cleanup_orphan_resumes 调 delete_resume_index（幂等）；并修复 _delete_document 从不删 Paragraph 的深层缺陷（内核模型 DO_NOTHING 无级联，候选人删除路径同样段落残留，此前孤儿段落会继续被检索命中）；
+  - **流转日志 PII 级联清理**：delete_resume/delete_candidate 清理 ResumeFlowLog（EXTRACT/SANITIZE 含未脱敏全文，删除后不留存；HrAuditLog 操作审计保留）；
+  - **检索参数与异常加固**：recall_k clamp [5,60]、similarity clamp [0,2]（负数 recall_k 曾触发 PG LIMIT 报错 500）；embedding 模型缺失/embed_query 失败转业务异常（曾裸 AttributeError 500）；
+  - **模式 B 结构化路补齐（设计 §2 步骤2）**：Candidate.skills 精确命中与语义路命中向量 OR 合并，仅结构化命中的简历按字典序补位输出；meta 新增 recall.structured_hits；
+  - **入库前 PII 二次扫描**：scan_residual_pii（全空格分隔手机号/15 位身份证/16-19 位银行卡变体）残留即拒绝入库（设计 §6.8 承诺，不阻塞建档）；
+  - **meta 契约与权限小修**：mode=skills 解析失败 meta.mode 如实为 phrase（此前误导）；meta.rerank.model/sparse_failed 补齐；Download/Content 视图改 hr_operator_required（与服务层一致）；title 上限 20 对齐设计；
+  - 已知限制记录（设计文档 §9.3）：简历知识库可被系统管理员经内核知识库 API 读取（绕过 HrAccess，P2 待加固）、模型工作区可见性校验在裁剪内核为 no-op（共享 default 模型为当前产品行为）、LLM 切片调用发送未脱敏全文（合规待确认）。
 
 另：人工反馈、更大标注集量化对比、档位 3（200 份）仍后置。docx 格式变体评测集（plans 1.3）并入阶段 3 检索评测。**注意**：冒烟中修复了应用创建/发布链路的 3 个裁剪期 bug（96afbd0），application.tests 现有 10 用例。
 
@@ -159,7 +167,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 ## 7. 提交流程与账本
 
 - 每期：docs 规格提交 → docs 实现计划提交 → 实现（TDD）→ 全量验收 → 审查 → 修复
-- 测试数演进：23→31→39→47→76→86→107（一期至七期，四 app 口径）→141→183→207→215（A 阶段，切 HR 单 app 口径）→227（四 app = HR 215 + 内核 12）→231（+ops 4）→240（+候选恢复 9）→255（+面试协作 15）→287（+Offer/交接 32）→301（+批量导入 14，B 阶段完成，2026-08-15）→336（C 阶段收尾，6c022e4 文档同步基线，HR 302）→342（HR 308 + 内核 34，2026-08-15：切片器超长降级 2 + docx 表格 1 + 流转日志 3）→**355（HR 321 + 内核 34，2026-08-16 实测：四 app + ops 355/355，342 后新增 13 例 = ResumeSearchTests 11 + AiService 配置扩展 2）**
+- 测试数演进：23→31→39→47→76→86→107（一期至七期，四 app 口径）→141→183→207→215（A 阶段，切 HR 单 app 口径）→227（四 app = HR 215 + 内核 12）→231（+ops 4）→240（+候选恢复 9）→255（+面试协作 15）→287（+Offer/交接 32）→301（+批量导入 14，B 阶段完成，2026-08-15）→336（C 阶段收尾，6c022e4 文档同步基线，HR 302）→342（HR 308 + 内核 34，2026-08-15：切片器超长降级 2 + docx 表格 1 + 流转日志 3）→**355（HR 321 + 内核 34，2026-08-16 实测：四 app + ops 355/355，342 后新增 13 例 = ResumeSearchTests 11 + AiService 配置扩展 2）**→357（HR 323 + 内核 34，742fafe 审查修复 4 处）→**367（HR 333 + 内核 34，2026-08-16 第二轮审查修复后实测：四 app + ops 367/367，357 后新增 10 例 = 删除清理 2 + PII 二次扫描 2 + 结构化路 2 + 参数 clamp 1 + embedding 友好错误 2 + mode 退化 meta 1）**
 - 规格/计划/验收文档路径规范：`docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`、`docs/superpowers/plans/`、`docs/superpowers/audits/YYYY-MM-DD-<topic>-baseline.md`
 - 提交信息：`feat(人事)/fix(人事)/docs(人事)/test(人事): 中文描述`
 

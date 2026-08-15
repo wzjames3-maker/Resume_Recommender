@@ -169,4 +169,11 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
 - 语义检索（阶段 3，2026-08-16）：POST /workspace/{ws}/hr/resumes/search——双路召回（dense + sparse 关键词路）→ Python RRF(k=60) 融合 → bge-reranker-v2-m3 精排 → Small-to-Big 简历聚合；模式 B（Skill-AND）技能复合检索（LLM 有序技能分解 → 逐技能双路召回 → 命中向量字典序 → rerank 精排）；hr_access_required + VIEWER 脱敏 + SEARCH 审计（查询原文不入库）；无 rerank/LLM 自动降级。单测 13 例（ResumeSearchTests 11 + AiService 配置扩展 2）。
 - 量化对比（阶段 3.3 出口，2026-08-16）：31 份语料 + 12 锚点查询 × 5 模式——**RRF+rerank recall@5=0.92 / recall@3=0.83 / Top-1=0.75 / MRR=0.785**（最优），结构化基线 0.00（语料 skills 字段为空）；报告 audits/2026-08-15-c-stage-rerank-eval.md。**C 阶段完成定义达成（PRD §9.2）**。
 - 测试：`hr.tests application.tests knowledge.tests models_provider.tests ops.tests`，**355/355 PASS（HR 321）**（keepdb 稳定）。
+- 第二轮独立审查修复（2026-08-16，10 例回归，**367/367 PASS（HR 333）**）：
+  - 简历删除/TTL 清理联动语义索引（delete_resume/cleanup_orphan_resumes → delete_resume_index；`_delete_document` 显式删 Paragraph，修复内核 DO_NOTHING 无级联导致的段落残留）；
+  - 简历/候选人删除级联清理 ResumeFlowLog（EXTRACT/SANITIZE 含未脱敏全文，删除后不留存，PII 生命周期闭环）；
+  - 检索参数 clamp（recall_k [5,60]/similarity [0,2]）与 embedding 模型缺失/调用失败友好业务异常（消除两类 500）；
+  - 模式 B 结构化路补齐（Candidate.skills 精确命中 → 命中向量 OR 合并 → 字典序补位，meta.recall.structured_hits）；
+  - 入库前 PII 二次扫描拒绝（scan_residual_pii：全空格手机号/15 位身份证/银行卡变体）；
+  - meta 契约与权限小修（mode=skills 退化 meta 如实、rerank.model/sparse_failed、Download/Content → OPERATOR+、title 上限 20）。
 - 设计/计划：docs/superpowers/specs/2026-08-15-end-to-end-pipeline-combined-design.md（权威）、docs/superpowers/specs/2026-08-15-hr-resume-search-design.md（检索设计 v2）、docs/superpowers/plans/2026-08-15-c-stage-resume-rag.md（阶段 3 已完成）。

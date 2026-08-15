@@ -69,6 +69,7 @@ def main():
         ("Skill-AND", {"mode": "auto"}),
     ]
     results = {name: [] for name, _ in modes}
+    errors = {name: 0 for name, _ in modes}
     for anchor in ANCHORS:
         q, targets = anchor["q"], anchor["targets"]
         print(f"\n=== [{anchor['type']}] {q} → {targets}")
@@ -80,7 +81,9 @@ def main():
                     llm_model=llm, rerank_model=rerank if opts.get("rerank") else None,
                 )
             except Exception as exc:
+                # 异常锚点不参与分母（记入警告，便于复核口径）
                 results[name].append(False)
+                errors[name] += 1
                 print(f"  {name}: ERROR {str(exc)[:80]}")
                 continue
             items = result["items"]
@@ -91,6 +94,8 @@ def main():
                 fn = it["resume"]["file_name"] if it.get("resume") else None
                 if fn in targets and fn not in rank_of:
                     rank_of[fn] = idx
+            # MRR 口径：全部相关目标的 1/rank 均值（非标准 first-relevant MRR；多目标锚点数值系统性偏低，
+            # 仅用于模式间横向对比，与审计报告口径一致）
             mrr = sum(1.0 / r for r in rank_of.values()) / len(targets) if rank_of else 0
             results[name].append((bool(hit), rank_of, mrr))
             print(f"  {name}: hits={hit_names[:5]} 命中={hit} MRR={mrr:.3f}")
@@ -117,9 +122,9 @@ def main():
             if fn in anchor["targets"]:
                 rank = idx
                 break
-        mrr = (1.0 / rank) if rank else 0
-        struct_results.append((bool(hit), mrr))
-        print(f"  结构化基线: {hit_names[:5]} 命中={hit} MRR={mrr:.3f}")
+        # 与语义模式相同的四指标口径（此前仅 recall@5/MRR，报告表格中的 recall@3/Top-1 无法由脚本复现）
+        struct_results.append((bool(hit), rank))
+        print(f"  结构化基线: {hit_names[:5]} 命中={hit} Top-1={1 if rank == 1 else 0}")
 
     # 汇总
     print("\n" + "=" * 70)
@@ -133,10 +138,14 @@ def main():
         top1 = sum(1 for r in ok if any(v == 1 for v in r[1].values())) / len(ok)
         mrr = sum(r[2] for r in ok) / len(ok)
         print(f"{name:>12}: recall@5={recall5:.2f} recall@3={recall3:.2f} Top-1={top1:.2f} MRR={mrr:.3f}")
+        if errors[name]:
+            print(f"           ⚠ {errors[name]} 个锚点异常被剔除（不计入分母）")
     ok = [r for r in struct_results if isinstance(r, tuple)]
     recall5 = sum(1 for r in ok if r[0]) / len(ok)
-    mrr = sum(r[1] for r in ok) / len(ok)
-    print(f"{'结构化基线':>12}: recall@5={recall5:.2f} MRR={mrr:.3f}")
+    recall3 = sum(1 for r in ok if r[1] and r[1] <= 3) / len(ok)
+    top1 = sum(1 for r in ok if r[1] == 1) / len(ok)
+    mrr = sum(1.0 / r[1] for r in ok if r[1]) / len(ok)
+    print(f"{'结构化基线':>12}: recall@5={recall5:.2f} recall@3={recall3:.2f} Top-1={top1:.2f} MRR={mrr:.3f}")
     return 0
 
 

@@ -286,3 +286,38 @@ def _search_skill_and(skills, structured_hits, knowledge, embedding_model, candi
 4. 全量 342 + 新增回归通过；`makemigrations --check` 干净（仅 HrConfig.rerank_model_id 迁移 0016）
 
 > 关联：实施计划 ../plans/2026-08-15-c-stage-resume-rag.md 阶段 3；综合设计 §1.2/§6；HANDOFF §5.3
+
+## 9. 实施偏差与已知限制记录（2026-08-16 第二轮独立审查后同步）
+
+> 本节记录「设计承诺 vs 代码实际」的偏差，已实现的标注 ✅，未实现的标注 ⚠️（含后续项）。审查与修复记录见 HANDOFF §5.3 第二轮。
+
+### 9.1 已实现（本轮修复，2026-08-16）
+
+| 设计承诺 | 修复 |
+|---|---|
+| 模式 B 结构化路（§2 步骤2/§4 structured_hits：Candidate.skills 精确命中与语义路统一排序） | ✅ 已实现：_search_skill_and 结构化路（忽略大小写精确匹配、排除 DELETED/ARCHIVED）+ 两路命中向量按位 OR 合并；仅结构化命中的简历按字典序补位输出（paragraphs=[]）；meta 新增 recall.structured_hits |
+| 入库前二次扫描、PII 残留拒绝入库（综合设计 §6.8） | ✅ 已实现：scan_residual_pii（全空格分隔手机号/15 位身份证/16-19 位银行卡变体），残留 → ValueError 拒绝入库（任务 error_message，不阻塞建档） |
+| recall_k clamp [5,60]、similarity clamp [0,2]（§3.1） | ✅ 已实现（此前负数 recall_k 触发 PG LIMIT 报错 → 500） |
+| 降级链「关键词路失败 → meta.sparse_failed=true」（§2） | ✅ 已实现（模式 A/B 均透传） |
+| meta.rerank.model（§3.1 响应契约） | ✅ 已实现 |
+| mode=skills 解析失败 → 退化整句、meta 如实 | ✅ 已实现（此前 meta.mode 误导为 skills 且误走 dense-only） |
+| title ≤ 20 字（综合设计 §6.8） | ✅ 已实现（代码上限与 prompt 对齐为 20） |
+| 简历删除/候选人删除联动清理语义索引与流转日志（HANDOFF §5.3「删除/归档/恢复同步」） | ✅ 已实现：delete_resume/TTL 清理调 delete_resume_index；_delete_document 显式删除 Paragraph（内核模型 DO_NOTHING 无级联，此前段落残留）；delete_resume/delete_candidate 级联清理 ResumeFlowLog（PII 不留存） |
+
+### 9.2 未实现（⚠️ 已知偏差，均非阻断）
+
+| 设计承诺 | 现状 | 备注 |
+|---|---|---|
+| 顺位放宽阶梯（§2 步骤5：top_k 不足时按顺位放宽，meta.skill_relaxed 记录放宽顺位） | ⚠️ 未实现：skill_relaxed 恒为 len(skills)；弱命中简历恒在尾部返回（相当于「放宽到无约束」始终开启） | 后续项；当前行为可解释（rerank 已兜底） |
+| meta.elapsed_ms 分段（total/recall/rerank/aggregate，§3.1） | ⚠️ 仅 total | 后续项 |
+| 降级链「rerank → RRF → dense → 空」中 embedding 层失败 | ⚠️ 转业务异常（500 业务码）而非 meta 标记返回空 | 无 embedding 无法检索，友好报错更合理 |
+| 候选池截断语义（§2「候选池不截断，最终输出才取 top_k」） | ⚠️ rerank 前按 max(top_k×3, recall_k) 截断候选文档数 | 影响小（截断量 > top_k），视为实现细节 |
+
+### 9.3 已知限制（安全/权限，需产品决策）
+
+1. **简历知识库可经内核知识库 API 读取（绕过 HrAccess）**：简历语义索引为 workspace 内普通知识库（scope=WORKSPACE），内核文档/段落接口按工作区成员权限放行。查证：裁剪内核无 workspace 成员映射，普通 USER 的 permission_list 不含 KNOWLEDGE 资源权限 → 无法读取；实际暴露面为系统管理员/WORKSPACE_MANAGE（本就拥有全部数据权）。风险评级 P2：权限模型不一致 + 管理员可增删文档影响 HR 检索可用性；防线为索引内容 PII 掩码。**建议后续加固**：简历知识库 meta 标记（如 is_hr_resume_index）+ 内核视图拦截，或索引迁移出 knowledge 模块。
+2. **模型工作区可见性校验为 no-op**：get_model_by_id 依赖 get_authorized_model（DatabaseModelManage），裁剪内核未注册（settings 无 MODEL_HANDLES）→ 任何工作区的模型 id 均可被引用。当前单租户部署下「共享 default 模型」即产品行为（README 五期）；多租户部署前须恢复授权查询或显式 workspace 校验。
+3. **LLM 切片调用发送未脱敏全文**：PII 掩码在切片之后（设计定稿），切片 prompt 含电话/邮箱等 → 外部 LLM 供应商可见；PRD §6「默认不发送候选人联系方式」存在张力，需合规确认（或改为切片前对联系方式行先行掩码）。
+4. **SEARCH 审计与 A3 审计规范一致（查询原文不入库）**；HrAuditLog 无 trace 字段（PRD §7 已标注未实现）。
+
+> 关联：实施计划 ../plans/2026-08-15-c-stage-resume-rag.md 阶段 3；综合设计 §1.2/§6；HANDOFF §5.3
