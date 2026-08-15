@@ -57,7 +57,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 | `README-hr.md` | 各期验收记录（一期到 A 阶段，含测试数演进） |
 | `docs/superpowers/specs/2026-08-13-*.md` | 二至七期规格（简历/搜索匹配/AI/异步/合并） |
 
-## 3. 已完成（当前测试基线：四 app + ops 322/322 PASS，HR 288）
+## 3. 已完成（当前测试基线：四 app + ops 336/336 PASS，HR 302）
 
 ### 3.1 PRD 七期（基础能力）
 
@@ -124,12 +124,12 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 
 **设计定稿（2026-08-15）**：端到端综合方案 docs/superpowers/specs/2026-08-15-end-to-end-pipeline-combined-design.md（**唯一权威**，§6 含切片协议 v4：LLM 边界标注 + 条目级 + 禁止改写 + PII 过滤）；实施计划 docs/superpowers/plans/2026-08-15-c-stage-resume-rag.md（**执行依据**）；GitHub 调研 docs/superpowers/audits/2026-08-15-chunking-landscape.md；真实数据审查 docs/superpowers/audits/2026-08-15-design-reality-check.md（输入按 PRD 锁定 docx/txt，无 OCR/表格；数据集合成为压力测试语料）。
 
-**剩余（未交付，按 docs/superpowers/plans/2026-08-15-c-stage-resume-rag.md 三阶段执行）**：
-1. 阶段 1：sanitize_resume_text() 清洗 + ResumeSplitter（LLM 行号边界标注 + 校验层 + 规则降级 + PII 过滤）+ docx 格式变体评测（边界 F1/保真度）；
-2. 阶段 2：打通入库（parse_resume_task → 切片 → Document → 向量化）+ ResumeFile.document_id 关联与生命周期同步（删除/归档/合并）；
-3. 阶段 3：Rerank 接入检索管线（召回 top10 → 精排 top3~5）+ Small-to-Big 回溯 + 可选（RRF 融合优化 / 画像向量 / RAG Fusion 子查询）。
+**C 阶段实现进展（2026-08-15）**：
+- ✅ 阶段 1（切片器）：sanitize_resume_text() + ResumeSplitter（LLM 行号边界标注 + L2 校验 + L3 规则/smart 降级 + PII 掩码），单测 9 例；真实模型冒烟 10/10 保真、0 异常（提交 19637e8）；
+- ✅ 阶段 2（打通入库）：ResumeFile.document_id（迁移 0013）+ hr/services/resume_index.py（简历知识库幂等创建/入库/删除/启停用）+ parse_resume_task 自动索引（失败不阻塞建档）+ 生命周期同步（删除/合并清文档、归档/恢复切 is_active）+ 状态接口暴露 document_id；单测 5 例；端到端冒烟通过（上传 3 份 → LLM 切片 → 向量化 SUCCESS → 检索命中"幕墙系统设计" 0.665）（提交 ce8f065/1486cac）；
+- ⏳ 阶段 3（未开始）：Rerank 接入检索管线（召回 top10 → 精排 top3~5）+ Small-to-Big 回溯 + 可选（RRF 融合优化 / 画像向量 / RAG Fusion 子查询）+ 量化对比报告（PRD §9.2 完成定义：Top-K 相关性优于结构化基线）。
 
-另：人工反馈、更大标注集量化对比、档位 3（200 份）仍后置。**注意**：冒烟中修复了应用创建/发布链路的 3 个裁剪期 bug（96afbd0），application.tests 现有 10 用例。
+另：人工反馈、更大标注集量化对比、档位 3（200 份）仍后置。docx 格式变体评测集（plans 1.3）并入阶段 3 检索评测。**注意**：冒烟中修复了应用创建/发布链路的 3 个裁剪期 bug（96afbd0），application.tests 现有 10 用例。
 
 **运行要点**：web `python main.py dev`；celery `PATH=.venv/bin:$PATH MAXKB_WORKER_TMP=/tmp/maxkb-worker python main.py dev celery`；冒烟 `RUN_REAL_MODEL=1 REAL_MODEL_STAGE=1 SENSENOVA_API_KEY=... SILICONFLOW_API_KEY=... python installer/real_model_smoke.py`。冒烟用户 `smoke-admin`（ADMIN 角色，密码 Smoke@123，仅本机）；模型/知识库/应用 API 只认 `default` 工作区（HR 模块才用自定义 workspace + HrAccess）。
 

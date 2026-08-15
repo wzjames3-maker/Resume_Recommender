@@ -158,3 +158,11 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
 - 原实现计划（2026-08-12）声明"只改前端路由与视图层、不删后端代码"；本轮因本机无法编译原版依赖，
   改为实际删除无用代码与依赖（见《2026-08-13-local-core-slimming-design.md》规格与本文档裁剪范围）。
 - Docker 构建、Docker Compose 与生产守护进程部署验证不在本轮验收范围，后续独立补齐。
+
+## C 阶段语义索引（2026-08-15 验收补充）
+
+- 切片器：`sanitize_resume_text()` + ResumeSplitter（LLM 行号边界标注主干 + L2 校验[越界/重叠/覆盖/保真] + L3 规则/smart 降级 + PII 掩码），单测 9 例（apps/hr/services/resume_splitter.py）。
+- 入库打通：`ResumeFile.document_id`（迁移 0013）+ hr/services/resume_index.py（简历知识库幂等创建/入库/删除/启停用）；`parse_resume_task` 解析成功后自动「清洗→LLM 切片→建 Document/Paragraph→向量化」，失败不阻塞建档；候选人删除/合并清文档向量、归档/恢复同步 is_active。
+- 真实模型验证：切片冒烟 10/10 保真、0 异常（SenseNova）；端到端冒烟 3/3（上传→切片→SiliconFlow 向量化 SUCCESS→检索命中"幕墙系统设计" 0.665）。
+- 测试：`hr.tests application.tests knowledge.tests models_provider.tests ops.tests`，336/336 PASS（keepdb 稳定）。
+- 设计/计划：docs/superpowers/specs/2026-08-15-end-to-end-pipeline-combined-design.md、docs/superpowers/plans/2026-08-15-c-stage-resume-rag.md（阶段 3 待执行：Rerank 接入 + 量化对比）。
