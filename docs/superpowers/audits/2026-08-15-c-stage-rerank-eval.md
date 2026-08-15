@@ -20,14 +20,14 @@
 | dense-only | 0.75 | 0.58 | 0.42 | 0.513 |
 | RRF 双路融合 | 0.75 | 0.67 | 0.50 | 0.579 |
 | **RRF + rerank** | **0.92** | **0.83** | **0.75** | **0.785** |
-| Skill-AND | 0.75 | 0.75 | 0.50 | 0.604 |
+| Skill-AND（含 rerank） | 0.75 | 0.75 | 0.50 | 0.604 |
 | 结构化基线 | 0.00 | 0.00 | 0.00 | 0.000 |
 
 ## 3. 结论
 
 1. **RRF+rerank 全面最优，达成 PRD 完成定义**：recall@5=0.92、MRR=0.785，显著优于结构化基线（0.00）与单路 dense（0.513）。rerank 把"平面设计"目标从 RRF 第 2 提到第 1、"幕墙"等保持 Top-1，并清理了低相关候选（rerank 分 0 的排后）。
 2. **RRF 双路融合优于单 dense**（MRR 0.513→0.579，recall@3 0.58→0.67）：sparse 关键词路（jieba→tsvector）对实体词（新媒体/平面设计/会计）有精确命中，与 dense 语义互补。
-3. **Skill-AND 技能复合**：recall@3=0.75 与 rerank 相当，MRR 0.604；在"教师"场景从 0 命中到 Top-1（技能分解把"教育/培训/教师"拆开各自检索）。受限于合成语料技能分布（多份简历共享模板技能），区分度有限，真实技能异质数据上预期优势更大。
+3. **Skill-AND 技能复合**：recall@3=0.75、MRR 0.604（含 rerank 精排，2026-08-16 补齐设计步骤 6）。12 个锚点中仅 3 个（Unity/楼面经理/外联）被 LLM 解析为多技能走模式 B，其余为单复合技能走模式 A——评测集多数查询并非多技能场景，Skill-AND 优势未充分体现；单测已验证模式 B rerank 通路（skill_ordered_reranked），真实多技能查询（"会 java python fastapi agent rag 的人"）上技能分解价值在数据集 30 份压力测试中已验证。
 4. **结构化基线 0.00**：该语料 Candidate.skills 规则解析为空（技能在正文未进结构化字段）——恰好证明简历正文语义检索的价值（结构化检索对此类简历完全失效）。
 5. **rerank 成本**：每查询 1 次 /rerank 调用（top_n=5），12 查询共 12 次，远低于配额。
 
@@ -40,6 +40,7 @@
 | rerank index 映射错误 | SiliconFlow results[].index=输入下标，原代码用 enumerate 下标映射 → 分数错位 | 按 index 写回 fused 原行再排序 |
 | rerank 排序被聚合覆盖 | rerank 重排段落但 _aggregate 用 rrf 聚合 → 排序回退 | `_para_score`：rerank 启用时聚合/排序键优先 rerank 分 |
 | 模式 B 固定命中阈值无区分度 | 短技能词对任意段落 dense 相似度 0.2~0.42，固定 0.2 下人人命中 | 相对阈值 max(0.2, 技能top分×0.75) |
+| 模式 B 缺 rerank（设计步骤 6 未实现） | Skill-AND 只有 hit_vec 排序，无精排 | 候选段落（每简历最优段）→ rerank → skill_ordered_reranked（2026-08-16 补齐） |
 
 ## 5. 资源消耗
 

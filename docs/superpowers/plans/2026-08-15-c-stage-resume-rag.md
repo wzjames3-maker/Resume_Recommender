@@ -1,7 +1,7 @@
 # C 阶段实施计划：简历语义索引（入库打通 + 检索增强）
 
 > 日期：2026-08-15
-> 状态：执行中——阶段 1/2 已完成 + 数据集 30 份压力测试（2026-08-15，见 HANDOFF §5.3）；阶段 3 细化计划已定（2026-08-15），待执行
+> 状态：**全部完成（2026-08-16）**——阶段 1/2/3 均已交付，C 阶段完成定义达成（PRD §9.2），见 HANDOFF §5.3 与 audits/2026-08-15-c-stage-rerank-eval.md
 > 依据：../specs/2026-08-15-end-to-end-pipeline-combined-design.md（权威设计）；本文档为实施顺序与验收的唯一来源
 > 输入约束：PRD 锁定 docx/txt（无 OCR/表格/图片）；外部模型：SenseNova 6.8-flash-lite（LLM）、SiliconFlow bge-large-zh-v1.5（Embedding）+ bge-reranker-v2-m3（Rerank）
 
@@ -30,7 +30,7 @@
 
 **出口标准**：上传→索引→检索全链路通（真实模型），生命周期同步单测全绿。
 
-## 阶段 3：检索增强【进行中——2026-08-15 制定细化计划】
+## 阶段 3：检索增强【已完成 2026-08-16】
 
 > 现状（盘点）：Rerank 模型已注册（OpenAIRerankModel → SiliconFlow /rerank）但**零接入**；知识库 hit_test（blend 双路召回）为唯一检索入口，无 rerank；HR 侧**无简历正文语义检索 API**（AI 搜人走 LLM 解析转结构化筛选）；简历索引链路完备（每工作区"简历语义索引"知识库 + ResumeFile.document_id + 生命周期同步）。
 
@@ -41,7 +41,7 @@
 | 3.3 | **量化对比报告**（PRD §9.2 完成定义）：试点标注集（数据集 30 份 + 锚点查询 10~15 个：实体型"有幕墙设计经验" + 自然语言型职责描述）→ 对比结构化基线（组合搜索）vs blend top10 vs rerank top5 | 指标：recall@5（三路对比）、rerank 后 recall@3、Top-K 相关性；报告落盘 docs/superpowers/audits/2026-08-15-c-stage-rerank-eval.md |
 | 3.4 | （可选，按评测收益决策）blend 融合改 RRF（k=60）/ 画像向量路 A / RAG Fusion 子查询 / LLM title 摘要 | 各按评测收益决策 |
 
-**出口标准**：PRD §9.2 C 阶段完成定义——语义索引与候选人生命周期同步（已完成）+ 试点标注集 Top-K 相关性优于结构化检索基线（量化对比报告落盘）。
+**出口标准（已达成 2026-08-16）**：PRD §9.2 C 阶段完成定义——语义索引与候选人生命周期同步（已完成）+ 试点标注集 Top-K 相关性优于结构化检索基线（量化对比报告 audits/2026-08-15-c-stage-rerank-eval.md：RRF+rerank recall@5=0.92 vs 结构化基线 0.00）。
 
 ## 里程碑与模型调用预算
 

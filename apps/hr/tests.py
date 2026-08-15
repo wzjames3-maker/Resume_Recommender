@@ -3745,3 +3745,29 @@ class ResumeSearchTests(TestCase):
         self.assertIsNotNone(log)
         self.assertNotIn("java", str(log.detail))  # 查询原文不入审计
 
+    def test_skill_and_with_rerank(self):
+        """模式 B + rerank：精排生效、search_type=skill_ordered_reranked"""
+        from hr.services.resume_search import search_resumes
+        p_a1 = self._paragraph("Java 开发")
+        p_a2 = self._paragraph("Python 开发")
+        self._embedding(p_a1)
+        self._embedding(p_a2)
+        fake_llm = Mock()
+        fake_llm.invoke.return_value = type("R", (), {"content": '{"skills": ["java", "python"]}'})()
+        rerank = self._fake_rerank()
+        with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()), \
+                patch("hr.services.resume_search.EmbeddingSearch") as m_emb, \
+                patch("hr.services.resume_search.KeywordsSearch") as m_key:
+            m_emb.return_value.handle.side_effect = [
+                [{"paragraph_id": str(p_a1.id), "similarity": 0.9}],  # java
+                [{"paragraph_id": str(p_a2.id), "similarity": 0.85}],  # python
+            ]
+            m_key.return_value.handle.return_value = []
+            result = search_resumes(self.workspace_id, "会 java python 的人", mode="skills",
+                                    llm_model=fake_llm, rerank_model=rerank, user_id=self.user.id)
+        self.assertEqual(result["meta"]["search_type"], "skill_ordered_reranked")
+        self.assertTrue(result["meta"]["rerank"]["enabled"])
+        self.assertEqual(len(result["items"]), 1)
+        self.assertIn("rerank", result["items"][0]["score"])
+
+

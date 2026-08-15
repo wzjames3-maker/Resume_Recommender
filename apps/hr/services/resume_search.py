@@ -224,17 +224,20 @@ def _search_skill_and(skills, knowledge, embedding_model, candidate_k, similarit
         row["content"] = p.get("content", "") if p else ""
         row["title"] = p.get("title", "") if p else ""
         row["document_id"] = str(p.get("document_id")) if p and p.get("document_id") else None
-    # 简历级命中向量
+    # 简历级命中向量 + 每简历段落池（供 rerank 精排）
+    doc_paragraphs = {}
     for pid, row in pool.items():
         doc_id = row.get("document_id")
         if doc_id is None:
             continue
+        doc_paragraphs.setdefault(doc_id, []).append(row)
         vec = doc_skill_vec.setdefault(doc_id, [0] * len(skills))
         for skill_index in row.get("hit_skills", []):
             vec[skill_index] = 1
     # 字典序排序：命中靠前技能优先
     ordered = sorted(doc_skill_vec.items(), key=lambda item: tuple(item[1]), reverse=True)
-    return ordered, {"rounds": len(skills), "pool_paragraphs": len(pool), "skill_relaxed": len(skills)}
+    return ordered, {"rounds": len(skills), "pool_paragraphs": len(pool), "skill_relaxed": len(skills),
+                     "doc_paragraphs": doc_paragraphs}
 
 
 def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
@@ -284,20 +287,45 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
     # ---------- 模式 B：Skill-AND ----------
     if mode == "skills" and len(skills) >= 2:
         ordered, b_meta = _search_skill_and(skills, knowledge, embedding_model, recall_k, similarity, top_k)
+        doc_paragraphs = b_meta.pop("doc_paragraphs", {})
         meta.update(b_meta)
-        meta["search_type"] = "skill_ordered"
         meta["recall"] = {"rounds": b_meta["rounds"], "pool_paragraphs": b_meta["pool_paragraphs"], "candidate_k": recall_k}
+        # 候选段落：按 hit_vec 排序取前 candidate_k 简历的最优段落（Small-to-Big 回溯到段落）
+        cand_docs = [doc_id for doc_id, _ in ordered[: max(top_k * 3, recall_k)]]
+        cand_paras = []
+        for doc_id in cand_docs:
+            best = None
+            for row in doc_paragraphs.get(doc_id, []):
+                if best is None or _para_score(row) > _para_score(best):
+                    best = row
+            if best is not None:
+                cand_paras.append(best)
+        # Rerank 精排（设计步骤 6）：对候选段落精排，失败降级 hit_vec 顺序
+        reranked = False
+        if rerank_model is not None and cand_paras:
+            cand_paras, reranked = _rerank(query, cand_paras, rerank_model, top_k)
+        meta["rerank"] = {"enabled": rerank_model is not None, "top_n": top_k, "failed": rerank_model is not None and not reranked}
+        meta["search_type"] = "skill_ordered_reranked" if reranked else ("skill_ordered" if rerank_model is None else "skill_ordered_fallback")
+        # 按 rerank 分排序取 top_k，回溯候选人
+        seen = set()
         items = []
-        for idx, (doc_id, hit_vec) in enumerate(ordered[:top_k], 1):
+        for row in cand_paras:
+            doc_id = row.get("document_id")
+            if doc_id is None or doc_id in seen:
+                continue
+            seen.add(doc_id)
+            hit_vec = dict(ordered).get(doc_id, [0] * len(skills))
             resume = QuerySet(ResumeFile).filter(document_id=doc_id).select_related("candidate").first()
             items.append({
-                "rank": idx,
+                "rank": len(items) + 1,
                 "candidate": _mask_for_role(resume.candidate if resume else None, hr_role),
                 "resume": {"id": str(resume.id), "file_name": resume.file_name, "extension": resume.extension} if resume else None,
-                "score": {"hit_vec": hit_vec, "hit_count": sum(hit_vec)},
-                "paragraphs": [],
+                "score": {"hit_vec": hit_vec, "hit_count": sum(hit_vec), "rerank": _para_score(row)},
+                "paragraphs": [{"id": row.get("paragraph_id"), "title": row.get("title"), "content": row.get("content"), "score": _para_score(row)}],
                 "document_id": doc_id,
             })
+            if len(items) >= top_k:
+                break
         meta["aggregation"] = {"grouped_resumes": len(items)}
         meta["elapsed_ms"]["total"] = int((time.time() - t0) * 1000)
         _write_search_audit(workspace_id, user_id, query, top_k, meta, len(items))

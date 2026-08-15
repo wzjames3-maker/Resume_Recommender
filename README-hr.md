@@ -30,7 +30,7 @@
 
 ### 保留
 - 用户/工作区/成员角色权限
-- 模型配置（OpenAI 兼容 LLM/Embedding/Rerank 均已注册；reranker 接入检索管线为 C 阶段 3 工作）
+- 模型配置（OpenAI 兼容 LLM/Embedding/Rerank 均已注册；reranker 已接入简历语义检索管线）
 - 知识库、文档上传解析、分块、向量化、检索
 - 知识库问答（SIMPLE 应用）、引用来源、会话管理
 - 文件上传、homepage 工作台、系统设置
@@ -166,5 +166,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
 - 数据流转日志：ResumeFlowLog（迁移 0014/0015）+ 查询 API `GET /workspace/{ws}/hr/resumes/{id}/flow-logs`；UPLOAD/EXTRACT/SANITIZE/SPLIT/DOCUMENT/LIFECYCLE 六节点，SPLIT 记录每个 chunk 完整内容（title/content/length/pii）、EXTRACT/SANITIZE 保留全文，可审计逐节点数据。
 - docx 表格排版简历：extract_text_from_docx 遍历段落+表格单元格（合并单元格去重）；数据集真实表格简历端到端 8 段 → 检索命中 0.758。
 - 真实模型验证：切片冒烟 10/10 保真；端到端冒烟 3/3（上传→切片→SiliconFlow 向量化 SUCCESS→检索命中"幕墙系统设计" 0.665）；**数据集 30 份压力测试 30/30 成功、29/30 LLM 路径、30/30 内容无改写**（SenseNova 需透传 `thinking=disabled` 禁推理流，已内置于适配器；脚本 installer/resume_splitter_dataset30.py）。
-- 测试：`hr.tests application.tests knowledge.tests models_provider.tests ops.tests`，**342/342 PASS（HR 308）**（keepdb 稳定）。
-- 设计/计划：docs/superpowers/specs/2026-08-15-end-to-end-pipeline-combined-design.md、docs/superpowers/plans/2026-08-15-c-stage-resume-rag.md（阶段 3 待执行：Rerank 接入 + 量化对比）。
+- 语义检索（阶段 3，2026-08-16）：POST /workspace/{ws}/hr/resumes/search——双路召回（dense + sparse 关键词路）→ Python RRF(k=60) 融合 → bge-reranker-v2-m3 精排 → Small-to-Big 简历聚合；模式 B（Skill-AND）技能复合检索（LLM 有序技能分解 → 逐技能双路召回 → 命中向量字典序 → rerank 精排）；hr_access_required + VIEWER 脱敏 + SEARCH 审计（查询原文不入库）；无 rerank/LLM 自动降级。单测 11 例。
+- 量化对比（阶段 3.3 出口，2026-08-16）：31 份语料 + 12 锚点查询 × 5 模式——**RRF+rerank recall@5=0.92 / recall@3=0.83 / Top-1=0.75 / MRR=0.785**（最优），结构化基线 0.00（语料 skills 字段为空）；报告 audits/2026-08-15-c-stage-rerank-eval.md。**C 阶段完成定义达成（PRD §9.2）**。
+- 测试：`hr.tests application.tests knowledge.tests models_provider.tests ops.tests`，**355/355 PASS（HR 321）**（keepdb 稳定）。
+- 设计/计划：docs/superpowers/specs/2026-08-15-end-to-end-pipeline-combined-design.md（权威）、docs/superpowers/specs/2026-08-15-hr-resume-search-design.md（检索设计 v2）、docs/superpowers/plans/2026-08-15-c-stage-resume-rag.md（阶段 3 已完成）。
