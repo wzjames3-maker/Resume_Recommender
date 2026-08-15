@@ -73,7 +73,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
 ## 新增模块
 - apps/hr：人事招聘基础闭环，包含候选人、职位和候选人指派。
 - ui/src/views/hr：候选人和职位管理页面。
-- API：`/admin/api/workspace/{workspace_id}/hr/...`，复用当前工作区认证与管理员权限。
+- API：`/admin/api/workspace/{workspace_id}/hr/...`，认证复用登录会话；权限为 HR 显式授权（`HrAccess` VIEWER/OPERATOR/ADMIN，A3 起不再复用工作区管理员权限）。
 
 ## 人事一期验收（2026-08-13）
 

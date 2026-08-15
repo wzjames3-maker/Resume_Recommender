@@ -1,11 +1,9 @@
 # 安全说明
 
-如果您发现安全问题，请[提交给我们](https://github.com/1Panel-dev/MaxKB/security/advisories/new)。
+如果您发现本 fork（精简版 MaxKB + 人事招聘工作台）的安全问题，请直接联系本仓库维护者（不要公开披露真实候选人数据相关缺陷），并附上：
 
-感谢您的支持！
+- 受影响版本/提交。
+- 复现步骤。
+- 影响范围（涉及哪些 PII 或权限边界）。
 
-# Security Policy
-
-Any security issue please [submit a vulnerability report](https://github.com/1Panel-dev/MaxKB/security/advisories/new).
-
-Thanks for your support!
+修复遵循 HANDOFF.md §4 的审查结论（权限校验、审计埋点、脱敏、终态约束等模式），并补充回归测试。

@@ -11,13 +11,14 @@
 </p>
 <hr/>
 
-MaxKB = Max Knowledge Brain, it is an open-source platform for building enterprise-grade agents. MaxKB integrates Retrieval-Augmented Generation (RAG) pipelines, supports robust workflows, and provides advanced MCP tool-use capabilities. MaxKB is widely applied in scenarios such as intelligent customer service, corporate internal knowledge bases, academic research, and education.
+> **Fork status**: This repository is a **slimmed MaxKB v2 core** embedded with a multi-tenant HR recruitment workspace (ATS) in `apps/hr`. The upstream workflow engine, MCP tool-use, function library, multi-modal and local-model features have been **removed**; the working product is described by `README-hr.md` and `docs/PRD.md`, not by the upstream marketing copy below.
 
-- **RAG Pipeline**: Supports direct uploading of documents / automatic crawling of online documents, with features for automatic text splitting, vectorization. This effectively reduces hallucinations in large models, providing a superior smart Q&A interaction experience.
-- **Agentic Workflow**: Equipped with a powerful workflow engine, function library and MCP tool-use, enabling the orchestration of AI processes to meet the needs of complex business scenarios.
-- **Seamless Integration**: Facilitates zero-coding rapid integration into third-party business systems, quickly equipping existing systems with intelligent Q&A capabilities to enhance user satisfaction.
+MaxKB = Max Knowledge Brain, an open-source platform for building enterprise-grade agents. This fork keeps the core knowledge-base Q&A (RAG) foundation and adds a recruitment workspace with resume parsing/search, interview collaboration, offer artifacts and onboarding handoff.
+
+- **RAG Pipeline**: Supports direct uploading of documents / automatic crawling of online documents, with features for automatic text splitting and vectorization.
+- **HR Workspace (ATS)**: Multi-tenant recruitment — candidates, jobs, assignments, resume parsing (async), AI search, interviews, offers and onboarding handoff.
+- **Seamless Integration**: Facilitates zero-coding rapid integration into third-party business systems.
 - **Model-Agnostic**: Supports various large models, including private models (such as DeepSeek, Llama, Qwen, etc.) and public models (like OpenAI, Claude, Gemini, MiniMax, etc.).
-- **Multi Modal**: Native support for input and output text, image, audio and video.
 
 ## Quick start
 
