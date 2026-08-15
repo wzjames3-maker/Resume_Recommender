@@ -12,7 +12,7 @@
 | # | 开源模式 | 出处 | 本仓库决策 | 理由 |
 |---|---|---|---|---|
 | 1 | 候选放大 candidate_k = top_k × 3 | MewAgent | ✅ **采纳**：recall_k = top_k × 3（clamp [15, 60]），重排后再截断 | 防召回不足；成本仅 SQL 多返回几行 |
-| 2 | 稠密+稀疏双路 + RRF(k=60) | MewAgent/Milvus | ✅ **采纳（Python 侧）**：dense=EmbeddingSearch(cosine) 独立路 + sparse=KeywordsSearch(ts_rank_cd+Termbase) 独立路 → Python 侧 score = Σ 1/(k+rank) 融合 | 两路独立 SQL 已存在（embedding_search.sql / keywords_search.sql），只需一次 embed 两次 handle，RRF 在服务层 5 行实现；**不引入 sparsevec**（tsvector 已覆盖关键词路，避免双套引擎，design-reality-check 既定原则） |
+| 2 | 稠密+稀疏双路 + RRF(k=60) | MewAgent/Milvus | ✅ **采纳（Python 侧）**：dense=EmbeddingSearch(cosine) 独立路 + sparse=KeywordsSearch(ts_rank_cd+Termbase) 独立路 → Python 侧 score = Σ 1/(k+rank) 融合 | 两路独立 SQL 已存在（embedding_search.sql / keywords_search.sql），只需一次 embed 两次 handle，RRF 在服务层 5 行实现。**术语澄清**：本仓库"稀疏路"就是**关键词检索**（jieba 分词 → PostgreSQL tsvector → ts_rank_cd 排名，BM25 家族），与 MewAgent 的 BM25 路/xt765 的 BM25 工具同族——不是额外第三路，也没有去掉关键词检索。学习型稀疏向量（bge-m3 sparse/SPLADE，模型产出的高维稀疏向量）为可选增强 E，pgvector 0.8.6 已支持 sparsevec |
 | 3 | 路由分级浅/深检索 | HireFlow | ⏳ **可选增强（v2）**：查询词数 ≤3 → shallow（纯 dense）；否则 deep（全管线）；LLM 路由后置 | v1 全走 deep 简单可靠；路由收益待评测 |
 | 4 | 评分-重写-再检索循环 | MewAgent grader | ⏳ **可选增强（v2）**：LLM 二分相关性 + step-back/HyDE 重写 | 每查询 2~4 次 LLM 调用，成本高；先做量化对比看 rerank 是否已够 |
 | 5 | 画像重排（LLM 一次评 10 人） | resume-rag-ranker | ⏳ **可选增强（v2）**：rerank 后对 top 候选人用结构化画像（Candidate.skills/degree/years/note）做 LLM 批量打分 | 1 次调用/查询；画像字段已具备 |
@@ -31,7 +31,7 @@ POST /hr/resumes/search
   → ③ 一次 embedding（query → 向量；get_embedding_model_by_knowledge_id）
   → ④ 双路独立召回（candidate_k = top_k × 3，同知识库，排除 is_active=False 文档）：
        dense  ：EmbeddingSearch.handle → [{paragraph_id, similarity}] rank_d
-       sparse ：KeywordsSearch.handle  → [{paragraph_id, similarity}] rank_s
+       sparse ：KeywordsSearch.handle（=关键词检索：jieba→tsvector→ts_rank_cd）→ [{paragraph_id, similarity}] rank_s
   → ⑤ RRF 融合（k=60）：score(d) = 1/(k+rank_d(d)) + 1/(k+rank_s(d))（单路命中另一路记 0）
        fused = 融合分 top(candidate_k)；同时保留 dense_score/sparse_score 单列展示
   → ⑥ list_paragraph 补全 content/title/document_id
@@ -182,6 +182,7 @@ def _mask_for_role(candidate, hr_role) -> dict:
 | B 查询重写循环 | LLM grader 判相关性不过 → step-back/HyDE 重写再查 | rerank 后 recall@3 仍低 | ~2-4 次 LLM/查询 |
 | C 画像重排 | rerank 后 LLM 用结构化画像批量打分（1 次/查询） | 需要可解释匹配分 | ~1 次 LLM/查询 |
 | D RAG Fusion 子查询 | 长复合查询 LLM 拆子句分别召回 RRF | 复合查询表现差 | ~1 次 LLM/查询 |
+| E 学习型稀疏向量 | bge-m3 sparse / SPLADE 编码段落与查询为稀疏向量（pgvector sparsevec 列 + HNSW 稀疏索引），替换或补充 jieba+tsvector 关键词路 | 关键词路在专有名词/同义/未登录词上表现差，量化对比显示关键词路拖后腿 | 入库每段 +1 次模型调用（bge-m3 可同时出 dense+sparse，一次调用双份）+ 新列/新索引迁移 |
 
 ## 7. 预算（阶段 3 增量）
 
