@@ -14,7 +14,7 @@ from hr.models import Candidate, HrConfig, ResumeFile, ResumeStatus
 from knowledge.models import Document, Paragraph
 from hr.services.audit import write_audit_log
 from hr.services.flow_log import log_flow
-from hr.services.resume_index import index_resume
+from hr.services.resume_index import delete_resume_index, index_resume
 from hr.services.resume_parser import extract_text_from_docx, extract_text_from_txt, parse_resume_text
 from hr.services.resume_splitter import sanitize_resume_text
 from models_provider.tools import get_model_instance_by_model_workspace_id
@@ -42,6 +42,8 @@ def cleanup_orphan_resumes():
     cutoff = timezone.now() - timedelta(days=30)
     resumes = ResumeFile.objects.filter(candidate__isnull=True, create_time__lt=cutoff)
     for resume in resumes:
+        # 语义索引联动清理（幂等；仅已索引的孤儿简历有 document_id）
+        delete_resume_index(resume)
         file_delete_failed = False
         if resume.file_path and get_storage().exists(resume.file_path):
             try:

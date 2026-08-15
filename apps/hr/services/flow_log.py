@@ -35,6 +35,11 @@ def log_flow(
         pass
 
 
+def delete_flow_logs(workspace_id, resume_id):
+    """简历删除时级联清理流转日志（含 EXTRACT/SANITIZE 未脱敏全文，PII 不留存）。"""
+    ResumeFlowLog.objects.filter(workspace_id=workspace_id, resume_id=resume_id).delete()
+
+
 def list_flow_logs(workspace_id, resume_id=None, limit=200):
     """按简历查询流转日志（时间正序）。"""
     query = ResumeFlowLog.objects.filter(workspace_id=workspace_id)

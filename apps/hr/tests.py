@@ -3365,6 +3365,28 @@ class ResumeIndexTests(TestCase):
         set_resume_index_active(resume, True)
         self.assertTrue(Document.objects.get(id=doc_id).is_active)
 
+    def test_index_resume_rejects_residual_pii(self):
+        """修复回归（审查 P2，设计 §6.8）：掩码未覆盖的 PII 变体（15 位身份证）必须拒绝入库。"""
+        resume = self._resume()
+        # 15 位身份证：主掩码正则（18 位）不覆盖 → 二次扫描应拒绝
+        text = "姓名：李冠光\n\n【基本信息】\n- 身份证：110101900101123\n- 其他：无"
+        with self.assertRaises(ValueError) as ctx:
+            index_resume(self.workspace_id, self.user_id, resume, text, self._stub_chat())
+        self.assertIn("PII", str(ctx.exception))
+        self.assertIsNone(resume.document_id)
+
+    def test_index_resume_accepts_masked_content(self):
+        """修复回归（审查 P2）：掩码已覆盖内容（电话/邮箱/18 位身份证）不触发二次扫描拒绝。"""
+        resume = self._resume()
+        text = "姓名：李冠光\n\n【基本信息】\n- 电话：13812345678\n- 邮箱：a@b.com\n- 身份证：11010119900101123X"
+        doc_id = index_resume(self.workspace_id, self.user_id, resume, text, self._stub_chat())
+        self.assertTrue(doc_id)
+        paragraphs = Paragraph.objects.filter(document_id=doc_id)
+        # 掩码生效（至少一段含掩码标记）且二次扫描无残留
+        from hr.services.resume_splitter import scan_residual_pii
+        self.assertTrue(any("[已脱敏]" in p.content for p in paragraphs))
+        self.assertTrue(all(not scan_residual_pii(p.content) for p in paragraphs))
+
 
 class ResumeParserDocxTableTests(TestCase):
     """docx 表格排版简历提取（数据集 sample 实测场景：内容全在表格里）"""
@@ -3530,6 +3552,67 @@ class ResumeFlowLogTests(TestCase):
             self.assertEqual(response.status_code, 200)
             nodes = [log["node"] for log in response.json()["data"]]
             self.assertIn("EXTRACT", nodes)
+
+    def test_delete_resume_cleans_index_and_flow_logs(self):
+        """修复回归（审查 P1）：简历删除必须联动清理语义索引（文档/段落/向量）与流转日志（含未脱敏全文）。"""
+        from hr.services.flow_log import list_flow_logs, log_flow
+        from hr.serializers.recruitment import RecruitmentService
+        from knowledge.models import Document, Embedding, Knowledge, KnowledgeFolder, KnowledgeScope, KnowledgeType, Paragraph
+
+        KnowledgeFolder.objects.get_or_create(id="default", defaults={"name": "default", "workspace_id": "default"})
+        knowledge = Knowledge.objects.create(
+            id=uuid.uuid7(), workspace_id=self.workspace_id, name="简历语义索引", desc="",
+            embedding_model_id=str(self.model.id), type=KnowledgeType.BASE.value,
+            scope=KnowledgeScope.WORKSPACE.value, user_id=self.user.id,
+        )
+        content = "姓名：李冠光\n\n【教育经历】\n- 院校：北京师范大学 | 学位：硕士"
+        handle = tempfile.NamedTemporaryFile(suffix=".txt", delete=False)
+        handle.write(content.encode("utf-8"))
+        handle.close()
+        resume = ResumeFile.objects.create(
+            workspace_id=self.workspace_id, file_name="r.txt", extension="txt",
+            file_path=handle.name, file_size=os.path.getsize(handle.name),
+            sha256="sha-" + uuid.uuid7().hex, source_channel="OTHER",
+            status=ResumeStatus.SUCCESS, user_id=self.user.id,
+        )
+        document = Document.objects.create(
+            id=uuid.uuid7(), knowledge_id=knowledge.id, name="r.txt", char_length=10, user_id=self.user.id,
+        )
+        paragraph = Paragraph.objects.create(
+            id=uuid.uuid7(), document_id=document.id, knowledge_id=knowledge.id, content="内容", title="t",
+        )
+        Embedding.objects.create(
+            id=uuid.uuid7(), document_id=document.id, paragraph_id=paragraph.id,
+            knowledge_id=knowledge.id, embedding=[0.1] * 8, is_active=True,
+        )
+        resume.document_id = document.id
+        resume.save(update_fields=["document_id", "update_time"])
+        log_flow(self.workspace_id, "EXTRACT", resume_id=resume.id, detail={"text": "电话：13812345678"})
+        os.remove(handle.name)
+
+        service = RecruitmentService(workspace_id=self.workspace_id, user_id=self.user.id, hr_role="ADMIN")
+        service.delete_resume(str(resume.id))
+        # 索引三件套清空 + 流转日志清空（PII 不留存）
+        self.assertFalse(Document.objects.filter(id=document.id).exists())
+        self.assertFalse(Paragraph.objects.filter(document_id=document.id).exists())
+        self.assertFalse(Embedding.objects.filter(document_id=document.id).exists())
+        self.assertEqual(list_flow_logs(self.workspace_id, resume_id=resume.id), [])
+
+    def test_delete_candidate_cleans_flow_logs(self):
+        """修复回归（审查 P1）：候选人删除匿名化时其简历的流转日志（含 PII）一并清理。"""
+        from hr.services.flow_log import list_flow_logs, log_flow
+        from hr.serializers.recruitment import RecruitmentService
+
+        resume = self._resume()
+        log_flow(self.workspace_id, "EXTRACT", resume_id=resume.id, detail={"text": "姓名：李冠光"})
+        candidate = Candidate.objects.create(
+            workspace_id=self.workspace_id, user_id=self.user.id, name="李冠光",
+        )
+        resume.candidate = candidate
+        resume.save(update_fields=["candidate", "update_time"])
+        service = RecruitmentService(workspace_id=self.workspace_id, user_id=self.user.id, hr_role="ADMIN")
+        service.delete_candidate(str(candidate.id))
+        self.assertEqual(list_flow_logs(self.workspace_id, resume_id=resume.id), [])
 
 
 class ResumeSearchTests(TestCase):
@@ -3825,7 +3908,7 @@ class ResumeSearchTests(TestCase):
             ]
             m_key.return_value.handle.return_value = []
             ordered, b_meta = _search_skill_and(
-                ["java", "python"], self.knowledge, self._fake_embedding_model(), 5, 0.2, 5
+                ["java", "python"], self.workspace_id, self.knowledge, self._fake_embedding_model(), 5, 0.2, 5
             )
         doc_paragraphs = b_meta["doc_paragraphs"]
         rows = doc_paragraphs.get(str(self.document.id), [])
@@ -3834,4 +3917,123 @@ class ResumeSearchTests(TestCase):
             hit_skills = row.get("hit_skills", [])
             self.assertEqual(len(hit_skills), len(set(hit_skills)), f"hit_skills 重复: {hit_skills}")
 
+
+
+    # ---------- 审查修复回归（2026-08-16 第二轮） ----------
+
+    def test_recall_k_and_similarity_clamped(self):
+        """修复回归：recall_k/similarity 越界 clamp（设计 §3.1 [5,60]/[0,2]），负数不得进 SQL（PG LIMIT 报错）。"""
+        from hr.services.resume_search import search_resumes
+        paragraph = self._paragraph()
+        self._embedding(paragraph)
+        with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()), \
+                patch("hr.services.resume_search.EmbeddingSearch") as m_emb, \
+                patch("hr.services.resume_search.KeywordsSearch") as m_key:
+            m_emb.return_value.handle.return_value = [{"paragraph_id": str(paragraph.id), "similarity": 0.9}]
+            m_key.return_value.handle.return_value = []
+            # recall_k=-1 / 9999 与 similarity 越界均不得抛异常（此前 recall_k=-1 触发 DataError → 500）
+            r1 = search_resumes(self.workspace_id, "java", mode="phrase", recall_k=-1, similarity=-5)
+            self.assertEqual(r1["meta"]["recall"]["candidate_k"], 5)
+            r2 = search_resumes(self.workspace_id, "java", mode="phrase", recall_k=9999, similarity=99)
+            self.assertEqual(r2["meta"]["recall"]["candidate_k"], 60)
+        self.assertEqual(len(r1["items"]), 1)
+
+    def test_missing_embedding_model_friendly_error(self):
+        """修复回归：知识库绑定的 Embedding 模型缺失 → 业务异常而非裸 AttributeError 500。"""
+        from hr.services.resume_search import search_resumes
+        self.knowledge.embedding_model_id = uuid.uuid7()  # 指向不存在的模型
+        self.knowledge.save(update_fields=["embedding_model_id"])
+        with self.assertRaises(AppApiException) as ctx:
+            search_resumes(self.workspace_id, "java", mode="phrase")
+        self.assertIn("Embedding", str(ctx.exception))
+
+    def test_embed_query_failure_friendly_error(self):
+        """修复回归：embed_query 调用失败（模型不可用/输入超限）→ 业务异常而非裸 500。"""
+        from hr.services.resume_search import search_resumes
+        fake = self._fake_embedding_model()
+        fake.embed_query.side_effect = Exception("provider down")
+        with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=fake):
+            with self.assertRaises(AppApiException) as ctx:
+                search_resumes(self.workspace_id, "java", mode="phrase")
+        self.assertIn("Embedding", str(ctx.exception))
+
+    def test_mode_skills_fallback_meta(self):
+        """修复回归：显式 skills 模式但 LLM 不可用 → 退化整句，meta.mode 如实为 phrase（此前误导为 skills 且误走 dense-only）。"""
+        from hr.services.resume_search import search_resumes
+        paragraph = self._paragraph()
+        self._embedding(paragraph)
+        fake_llm = Mock()
+        fake_llm.invoke.side_effect = Exception("llm down")
+        with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()), \
+                patch("hr.services.resume_search.EmbeddingSearch") as m_emb, \
+                patch("hr.services.resume_search.KeywordsSearch") as m_key:
+            m_emb.return_value.handle.return_value = [{"paragraph_id": str(paragraph.id), "similarity": 0.9}]
+            m_key.return_value.handle.return_value = [{"paragraph_id": str(paragraph.id), "similarity": 0.5}]
+            result = search_resumes(self.workspace_id, "java 开发", mode="skills",
+                                    llm_model=fake_llm, user_id=self.user.id)
+        self.assertEqual(result["meta"]["mode"], "phrase")
+        self.assertEqual(result["meta"]["recall"]["sparse"], 1)  # 双路生效
+
+    def test_skill_and_structured_path(self):
+        """设计补齐：模式 B 结构化路——技能在 Candidate.skills 但正文未出现的简历经结构化命中补位（paragraphs=[]）。"""
+        from hr.services.resume_search import search_resumes
+        p_a1 = self._paragraph("Java 开发")
+        p_a2 = self._paragraph("Python 开发")
+        self._embedding(p_a1)
+        self._embedding(p_a2)
+        candidate_b = Candidate.objects.create(
+            workspace_id=self.workspace_id, user_id=self.user.id, name="结构化候选", skills=["java"]
+        )
+        doc_b = Document.objects.create(
+            id=uuid.uuid7(), knowledge_id=self.knowledge.id, name="B.docx", char_length=5, user_id=self.user.id,
+        )
+        ResumeFile.objects.create(
+            workspace_id=self.workspace_id, file_name="B.docx", extension="docx",
+            file_path="/tmp/b.docx", file_size=1, sha256="sha-" + uuid.uuid7().hex,
+            source_channel="OTHER", status=ResumeStatus.SUCCESS, user_id=self.user.id,
+            candidate=candidate_b, document_id=doc_b.id,
+        )
+        # B 的正文不含任何技能词（语义路两轮均不召回其段落）
+        Paragraph.objects.create(
+            id=uuid.uuid7(), document_id=doc_b.id, knowledge_id=self.knowledge.id, content="负责日常事务协调", title="经历",
+        )
+        fake_llm = Mock()
+        fake_llm.invoke.return_value = type("R", (), {"content": '{"skills": ["java", "python"]}'})()
+        with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()), \
+                patch("hr.services.resume_search.EmbeddingSearch") as m_emb, \
+                patch("hr.services.resume_search.KeywordsSearch") as m_key:
+            m_emb.return_value.handle.side_effect = [
+                [{"paragraph_id": str(p_a1.id), "similarity": 0.9}],  # java
+                [{"paragraph_id": str(p_a2.id), "similarity": 0.85}],  # python
+            ]
+            m_key.return_value.handle.return_value = []
+            result = search_resumes(self.workspace_id, "会 java python 的人", mode="skills",
+                                    llm_model=fake_llm, user_id=self.user.id)
+        self.assertEqual(result["meta"]["recall"]["structured_hits"], 2)  # 李冠光 + 结构化候选
+        names = [item["candidate"]["name"] for item in result["items"]]
+        self.assertIn("结构化候选", names)
+        structured_item = result["items"][names.index("结构化候选")]
+        self.assertEqual(structured_item["paragraphs"], [])
+        self.assertEqual(structured_item["score"]["hit_vec"], [1, 0])
+        self.assertEqual(structured_item["score"]["hit_count"], 1)
+
+    def test_skill_and_structured_merge_no_duplicate(self):
+        """设计补齐：同一简历两路都命中 → hit_vec 按位 OR 合并（不重复计）。"""
+        from hr.services.resume_search import search_resumes
+        p_a1 = self._paragraph("Java 开发")
+        self._embedding(p_a1)
+        fake_llm = Mock()
+        fake_llm.invoke.return_value = type("R", (), {"content": '{"skills": ["java", "python"]}'})()
+        with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()), \
+                patch("hr.services.resume_search.EmbeddingSearch") as m_emb, \
+                patch("hr.services.resume_search.KeywordsSearch") as m_key:
+            m_emb.return_value.handle.side_effect = [
+                [{"paragraph_id": str(p_a1.id), "similarity": 0.9}],  # java（语义命中）
+                [],  # python（语义未命中；结构化字段 skills 含 python → OR 补 1）
+            ]
+            m_key.return_value.handle.return_value = []
+            result = search_resumes(self.workspace_id, "会 java python 的人", mode="skills",
+                                    llm_model=fake_llm, user_id=self.user.id)
+        self.assertEqual(result["items"][0]["score"]["hit_vec"], [1, 1])  # java 语义 + python 结构化
+        self.assertEqual(len(result["items"][0]["paragraphs"]), 1)  # 段落不重复
 

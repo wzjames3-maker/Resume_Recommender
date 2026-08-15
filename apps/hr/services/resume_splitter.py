@@ -14,7 +14,7 @@ from common.utils.split_model import smart_split_paragraph
 
 _MAX_CHUNK_LENGTH = 500
 _MIN_TEXT_LENGTH = 20
-_TITLE_MAX_LENGTH = 50
+_TITLE_MAX_LENGTH = 20
 
 # ---------- PII ----------
 _PHONE_RE = re.compile(r"(?:\+?86[\s-]?)?1[3-9]\d(?:[\s-]?\d{4}){2}")
@@ -22,6 +22,12 @@ _EMAIL_RE = re.compile(r"[\w.+-]+@[\w-]+\.[\w.-]+")
 _IDCARD_RE = re.compile(r"\b\d{17}[\dXx]\b")
 _PII_PATTERNS = (_PHONE_RE, _EMAIL_RE, _IDCARD_RE)
 _PII_MASK = "[已脱敏]"
+
+# 入库前二次扫描的扩展变体（掩码正则未覆盖的 PII 形态：全空格分隔手机号 / 15 位身份证 / 连续 16-19 位银行卡）
+_STRICT_PHONE_RE = re.compile(r"1\s*[3-9]\s*\d(?:\s*\d){8}")
+_IDCARD15_RE = re.compile(r"\b\d{15}\b")
+_BANKCARD_RE = re.compile(r"\b\d{16,19}\b")
+_RESIDUAL_PII_PATTERNS = (_STRICT_PHONE_RE, _IDCARD15_RE, _BANKCARD_RE)
 
 # ---------- L3 规则切分的结构线索 ----------
 _SECTION_RE = re.compile(r"^【([^】]+)】\s*$")
@@ -79,6 +85,12 @@ def mask_pii(content):
     for pattern in _PII_PATTERNS:
         content = pattern.sub(_PII_MASK, content)
     return content
+
+
+def scan_residual_pii(content):
+    """入库前二次扫描：掩码正则未覆盖的 PII 变体（全空格分隔手机号/15 位身份证/连续数字银行卡）。
+    返回 True 表示仍有 PII 残留，调用方应拒绝入库（设计 §6.8：入库前二次扫描，仍有 PII → 拒绝入库）。"""
+    return any(pattern.search(content) for pattern in _RESIDUAL_PII_PATTERNS)
 
 
 def _parse_chunks(raw):

@@ -219,7 +219,7 @@ class ResumeDetailAPI(APIView):
     class Download(APIView):
         authentication_classes = [TokenAuth]
 
-        @hr_access_required
+        @hr_operator_required
         def get(self, request, workspace_id, resume_id):
             file_path, file_name, content_type = _service(request, workspace_id).download_resume(resume_id)
             try:
@@ -231,7 +231,7 @@ class ResumeDetailAPI(APIView):
     class Content(APIView):
         authentication_classes = [TokenAuth]
 
-        @hr_access_required
+        @hr_operator_required
         def get(self, request, workspace_id, resume_id):
             return result.success(_service(request, workspace_id).resume_content(resume_id))
 

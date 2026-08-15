@@ -10,14 +10,14 @@
 from django.db.models import QuerySet
 
 from common.exception.app_exception import AppApiException
-from knowledge.models import Document, Embedding, Knowledge, KnowledgeFolder, KnowledgeScope, KnowledgeType
+from knowledge.models import Document, Embedding, Knowledge, KnowledgeFolder, KnowledgeScope, KnowledgeType, Paragraph
 from knowledge.serializers.document import DocumentSerializers
 from knowledge.serializers.knowledge import KnowledgeSerializer
 from knowledge.task.embedding import delete_embedding_by_document
 from models_provider.models import Model
 
 from hr.services.flow_log import log_flow
-from hr.services.resume_splitter import split_resume_text
+from hr.services.resume_splitter import scan_residual_pii, split_resume_text
 
 _KNOWLEDGE_NAME = "简历语义索引"
 _DEFAULT_FOLDER_ID = "default"
@@ -83,6 +83,10 @@ def index_resume(workspace_id, user_id, resume, text, chat_fn, stats=None):
             ],
         },
     )
+    # 入库前二次扫描（设计 §6.8）：掩码未覆盖的 PII 变体 → 拒绝入库（不阻塞候选人建档，错误经任务记入 error_message）
+    for chunk in chunks:
+        if scan_residual_pii(chunk["content"]):
+            raise ValueError(f"切片内容仍包含未掩码的 PII（{chunk['title']}），拒绝入库")
     if resume.document_id:
         _delete_document(str(resume.document_id))
     serializer = DocumentSerializers.Create(data={"knowledge_id": str(knowledge.id), "user_id": str(user_id)})
@@ -101,7 +105,10 @@ def index_resume(workspace_id, user_id, resume, text, chat_fn, stats=None):
 
 
 def _delete_document(document_id):
-    """删除文档及其向量（幂等）。"""
+    """删除文档及其向量与段落（幂等）。
+    Paragraph.document 为 on_delete=DO_NOTHING 且无 DB 级联约束（内核模型），必须显式删除段落，
+    否则简历删除/替换后段落残留、仍可被检索（审查 P1 修复）。"""
+    QuerySet(Paragraph).filter(document_id=document_id).delete()
     delete_embedding_by_document(document_id)
     QuerySet(Document).filter(id=document_id).delete()
 

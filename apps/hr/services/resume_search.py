@@ -18,7 +18,7 @@ from knowledge.vector.pg_vector import EmbeddingSearch, KeywordsSearch
 
 from common.exception.app_exception import AppApiException
 
-from hr.models import ResumeFile
+from hr.models import Candidate, CandidateStatus, ResumeFile
 from hr.services.ai_parser import parse_search_skills
 from hr.services.audit import write_audit_log
 from hr.services.resume_index import get_resume_knowledge
@@ -91,9 +91,13 @@ def _sparse_query(query, max_terms=4):
 
 
 def _recall_dual(query, knowledge, embedding_model, candidate_k, similarity, use_sparse=True):
-    """一次 embed，双路独立召回。返回 {dense: [...], sparse: [...], query_embedding}。
+    """一次 embed，双路独立召回。返回 {dense: [...], sparse: [...], query_embedding, sparse_failed}。
     结果项: {paragraph_id, similarity}"""
-    embedding_query = embedding_model.embed_query(query)
+    try:
+        embedding_query = embedding_model.embed_query(query)
+    except Exception:
+        # Embedding 调用失败（模型不可用/输入超限等）：裸异常会 500，转为业务异常（设计：不抛未处理异常）
+        raise AppApiException(500, "Embedding 调用失败，请稍后重试或检查模型配置")
     exclude_ids = _exclude_documents(knowledge.id)
     exclude_dict = {"document_id__in": exclude_ids} if exclude_ids else {}
     query_set = QuerySet(Embedding).filter(knowledge_id=knowledge.id, is_active=True).exclude(**exclude_dict)
@@ -102,6 +106,7 @@ def _recall_dual(query, knowledge, embedding_model, candidate_k, similarity, use
         query_set, query, embedding_query, candidate_k, similarity, SearchMode.embedding, [knowledge.id]
     )
     sparse_results = []
+    sparse_failed = False
     if use_sparse:
         try:
             sparse_query = _sparse_query(query)
@@ -114,7 +119,9 @@ def _recall_dual(query, knowledge, embedding_model, candidate_k, similarity, use
                 )
         except Exception:
             sparse_results = []
-    return {"dense": dense_results, "sparse": sparse_results, "query_embedding": embedding_query}
+            sparse_failed = True
+    return {"dense": dense_results, "sparse": sparse_results, "query_embedding": embedding_query,
+            "sparse_failed": sparse_failed}
 
 
 def _rrf_fuse(dense, sparse, k=_RRF_K):
@@ -190,16 +197,18 @@ def _aggregate(paragraphs, hr_role):
     return results
 
 
-def _search_skill_and(skills, knowledge, embedding_model, candidate_k, similarity, top_k):
-    """模式 B 主干：按序逐技能双路召回（每技能一次 embed）→ 候选池累积（不截断）
-    → 命中向量（**相对阈值**：dense similarity ≥ max(similarity, top_sim × 0.75)）
+def _search_skill_and(skills, workspace_id, knowledge, embedding_model, candidate_k, similarity, top_k):
+    """模式 B 主干：语义路（按序逐技能双路召回，每技能一次 embed）→ 候选池累积（不截断）
+    + 结构化路（Candidate.skills 精确命中，设计 §2 步骤2）→ 命中向量 OR 合并
     → 字典序排序 → 返回 [(doc_id, hit_vec)]。
     相对阈值原因：短技能词（java/fastapi/rag）对任意段落的 dense 相似度都在 0.2~0.42 区间，
     固定阈值会导致人人命中、命中向量失去区分度（实测）。"""
     pool = {}            # paragraph_id(str) -> row
     doc_skill_vec = {}   # document_id(str) -> hit_vec
+    sparse_failed = False
     for skill_index, skill in enumerate(skills):
         recall = _recall_dual(skill, knowledge, embedding_model, candidate_k, similarity)
+        sparse_failed = sparse_failed or recall.get("sparse_failed", False)
         fused = _rrf_fuse(recall["dense"], recall["sparse"])
         for row in fused:
             pool.setdefault(row["paragraph_id"], row)
@@ -234,10 +243,41 @@ def _search_skill_and(skills, knowledge, embedding_model, candidate_k, similarit
         vec = doc_skill_vec.setdefault(doc_id, [0] * len(skills))
         for skill_index in row.get("hit_skills", []):
             vec[skill_index] = 1
+    # 结构化路（设计 §2 步骤2）：Candidate.skills 与有序技能列表的精确命中（忽略大小写，排除已删除/已归档候选人）
+    structured_vec = {}    # document_id -> hit_vec（结构化命中）
+    candidates = list(QuerySet(Candidate).filter(workspace_id=workspace_id, status=CandidateStatus.ACTIVE))
+    hit_candidate_ids = []
+    for candidate in candidates:
+        candidate_skills = [s.lower() for s in (candidate.skills or [])]
+        if not candidate_skills:
+            continue
+        vec = [1 if skill.lower() in candidate_skills else 0 for skill in skills]
+        if any(vec):
+            hit_candidate_ids.append((candidate.id, vec))
+    if hit_candidate_ids:
+        resumes = list(QuerySet(ResumeFile).filter(
+            candidate_id__in=[candidate_id for candidate_id, _ in hit_candidate_ids], document_id__isnull=False))
+        resume_by_candidate = {}
+        for rf in resumes:
+            resume_by_candidate.setdefault(str(rf.candidate_id), rf)
+        for candidate_id, vec in hit_candidate_ids:
+            rf = resume_by_candidate.get(str(candidate_id))
+            if rf is not None:
+                structured_vec[str(rf.document_id)] = vec
+    # 两路命中向量合并：同一简历两路都命中 → 按位 OR（段落并集，不重复计）
+    structured_only = {}   # document_id -> hit_vec（仅结构化命中、无语义段落）
+    for doc_id, structured_hit in structured_vec.items():
+        if doc_id in doc_skill_vec:
+            doc_skill_vec[doc_id] = [a or b for a, b in zip(doc_skill_vec[doc_id], structured_hit)]
+        else:
+            doc_skill_vec[doc_id] = structured_hit
+            doc_paragraphs[doc_id] = []
+            structured_only[doc_id] = structured_hit
     # 字典序排序：命中靠前技能优先
     ordered = sorted(doc_skill_vec.items(), key=lambda item: tuple(item[1]), reverse=True)
     return ordered, {"rounds": len(skills), "pool_paragraphs": len(pool), "skill_relaxed": len(skills),
-                     "doc_paragraphs": doc_paragraphs}
+                     "doc_paragraphs": doc_paragraphs, "structured_only": structured_only,
+                     "structured_hits": len(structured_vec), "sparse_failed": sparse_failed}
 
 
 def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
@@ -256,12 +296,19 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
         raise AppApiException(400, "mode must be one of auto|hybrid|dense|phrase|skills")
     if not isinstance(top_k, int) or not (1 <= top_k <= 20):
         raise AppApiException(400, "top_k must be in [1, 20]")
+    # recall_k/similarity 按设计契约 clamp（设计 §3.1：[5,60] / [0,2]），负数不得进入 SQL（PG LIMIT 报错）
     recall_k = recall_k if recall_k is not None else max(5, min(60, top_k * 3))
+    recall_k = max(5, min(60, recall_k))
+    similarity = max(0.0, min(2.0, similarity))
 
     knowledge = get_resume_knowledge(workspace_id)
     if knowledge is None:
         raise AppApiException(400, "简历语义索引尚未建立")
-    embedding_model = get_embedding_model_by_knowledge_id(knowledge.id)
+    try:
+        embedding_model = get_embedding_model_by_knowledge_id(knowledge.id)
+    except Exception:
+        # 知识库绑定的 Embedding 模型缺失/异常：裸异常会 500，转为业务异常（设计：不抛未处理异常）
+        raise AppApiException(500, "Embedding 模型不可用，无法执行语义检索")
 
     meta = {"mode": mode, "search_type": "", "skills": [], "recall": {}, "rerank": {},
             "aggregation": {}, "elapsed_ms": {}, "query": {"length": len(query), "truncated": False}}
@@ -283,13 +330,24 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
         else:
             mode = "phrase"
         meta["mode"] = mode
+    elif mode == "skills" and len(skills) < 2:
+        # 显式 skills 模式但技能解析失败/不足（LLM 未配置/异常）：退化整句检索，meta 如实反映
+        mode = "phrase"
+        meta["mode"] = "phrase"
 
     # ---------- 模式 B：Skill-AND ----------
     if mode == "skills" and len(skills) >= 2:
-        ordered, b_meta = _search_skill_and(skills, knowledge, embedding_model, recall_k, similarity, top_k)
+        ordered, b_meta = _search_skill_and(
+            skills, workspace_id, knowledge, embedding_model, recall_k, similarity, top_k
+        )
         doc_paragraphs = b_meta.pop("doc_paragraphs", {})
+        structured_only = b_meta.pop("structured_only", {})
+        sparse_failed = b_meta.pop("sparse_failed", False)
+        structured_hits = b_meta.pop("structured_hits", 0)
         meta.update(b_meta)
-        meta["recall"] = {"rounds": b_meta["rounds"], "pool_paragraphs": b_meta["pool_paragraphs"], "candidate_k": recall_k}
+        meta["recall"] = {"rounds": b_meta["rounds"], "pool_paragraphs": b_meta["pool_paragraphs"],
+                          "candidate_k": recall_k, "sparse_failed": sparse_failed,
+                          "structured_hits": structured_hits}
         # 候选段落：按 hit_vec 排序取前 candidate_k 简历的最优段落（Small-to-Big 回溯到段落）
         cand_docs = [doc_id for doc_id, _ in ordered[: max(top_k * 3, recall_k)]]
         cand_paras = []
@@ -304,7 +362,8 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
         reranked = False
         if rerank_model is not None and cand_paras:
             cand_paras, reranked = _rerank(query, cand_paras, rerank_model, top_k)
-        meta["rerank"] = {"enabled": rerank_model is not None, "top_n": top_k, "failed": rerank_model is not None and not reranked}
+        meta["rerank"] = {"enabled": rerank_model is not None, "top_n": top_k, "failed": rerank_model is not None and not reranked,
+                          "model": getattr(rerank_model, "model_name", None) if rerank_model else None}
         meta["search_type"] = "skill_ordered_reranked" if reranked else ("skill_ordered" if rerank_model is None else "skill_ordered_fallback")
         # 按 rerank 分排序取 top_k，回溯候选人
         seen = set()
@@ -326,6 +385,25 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
             })
             if len(items) >= top_k:
                 break
+        # 结构化-only 命中补位（设计 §2 步骤2：结构化字段精确满足、正文未命中 → 直接进候选）：
+        # 无段落可精排，按命中向量字典序排在 rerank 结果之后
+        if len(items) < top_k and structured_only:
+            seen_docs = {item["document_id"] for item in items}
+            for doc_id, hit_vec in sorted(structured_only.items(), key=lambda kv: tuple(kv[1]), reverse=True):
+                if doc_id in seen_docs:
+                    continue
+                seen_docs.add(doc_id)
+                resume = QuerySet(ResumeFile).filter(document_id=doc_id).select_related("candidate").first()
+                items.append({
+                    "rank": len(items) + 1,
+                    "candidate": _mask_for_role(resume.candidate if resume else None, hr_role),
+                    "resume": {"id": str(resume.id), "file_name": resume.file_name, "extension": resume.extension} if resume else None,
+                    "score": {"hit_vec": hit_vec, "hit_count": sum(hit_vec), "rerank": 0},
+                    "paragraphs": [],
+                    "document_id": doc_id,
+                })
+                if len(items) >= top_k:
+                    break
         meta["aggregation"] = {"grouped_resumes": len(items)}
         meta["elapsed_ms"]["total"] = int((time.time() - t0) * 1000)
         _write_search_audit(workspace_id, user_id, query, top_k, meta, len(items))
@@ -335,7 +413,8 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
     use_sparse = mode in ("auto", "hybrid", "phrase")
     recall = _recall_dual(query, knowledge, embedding_model, recall_k, similarity, use_sparse=use_sparse)
     fused = _rrf_fuse(recall["dense"], recall["sparse"])
-    meta["recall"] = {"dense": len(recall["dense"]), "sparse": len(recall["sparse"]), "fused": len(fused), "candidate_k": recall_k}
+    meta["recall"] = {"dense": len(recall["dense"]), "sparse": len(recall["sparse"]), "fused": len(fused),
+                      "candidate_k": recall_k, "sparse_failed": recall.get("sparse_failed", False)}
     if not fused:
         meta["search_type"] = "empty"
         meta["elapsed_ms"]["total"] = int((time.time() - t0) * 1000)
@@ -355,7 +434,8 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
     reranked = False
     if rerank_model is not None:
         fused, reranked = _rerank(query, fused, rerank_model, top_k)
-    meta["rerank"] = {"enabled": rerank_model is not None, "top_n": top_k, "failed": rerank_model is not None and not reranked}
+    meta["rerank"] = {"enabled": rerank_model is not None, "top_n": top_k, "failed": rerank_model is not None and not reranked,
+                      "model": getattr(rerank_model, "model_name", None) if rerank_model else None}
     meta["search_type"] = "hybrid_rrf_reranked" if reranked else ("hybrid_rrf" if rerank_model is None else "hybrid_rrf_fallback")
 
     # 简历聚合
@@ -378,7 +458,8 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
                 "sparse": top_paragraph.get("sparse", 0),
             },
             "paragraphs": [
-                {"id": p.get("paragraph_id"), "title": p.get("title"), "content": p.get("content"), "score": p.get("rrf", 0)}
+                {"id": p.get("paragraph_id"), "title": p.get("title"), "content": p.get("content"),
+                 "score": p.get("rerank") if p.get("rerank") is not None else p.get("rrf", 0)}
                 for p in a["paragraphs"]
             ],
             "document_id": a["document_id"],

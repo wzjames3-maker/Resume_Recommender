@@ -28,7 +28,7 @@ from hr.models import (
     ResumeStatus,
     TerminationReason,
 )
-from hr.services.flow_log import log_flow
+from hr.services.flow_log import delete_flow_logs, log_flow
 from hr.services.resume_index import delete_resume_index, set_resume_index_active
 from hr.services.resume_parser import extract_text_from_docx, extract_text_from_txt
 from hr.services.audit import write_audit_log
@@ -581,6 +581,7 @@ class RecruitmentService:
             delete_resume_index(resume)
             log_flow(self.workspace_id, "LIFECYCLE", resume_id=resume.id,
                      detail={"action": "delete", "document_id": str(resume.document_id) if resume.document_id else None})
+            delete_flow_logs(self.workspace_id, resume.id)
             file_delete_failed = False
             if resume.file_path and storage.exists(resume.file_path):
                 try:
@@ -999,6 +1000,11 @@ class RecruitmentService:
         resume = ResumeFile.objects.filter(id=resume_id, workspace_id=self.workspace_id).first()
         if resume is None:
             raise NotFound404(404, "Resource not found")
+        # 语义索引联动清理（幂等）+ 流转日志清理（EXTRACT/SANITIZE 含未脱敏全文，删除后不留存）
+        delete_resume_index(resume)
+        log_flow(self.workspace_id, "LIFECYCLE", resume_id=resume.id,
+                 detail={"action": "delete", "document_id": str(resume.document_id) if resume.document_id else None})
+        delete_flow_logs(self.workspace_id, resume.id)
         if resume.file_path:
             try:
                 get_storage().delete(resume.file_path)
