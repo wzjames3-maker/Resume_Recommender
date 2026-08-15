@@ -2,7 +2,7 @@
 
 > 日期：2026-08-15
 > 状态：计划（待执行）
-> 依据：specs/2026-08-15-end-to-end-pipeline-combined-design.md（权威设计）；本文档为实施顺序与验收的唯一来源
+> 依据：../specs/2026-08-15-end-to-end-pipeline-combined-design.md（权威设计）；本文档为实施顺序与验收的唯一来源
 > 输入约束：PRD 锁定 docx/txt（无 OCR/表格/图片）；外部模型：SenseNova 6.8-flash-lite（LLM）、SiliconFlow bge-large-zh-v1.5（Embedding）+ bge-reranker-v2-m3（Rerank）
 
 ---
@@ -49,4 +49,4 @@
 | 3 | ~10 次 | ~100 次 | 检索评测（查询×候选） |
 | 合计 | ~60 次 | ~500 次 | 远低于配额（SenseNova 3000 / SiliconFlow 3000） |
 
-> 关联：HANDOFF.md §5.3（状态跟踪）；综合方案 §6（切片协议）
+> 关联：../../../HANDOFF.md §5.3（状态跟踪）；综合方案 §6（切片协议）

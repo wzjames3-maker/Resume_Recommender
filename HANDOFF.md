@@ -57,7 +57,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 | `README-hr.md` | 各期验收记录（一期到 A 阶段，含测试数演进） |
 | `docs/superpowers/specs/2026-08-13-*.md` | 二至七期规格（简历/搜索匹配/AI/异步/合并） |
 
-## 3. 已完成（当前测试基线：四 app + ops 301/301 PASS，HR 285）
+## 3. 已完成（当前测试基线：四 app + ops 322/322 PASS，HR 288）
 
 ### 3.1 PRD 七期（基础能力）
 
@@ -113,10 +113,10 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 
 | 项 | 内容 |
 |---|---|
-| 完整面试协作 | **v1 已交付（2026-08-15）**：面试官用户化（interviewer_user_id）、最小可见（我的面试仅本人 + 无 PII 字段）、反馈截止（feedback_deadline + is_overdue）、反馈可追溯（feedback_submitted_at + INTERVIEW_FEEDBACK 审计）、前端「我的面试」页面；见 specs/2026-08-15-hr-interview-collaboration-design.md。剩余：自动提醒、面试官可见简历等（未排期） |
-| Offer 工件 | **已交付（2026-08-15）**：独立实体（hr_offer）+ 版本自增 + 审批（approval_status/approver）+ 金额/币种（Decimal）+ 状态机 DRAFT→SENT→ACCEPTED/REJECTED/WITHDRAWN + 接受自动流转 HIRED + 附件上传/下载权限（VIEWER 不可下载）+ 5 个 OFFER_* 审计动作；见 specs/2026-08-15-hr-offer-design.md |
-| 入职交接 | **已交付（2026-08-15）**：OnboardingHandoff 按指派唯一（幂等）+ 固定清单 payload（含联系方式）+ CHECKLIST/WEBHOOK 目标（urllib 同步投递，零新依赖）+ 失败可重试（仅 FAILED）+ HANDOFF 审计 + 交接页面与配置接口；见 specs/2026-08-15-hr-onboarding-handoff-design.md。异步化投递（Celery）与真实 HRIS 适配器未排期 |
-| 批量导入 | **已交付（2026-08-15）**：CSV（UTF-8/BOM）逐行校验导入（ADMIN），失败行跳过并报原因、文件内/库内疑似重复标注（仍创建）、汇总+明细报告、模板下载、IMPORT 审计 + 逐条 CREATE 审计；≤200 行/≤2MB；见 specs/2026-08-15-hr-csv-import-design.md。**至此 B 阶段（面试协作/Offer/入职交接/批量导入）全部完成** |
+| 完整面试协作 | **v1 已交付（2026-08-15）**：面试官用户化（interviewer_user_id）、最小可见（我的面试仅本人 + 无 PII 字段）、反馈截止（feedback_deadline + is_overdue）、反馈可追溯（feedback_submitted_at + INTERVIEW_FEEDBACK 审计）、前端「我的面试」页面；见 docs/superpowers/specs/2026-08-15-hr-interview-collaboration-design.md。剩余：自动提醒、面试官可见简历等（未排期） |
+| Offer 工件 | **已交付（2026-08-15）**：独立实体（hr_offer）+ 版本自增 + 审批（approval_status/approver）+ 金额/币种（Decimal）+ 状态机 DRAFT→SENT→ACCEPTED/REJECTED/WITHDRAWN + 接受自动流转 HIRED + 附件上传/下载权限（VIEWER 不可下载）+ 5 个 OFFER_* 审计动作；见 docs/superpowers/specs/2026-08-15-hr-offer-design.md |
+| 入职交接 | **已交付（2026-08-15）**：OnboardingHandoff 按指派唯一（幂等）+ 固定清单 payload（含联系方式）+ CHECKLIST/WEBHOOK 目标（urllib 同步投递，零新依赖）+ 失败可重试（仅 FAILED）+ HANDOFF 审计 + 交接页面与配置接口；见 docs/superpowers/specs/2026-08-15-hr-onboarding-handoff-design.md。异步化投递（Celery）与真实 HRIS 适配器未排期 |
+| 批量导入 | **已交付（2026-08-15）**：CSV（UTF-8/BOM）逐行校验导入（ADMIN），失败行跳过并报原因、文件内/库内疑似重复标注（仍创建）、汇总+明细报告、模板下载、IMPORT 审计 + 逐条 CREATE 审计；≤200 行/≤2MB；见 docs/superpowers/specs/2026-08-15-hr-csv-import-design.md。**至此 B 阶段（面试协作/Offer/入职交接/批量导入）全部完成** |
 
 ### 5.3 C 阶段：语义检索与智能优化
 
@@ -124,7 +124,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 
 **设计定稿（2026-08-15）**：端到端综合方案 docs/superpowers/specs/2026-08-15-end-to-end-pipeline-combined-design.md（**唯一权威**，§6 含切片协议 v4：LLM 边界标注 + 条目级 + 禁止改写 + PII 过滤）；实施计划 docs/superpowers/plans/2026-08-15-c-stage-resume-rag.md（**执行依据**）；GitHub 调研 docs/superpowers/audits/2026-08-15-chunking-landscape.md；真实数据审查 docs/superpowers/audits/2026-08-15-design-reality-check.md（输入按 PRD 锁定 docx/txt，无 OCR/表格；数据集合成为压力测试语料）。
 
-**剩余（未交付，按 plans/2026-08-15-c-stage-resume-rag.md 三阶段执行）**：
+**剩余（未交付，按 docs/superpowers/plans/2026-08-15-c-stage-resume-rag.md 三阶段执行）**：
 1. 阶段 1：sanitize_resume_text() 清洗 + ResumeSplitter（LLM 行号边界标注 + 校验层 + 规则降级 + PII 过滤）+ docx 格式变体评测（边界 F1/保真度）；
 2. 阶段 2：打通入库（parse_resume_task → 切片 → Document → 向量化）+ ResumeFile.document_id 关联与生命周期同步（删除/归档/合并）；
 3. 阶段 3：Rerank 接入检索管线（召回 top10 → 精排 top3~5）+ Small-to-Big 回溯 + 可选（RRF 融合优化 / 画像向量 / RAG Fusion 子查询）。

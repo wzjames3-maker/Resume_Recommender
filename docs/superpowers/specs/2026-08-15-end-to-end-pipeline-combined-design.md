@@ -4,7 +4,7 @@
 > 状态：**定稿（C 阶段唯一权威设计）**
 > 依据：GitHub 调研端到端流程（入库 11 步 + 检索 8 步，参考 smart-ats / hr-rag-assistant / MewAgent / ResumeScreening / HireFlow / Hungreeee 等） + 本项目已有能力盘点
 > 选型原则：**复用优先**——MaxKB 已具备向量化/混合检索/异步/chat 等 80% 能力，开发与模型调用预算只投在缺口上。
-> 关联：实施计划 plans/2026-08-15-c-stage-resume-rag.md；链路流程图 specs/2026-08-15-resume-upload-split-embed-flow.md（辅助）；调研 audits/2026-08-15-chunking-landscape.md；审查 audits/2026-08-15-design-reality-check.md
+> 关联：实施计划 ../plans/2026-08-15-c-stage-resume-rag.md；链路流程图 2026-08-15-resume-upload-split-embed-flow.md（辅助）；调研 ../audits/2026-08-15-chunking-landscape.md；审查 ../audits/2026-08-15-design-reality-check.md
 
 ---
 
@@ -92,7 +92,7 @@
 2. 阶段 2：打通入库链路（含生命周期同步）
 3. 阶段 3：rerank 接入 + Small-to-Big + 可选增强
 
-> 关联文档：实施计划 plans/2026-08-15-c-stage-resume-rag.md；链路流程图 specs/2026-08-15-resume-upload-split-embed-flow.md（辅助）；调研 audits/2026-08-15-chunking-landscape.md；审查 audits/2026-08-15-design-reality-check.md
+> 关联文档：实施计划 ../plans/2026-08-15-c-stage-resume-rag.md；链路流程图 2026-08-15-resume-upload-split-embed-flow.md（辅助）；调研 ../audits/2026-08-15-chunking-landscape.md；审查 ../audits/2026-08-15-design-reality-check.md
 
 
 ---
