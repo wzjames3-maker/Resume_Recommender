@@ -29,6 +29,7 @@
 - 解析失败/无技能 → 视为整句查询（走模式 A）
 - 技能数 = 1 → 走模式 A（单技能与整句等价）
 - 技能数 ≥ 2 → 走**模式 B：技能复合检索（Skill-AND）**
+- **技能数封顶 10**（超出取前 10，meta.skills_truncated=true）：每技能 1 次 embed + 1 轮双路查询，封顶控制成本与延迟
 
 **重要程度 = 检索顺序（不是权重分数）**：LLM 只负责**排序**，排序决定了进入双路召回的先后——
 1. **重要的技能先进入双路查询**（dense+sparse+RRF），其召回结果先落候选池、质量更高；
@@ -64,7 +65,7 @@
 # 不是整句向量化（会把 5 个技能混成一个向量、丢失 AND 约束），而是：
 # 1) LLM 查询分解 → 有序技能列表 skills = [java, python, fastapi, agent, rag]（重要在前）
 #    （扩展 ai_parser 模板：逐项列出、按重要程度降序；LLM 不做数值权重，只排顺序）
-# 2) 结构化路（并行）：Candidate.skills 与 skills 前 m 个（按顺序取）交集过滤 → AND 精确候选
+# 2) 结构化路（并行）：Candidate.skills 与 skills 的命中向量（按有序列表逐位判断）→ 精确候选
 # 3) 语义路（顺序进入双路！核心）：对每个技能**按序**单独 embedding + 双路召回 + RRF：
 #    round 1: java   → 双路查询 → 候选池 A（命中 java 的段落）
 #    round 2: python → 双路查询 → 候选池 B（A ∪ 命中 python 的段落）
@@ -94,7 +95,15 @@
   - 放宽也是按顺位（先保重要技能，再逐步放开）。
 - 一句话：**重要程度决定"谁先进双路查询"，不决定"谁的分值高"**。
 
-**结构化路与语义路的关系**：结构化路（Candidate.skills 与有序列表前段交集）命中的候选人 = 精确满足，直接进候选（命中向量按实际交集构造）；语义路捕获"技能写在正文但没进结构化字段"（如 fastapi/agent/rag 常在项目描述里）的简历。两路统一按命中向量字典序排序。
+**命中判定（排序与放宽的基准）**：技能 s 命中简历 r ⇔ s 在 r 的任意段落中 dense similarity ≥ 阈值（默认 0.2，与召回阈值同源可配）——**命中判定只看 dense 路分数**（尺度稳定可比），RRF/rerank 分数不参与命中判定，只用于同 hit_vec 内的二次排序与最终精排。
+
+**候选池不截断**：每轮技能召回后，候选池 = 已收段落 ∪ 新技能段落（**不按 top 截断**）——放宽到"只要求 java"时，java 低分简历仍在池中，放宽才有效；最终输出时才按排序键取 top_k。
+
+**AND 语义的精确定义（避免歧义）**：模式 B 的"AND"指**命中向量的字典序排序**（全命中 > 只命中前段 > 未命中靠前技能），不是 SQL 式硬性 AND 过滤——排序即筛选，避免"技能全命中才返回"导致空结果。放宽顺位 m 控制参与排序的前缀长度：m=len(skills)（默认）→ 全部技能参与命中向量；m 递减 → 只比较前 m 个技能，后面的技能不参与排序（也不影响放宽）。结构化路的 m 与语义路共用此顺位：结构化路命中数 ≥ 语义路放宽线即可进入候选。
+
+**短技能词的精度互补**：英文短词（java/fastapi）dense 路区分度差（"java"与"JavaScript"向量相近）——dense 路负责语义召回（会漏的靠它捞），**sparse 路（tsvector 精确词匹配）负责专名精确命中**，两路 RRF 互补；"java"被 jieba 切为整词、tsquery 精确匹配，sparse 路天然精确。量化评测中如短词误命中仍偏高，再评估技能词加限定语（"会 java 的候选人"）作为查询文本（可选增强 F）。
+
+**结构化路与语义路的关系**：结构化路（Candidate.skills 与有序列表前段交集）命中的候选人 = 精确满足，直接进候选（命中向量按实际交集构造）；语义路捕获"技能写在正文但没进结构化字段"（如 fastapi/agent/rag 常在项目描述里）的简历。两路统一按命中向量字典序排序，同一候选人两路都命中时按段落并集计算 hit_vec（不重复计）。
 
 **降级链（渐进可用，每级都可独立关闭）**：rerank → RRF 融合 → dense 单路 → 空结果+meta
 - rerank 未配置：跳过精排，聚合排序直出
@@ -138,19 +147,28 @@
     }
   ],
   "meta": {
-    "search_type": "hybrid_rrf_reranked",
-    "recall": {"dense": 15, "sparse": 9, "fused": 15, "candidate_k": 15},
+    "search_type": "hybrid_rrf_reranked",   // 模式A: hybrid_rrf_reranked | hybrid_rrf | dense_only | phrase_fallback
+                                             // 模式B: skill_ordered_reranked | skill_ordered | skill_ordered_fallback
+    "mode": "auto",                          // auto|hybrid|dense|phrase|skills（实际执行模式）
+    "skills": ["java", "python", "fastapi", "agent", "rag"],  // 模式B：有序技能列表（重要在前）
+    "recall": {"dense": 15, "sparse": 9, "fused": 15, "candidate_k": 15, "rounds": 5},
     "rerank": {"enabled": true, "model": "bge-reranker-v2-m3", "top_n": 5, "failed": false},
-    "aggregation": {"grouped_resumes": 6, "dropped_orphan_paragraphs": 2},
+    "aggregation": {"grouped_resumes": 6, "dropped_orphan_paragraphs": 2, "skill_relaxed": 2},
     "elapsed_ms": {"total": 342, "recall": 85, "rerank": 210, "aggregate": 12},
     "query": {"length": 18, "truncated": false}
   }
 }
 ```
 
+- **score 字段尺度**（可解释性约定）：
+  - `rrf`：RRF 融合分（≈1/(60+rank) 量级，仅模式内相对比较）；
+  - `dense`/`sparse`：两路原始分（dense≈余弦相似度 0~1；sparse≈ts_rank_cd 0~1）；
+  - `rerank`：bge-reranker 的 relevance_score（0~1，精排依据）；
+  - `resume`：简历聚合分（模式 A = 0.7×max+0.3×avg 段落分；模式 B = 命中向量顺位 + 段落分均值），**仅同模式内可比**；
+  - 排序键：模式 A 用 resume 聚合分、模式 B 用命中向量字典序（见 §2），rerank 分数是精排后的最终展示分。
 - 权限：`@hr_access_required`；VIEWER phone/email 脱敏（复用 `_masked_phone/_masked_email`）
 - 审计：`write_audit_log(ws, user, "SEARCH", "RESUME", detail={query_len, top_k, mode, hit_count, search_type})`——**查询原文不落审计**（PII 治理，与 A3 审计规范一致）
-- 输入校验：query 必填 ≤2000 字符；参数越界 400；`mode` 仅 auto|hybrid|dense
+- 输入校验：query 必填 ≤2000 字符；参数越界 400；`mode` 仅 auto|hybrid|dense|phrase|skills
 
 ### 3.2 配置扩展（AI 设置）
 
@@ -162,8 +180,8 @@
 ```python
 # 常量
 _RRF_K = 60
-_RESUME_SCORE_MAX_WEIGHT = 0.7   # 聚合：max 段分权重
-_RESUME_SCORE_AVG_WEIGHT = 0.3   # 聚合：avg 段分权重
+_RESUME_SCORE_MAX_WEIGHT = 0.7   # 模式A 简历聚合：max 段分权重（段落级，与技能顺序无关）
+_RESUME_SCORE_AVG_WEIGHT = 0.3   # 模式A 简历聚合：avg 段分权重（段落级，与技能顺序无关）
 _DEFAULT_SIMILARITY = 0.2
 _MAX_QUERY_LENGTH = 2000
 
@@ -222,10 +240,9 @@ def _search_skill_and(skills, structured_hits, knowledge, embedding_model, candi
 | 模式 B：顺序进入双路 | 调用顺序 = 技能顺序（先 java 后 agent）、候选池累积 |
 | 模式 B：命中向量字典序 | [1,1,0,0,0] > [1,0,1,0,0] > [0,1,1,0,0]，排序正确 |
 | 模式 B：顺位放宽 | 前 2 命中不足 top_k → 放宽前 1 → 整句，meta.skill_relaxed 记录顺位 |
-| 模式 B：技能命中矩阵聚合 | 全命中排前、部分命中靠后、加权总分正确 |
-| 模式 B：渐进放宽 | 全命中不足 top_k → 放宽 k-1，meta.skill_relaxed 记录 |
+| 模式 B：候选池不截断 | 放宽后低分简历仍在池中（放宽不失效） |
 | 模式 B：技能解析失败 | 退化模式 A 整句检索，meta.mode=phrase |
-| 模式 B：结构化路命中 | Candidate.skills 全含 → 权重最高排前 |
+| 模式 B：结构化路命中 | Candidate.skills 含前 m 技能 → 命中向量按实际交集构造、统一排序 |
 
 ### 5.2 真实模型冒烟（installer/resume_search_smoke.py，渐进）
 
@@ -264,7 +281,7 @@ def _search_skill_and(skills, structured_hits, knowledge, embedding_model, candi
 ## 8. 验收（出口标准）
 
 1. ResumeSearchTests 全绿（mock 离线）
-2. 真实模型冒烟通过（四类查询 rerank 排序生效、meta 完整、降级可触发）
+2. 真实模型冒烟通过（六类查询 rerank 排序生效、meta 完整、降级可触发）
 3. 量化对比报告落盘：RRF 融合 ≥ dense-only、rerank 后 recall@3 ≥ RRF、语义检索 Top-K 相关性优于结构化基线（PRD §9.2 C 阶段完成定义）
 4. 全量 342 + 新增回归通过；`makemigrations --check` 干净（仅 HrConfig.rerank_model_id 迁移 0016）
 
