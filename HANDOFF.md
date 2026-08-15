@@ -130,7 +130,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 - ✅ 数据流转日志：ResumeFlowLog（迁移 0014/0015）+ 流转日志 API GET /workspace/{ws}/hr/resumes/{id}/flow-logs + UPLOAD/EXTRACT/SANITIZE/SPLIT/DOCUMENT/LIFECYCLE 六节点持久化；SPLIT 节点 detail 含每个 chunk 完整内容（title/content/length/pii），EXTRACT/SANITIZE 保留全文，失败节点记 status=FAILED+error_message；单测 3 例（提交 b70f9d2/5043340）；
 - ✅ docx 表格排版简历提取：extract_text_from_docx 补表格单元格遍历（合并单元格按 _tc 对象去重，修复 id() 复用陷阱）；数据集真实 docx（表格排版、paragraphs 为空）全流程验证 8 段 → 检索命中 0.758（提交 a72b2b9）；
 - ✅ 数据集 30 份切片压力测试 + 两处生产修复（提交 af4c52a）：(1) **SenseNova 6.8 模型行为变化**——默认输出 reasoning 推理流耗尽 max_tokens 致 content 为空、LLM 路径 0% 命中；OpenAI 兼容适配器对 sensenova 透传 model_kwargs={"thinking": {"type": "disabled"}}，实测 106 tokens 完成切片、LLM 路径恢复 29/30；(2) **OCR 分号流**（PaddleOCR 单行"简历；；；姓名；…"输出）使行号边界协议失效——sanitize_resume_text 增加分号流自动转行（分号 ≥5 且基本无换行时触发，正常多行文本不受影响）。测试结果：30/30 成功、29/30 LLM 路径、30/30 内容无改写（保真度量=非空白序列一致）、PII 26/30 掩码（4 份样本本身无 PII）、全部 ≤500 字、耗时 95s。新脚本 installer/resume_splitter_dataset30.py（可复跑，报告 installer/dataset30_report.json）；
-- ⏳ 阶段 3（未开始）：Rerank 接入检索管线（召回 top10 → 精排 top3~5）+ Small-to-Big 回溯 + 可选（RRF 融合优化 / 画像向量 / RAG Fusion 子查询）+ 量化对比报告（PRD §9.2 完成定义：Top-K 相关性优于结构化基线）。
+- ⏳ 阶段 3（计划已定，2026-08-15）：HR 简历语义检索服务（blend 召回 top10 → bge-reranker-v2-m3 精排 top3~5，无 rerank 模型自动降级）+ Small-to-Big 回溯（段落→简历→候选人）+ 量化对比报告（recall@5 三路对比，落盘 audits）；可选：RRF 融合 / 画像向量 / RAG Fusion / title 摘要。细化见 plans 阶段 3。
 
 另：人工反馈、更大标注集量化对比、档位 3（200 份）仍后置。docx 格式变体评测集（plans 1.3）并入阶段 3 检索评测。**注意**：冒烟中修复了应用创建/发布链路的 3 个裁剪期 bug（96afbd0），application.tests 现有 10 用例。
 
