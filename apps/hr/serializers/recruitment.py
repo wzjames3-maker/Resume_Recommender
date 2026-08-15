@@ -904,6 +904,7 @@ class RecruitmentService:
             "source_channel": resume.source_channel,
             "status": resume.status,
             "error_message": resume.error_message,
+            "document_id": str(resume.document_id) if resume.document_id else None,
             "candidate_id": str(resume.candidate_id) if resume.candidate_id else None,
             "create_time": resume.create_time,
             "update_time": resume.update_time,
@@ -934,6 +935,7 @@ class RecruitmentService:
                     "sha256": existing.sha256,
                     "duplicate": True,
                     "candidate_id": str(existing.candidate_id) if existing.candidate_id else None,
+                    "document_id": str(existing.document_id) if existing.document_id else None,
                     "error_message": existing.error_message,
                 })
                 continue
@@ -965,6 +967,7 @@ class RecruitmentService:
                 "sha256": resume.sha256,
                 "duplicate": False,
                 "candidate_id": None,
+                "document_id": str(resume.document_id) if resume.document_id else None,
                 "error_message": error_message,
             })
         write_audit_log(
@@ -1122,6 +1125,7 @@ class RecruitmentService:
                 "file_name": resume.file_name,
                 "status": resume.status,
                 "candidate_id": str(resume.candidate_id) if resume.candidate_id else None,
+                "document_id": str(resume.document_id) if resume.document_id else None,
                 "error_message": resume.error_message,
             }
             for resume in resumes
