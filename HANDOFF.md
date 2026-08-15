@@ -57,7 +57,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 | `README-hr.md` | 各期验收记录（一期到 A 阶段，含测试数演进） |
 | `docs/superpowers/specs/2026-08-13-*.md` | 二至七期规格（简历/搜索匹配/AI/异步/合并） |
 
-## 3. 已完成（当前测试基线：四 app + ops 240/240 PASS，HR 224）
+## 3. 已完成（当前测试基线：四 app + ops 255/255 PASS，HR 239）
 
 ### 3.1 PRD 七期（基础能力）
 
@@ -113,7 +113,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 
 | 项 | 内容 |
 |---|---|
-| 完整面试协作 | 面试官最小可见、反馈截止、决策记录（当前面试官仅为文本字段） |
+| 完整面试协作 | **v1 已交付（2026-08-15）**：面试官用户化（interviewer_user_id）、最小可见（我的面试仅本人 + 无 PII 字段）、反馈截止（feedback_deadline + is_overdue）、反馈可追溯（feedback_submitted_at + INTERVIEW_FEEDBACK 审计）、前端「我的面试」页面；见 specs/2026-08-15-hr-interview-collaboration-design.md。剩余：自动提醒、面试官可见简历等（未排期） |
 | Offer 工件 | 独立实体：版本、审批、金额/币种、发送/接受/拒绝/撤回、附件权限（当前 OFFER 仅是状态） |
 | 入职交接 | Offer 接受后向 HRIS/OA/人工清单幂等交接（可重试、不重复建员工） |
 | 批量导入 | CSV 导入 + 失败/疑似重复报告 |
@@ -124,7 +124,7 @@ Embedding 语义召回、可解释匹配、人工反馈、索引与候选人生�
 
 ## 6. 已知限制与口径
 
-- 面试官是文本字段（非用户外键）；负责人存 user_id（UUID）未建外键
+- 面试官已支持用户化（interviewer_user_id，UUID 未建外键，项目惯例）；文本字段保留为显示名/临时外部面试官；负责人存 user_id（UUID）未建外键
 - 恢复误拒绝记录到 note（`[restore] <原因>`），未建独立字段
 - 导出为固定白名单（不含联系方式）；批量导入未做
 - TTL 每日调度，清理延迟最多约 24h
@@ -135,7 +135,7 @@ Embedding 语义召回、可解释匹配、人工反馈、索引与候选人生�
 ## 7. 提交流程与账本
 
 - 每期：docs 规格提交 → docs 实现计划提交 → 实现（TDD）→ 全量验收 → 审查 → 修复
-- 测试数演进：23→31→39→47→76→86→107→141→183→207→215（HR）→227（四 app）→231（四 app + ops 4，2026-08-15）→240（+候选恢复 9，2026-08-15）
+- 测试数演进：23→31→39→47→76→86→107→141→183→207→215（HR）→227（四 app）→231（四 app + ops 4，2026-08-15）→240（+候选恢复 9，2026-08-15）→255（+面试协作 15，2026-08-15）
 - 规格/计划/验收文档路径规范：`docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`、`docs/superpowers/plans/`、`docs/superpowers/audits/YYYY-MM-DD-<topic>-baseline.md`
 - 提交信息：`feat(人事)/fix(人事)/docs(人事)/test(人事): 中文描述`
 
