@@ -30,7 +30,7 @@
 
 ### 保留
 - 用户/工作区/成员角色权限
-- 模型配置（仅 OpenAI 兼容 LLM/Embedding、Rerank 暂不支持）
+- 模型配置（OpenAI 兼容 LLM/Embedding/Rerank 均已注册；reranker 接入检索管线为 C 阶段 3 工作）
 - 知识库、文档上传解析、分块、向量化、检索
 - 知识库问答（SIMPLE 应用）、引用来源、会话管理
 - 文件上传、homepage 工作台、系统设置
@@ -161,8 +161,10 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
 
 ## C 阶段语义索引（2026-08-15 验收补充）
 
-- 切片器：`sanitize_resume_text()` + ResumeSplitter（LLM 行号边界标注主干 + L2 校验[越界/重叠/覆盖/保真] + L3 规则/smart 降级 + PII 掩码），单测 9 例（apps/hr/services/resume_splitter.py）。
+- 切片器：`sanitize_resume_text()`（含 OCR 分号流自动转行：分号 ≥5 且基本无换行时转行式文本，使 LLM 行号边界协议可用）+ ResumeSplitter（LLM 行号边界标注主干 + L2 校验[越界/重叠/覆盖/500 字上限] + L3 规则/smart 降级 + PII 掩码），单测 9 例（apps/hr/services/resume_splitter.py）。
 - 入库打通：`ResumeFile.document_id`（迁移 0013）+ hr/services/resume_index.py（简历知识库幂等创建/入库/删除/启停用）；`parse_resume_task` 解析成功后自动「清洗→LLM 切片→建 Document/Paragraph→向量化」，失败不阻塞建档；候选人删除/合并清文档向量、归档/恢复同步 is_active。
-- 真实模型验证：切片冒烟 10/10 保真、0 异常（SenseNova）；端到端冒烟 3/3（上传→切片→SiliconFlow 向量化 SUCCESS→检索命中"幕墙系统设计" 0.665）。
-- 测试：`hr.tests application.tests knowledge.tests models_provider.tests ops.tests`，336/336 PASS（keepdb 稳定）。
+- 数据流转日志：ResumeFlowLog（迁移 0014/0015）+ 查询 API `GET /workspace/{ws}/hr/resumes/{id}/flow-logs`；UPLOAD/EXTRACT/SANITIZE/SPLIT/DOCUMENT/LIFECYCLE 六节点，SPLIT 记录每个 chunk 完整内容（title/content/length/pii）、EXTRACT/SANITIZE 保留全文，可审计逐节点数据。
+- docx 表格排版简历：extract_text_from_docx 遍历段落+表格单元格（合并单元格去重）；数据集真实表格简历端到端 8 段 → 检索命中 0.758。
+- 真实模型验证：切片冒烟 10/10 保真；端到端冒烟 3/3（上传→切片→SiliconFlow 向量化 SUCCESS→检索命中"幕墙系统设计" 0.665）；**数据集 30 份压力测试 30/30 成功、29/30 LLM 路径、30/30 内容无改写**（SenseNova 需透传 `thinking=disabled` 禁推理流，已内置于适配器；脚本 installer/resume_splitter_dataset30.py）。
+- 测试：`hr.tests application.tests knowledge.tests models_provider.tests ops.tests`，**342/342 PASS（HR 308）**（keepdb 稳定）。
 - 设计/计划：docs/superpowers/specs/2026-08-15-end-to-end-pipeline-combined-design.md、docs/superpowers/plans/2026-08-15-c-stage-resume-rag.md（阶段 3 待执行：Rerank 接入 + 量化对比）。

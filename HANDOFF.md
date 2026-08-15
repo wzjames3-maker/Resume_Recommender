@@ -57,7 +57,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 | `README-hr.md` | 各期验收记录（一期到 A 阶段，含测试数演进） |
 | `docs/superpowers/specs/2026-08-13-*.md` | 二至七期规格（简历/搜索匹配/AI/异步/合并） |
 
-## 3. 已完成（当前测试基线：四 app + ops 336/336 PASS，HR 302）
+## 3. 已完成（当前测试基线：四 app + ops 342/342 PASS，HR 308）
 
 ### 3.1 PRD 七期（基础能力）
 
@@ -127,6 +127,9 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 **C 阶段实现进展（2026-08-15）**：
 - ✅ 阶段 1（切片器）：sanitize_resume_text() + ResumeSplitter（LLM 行号边界标注 + L2 校验 + L3 规则/smart 降级 + PII 掩码），单测 9 例；真实模型冒烟 10/10 保真、0 异常（提交 19637e8）；
 - ✅ 阶段 2（打通入库）：ResumeFile.document_id（迁移 0013）+ hr/services/resume_index.py（简历知识库幂等创建/入库/删除/启停用）+ parse_resume_task 自动索引（失败不阻塞建档）+ 生命周期同步（删除/合并清文档、归档/恢复切 is_active）+ 状态接口暴露 document_id；单测 5 例；端到端冒烟通过（上传 3 份 → LLM 切片 → 向量化 SUCCESS → 检索命中"幕墙系统设计" 0.665）（提交 ce8f065/1486cac）；
+- ✅ 数据流转日志：ResumeFlowLog（迁移 0014/0015）+ 流转日志 API GET /workspace/{ws}/hr/resumes/{id}/flow-logs + UPLOAD/EXTRACT/SANITIZE/SPLIT/DOCUMENT/LIFECYCLE 六节点持久化；SPLIT 节点 detail 含每个 chunk 完整内容（title/content/length/pii），EXTRACT/SANITIZE 保留全文，失败节点记 status=FAILED+error_message；单测 3 例（提交 b70f9d2/5043340）；
+- ✅ docx 表格排版简历提取：extract_text_from_docx 补表格单元格遍历（合并单元格按 _tc 对象去重，修复 id() 复用陷阱）；数据集真实 docx（表格排版、paragraphs 为空）全流程验证 8 段 → 检索命中 0.758（提交 a72b2b9）；
+- ✅ 数据集 30 份切片压力测试 + 两处生产修复（提交 af4c52a）：(1) **SenseNova 6.8 模型行为变化**——默认输出 reasoning 推理流耗尽 max_tokens 致 content 为空、LLM 路径 0% 命中；OpenAI 兼容适配器对 sensenova 透传 model_kwargs={"thinking": {"type": "disabled"}}，实测 106 tokens 完成切片、LLM 路径恢复 29/30；(2) **OCR 分号流**（PaddleOCR 单行"简历；；；姓名；…"输出）使行号边界协议失效——sanitize_resume_text 增加分号流自动转行（分号 ≥5 且基本无换行时触发，正常多行文本不受影响）。测试结果：30/30 成功、29/30 LLM 路径、30/30 内容无改写（保真度量=非空白序列一致）、PII 26/30 掩码（4 份样本本身无 PII）、全部 ≤500 字、耗时 95s。新脚本 installer/resume_splitter_dataset30.py（可复跑，报告 installer/dataset30_report.json）；
 - ⏳ 阶段 3（未开始）：Rerank 接入检索管线（召回 top10 → 精排 top3~5）+ Small-to-Big 回溯 + 可选（RRF 融合优化 / 画像向量 / RAG Fusion 子查询）+ 量化对比报告（PRD §9.2 完成定义：Top-K 相关性优于结构化基线）。
 
 另：人工反馈、更大标注集量化对比、档位 3（200 份）仍后置。docx 格式变体评测集（plans 1.3）并入阶段 3 检索评测。**注意**：冒烟中修复了应用创建/发布链路的 3 个裁剪期 bug（96afbd0），application.tests 现有 10 用例。
@@ -153,7 +156,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 ## 7. 提交流程与账本
 
 - 每期：docs 规格提交 → docs 实现计划提交 → 实现（TDD）→ 全量验收 → 审查 → 修复
-- 测试数演进：23→31→39→47→76→86→107（一期至七期，四 app 口径）→141→183→207→215（A 阶段，切 HR 单 app 口径）→227（四 app = HR 215 + 内核 12）→231（+ops 4）→240（+候选恢复 9）→255（+面试协作 15）→287（+Offer/交接 32）→301（+批量导入 14，B 阶段完成，2026-08-15）
+- 测试数演进：23→31→39→47→76→86→107（一期至七期，四 app 口径）→141→183→207→215（A 阶段，切 HR 单 app 口径）→227（四 app = HR 215 + 内核 12）→231（+ops 4）→240（+候选恢复 9）→255（+面试协作 15）→287（+Offer/交接 32）→301（+批量导入 14，B 阶段完成，2026-08-15）→336（C 阶段收尾，6c022e4 文档同步基线）→**342（HR 308 + 内核 34，2026-08-15 实测：HR 全量 308/308、四 app + ops 342/342，含切片器 9、入库 5、docx 表格 2、流转日志 3 等 C 阶段新增）**
 - 规格/计划/验收文档路径规范：`docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`、`docs/superpowers/plans/`、`docs/superpowers/audits/YYYY-MM-DD-<topic>-baseline.md`
 - 提交信息：`feat(人事)/fix(人事)/docs(人事)/test(人事): 中文描述`
 

@@ -2,10 +2,7 @@
 
 > 日期：2026-08-15
 > 状态：**辅助文档（链路流程图）**——规范与选型以 2026-08-15-end-to-end-pipeline-combined-design.md（权威）为准；实施顺序见 ../plans/2026-08-15-c-stage-resume-rag.md
-> 范围：以真实代码为准梳理「简历进入语义索引」的完整链路。当前仓库存在**两条断开**的链路：
-> A. HR 简历上传 → 解析建候选人（已实现，止步于结构化字段）；
-> B. 知识库文档切片 → 向量化（已实现，pilot 通过手工 API 调用）。
-> 两者尚未打通——简历上传后**不会**自动切片/向量化。本文档同时给出打通方案（见 §8）。
+> 范围：以真实代码为准梳理「简历进入语义索引」的完整链路。链路 A（HR 简历上传→解析建候选人）与链路 B（知识库切片→向量化）**已于 2026-08-15 打通**（阶段 2 交付：parse_resume_task 自动清洗→LLM 切片→建 Document→向量化，失败不阻塞建档；详见 HANDOFF §5.3）。§8 原为打通方案，现已实现，保留作为链路说明。
 
 ---
 
@@ -247,9 +244,9 @@ stateDiagram-v2
 
 ---
 
-## 8. 打通方案（下一步工作）
+## 8. 打通方案（已实现，2026-08-15 阶段 2 交付）
 
-目标：`upload_resumes` 成功后，简历正文自动走「清洗 → 切片 → 建文档 → 向量化」，并随候选人生命周期同步清理。**端到端选型（含检索流水线）以 2026-08-15-end-to-end-pipeline-combined-design.md 为权威。**
+目标：`upload_resumes` 成功后，简历正文自动走「清洗 → 切片 → 建文档 → 向量化」，并随候选人生命周期同步清理。**已实现**：parse_resume_task 内调用 index_resume（hr/services/resume_index.py）完成清洗→切片→Document/Paragraph→embedding_by_document；删除/合并/归档/恢复同步生命周期；流转日志记录 UPLOAD/EXTRACT/SANITIZE/SPLIT/DOCUMENT/LIFECYCLE 节点。**端到端选型（含检索流水线）以 2026-08-15-end-to-end-pipeline-combined-design.md 为权威。**
 
 ```mermaid
 flowchart LR

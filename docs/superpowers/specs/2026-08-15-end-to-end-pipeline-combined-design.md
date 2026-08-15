@@ -15,8 +15,8 @@
 | 环节 | 调研方案 | 本项目决策 | 动作 |
 |---|---|---|---|
 | 1 上传校验 | 白名单 + 魔数 + MD5 | **已有**：docx/txt + sha256 去重 + 20MB（PRD 锁定，无 pdf/doc） | 可选补魔数校验 |
-| 2 解析 | python-docx 段落+表格；doc 用 POI/antiword；Tika 兜底 | **已有**：python-docx 段落 + txt utf-8/gbk；表格已排除（产品决策）；doc 不在 PRD 白名单 | 无 |
-| 3 清洗 | 空字节/换行/空格/空行/长度检查 | **缺** | 新增 `sanitize_resume_text()`（小函数，采纳 hr-rag-assistant 要点） |
+| 2 解析 | python-docx 段落+表格；doc 用 POI/antiword；Tika 兜底 | **已有**：python-docx 段落+表格（2026-08-15 实测数据集 docx 为表格排版、paragraphs 为空 → 补单元格遍历，合并去重）；txt utf-8/gbk；doc 不在 PRD 白名单 | 无 |
+| 3 清洗 | 空字节/换行/空格/空行/长度检查 | **已有**：`sanitize_resume_text()`（含 OCR 分号流自动转行，见 §6.3） | 无 |
 | 4 结构化提取 | LLM 20+ 字段 → 画像表 | **已有**：规则解析建 Candidate；LLM 画像增强可选 | 后置（1 次调用/份，画像用于检索补全） |
 | 5 切分 | A 整段摘要向量 / B 语义块、滑动窗口、递归、三级 Auto-merging | **B 为主（定稿）：LLM 边界标注 → 条目级 chunk（见 §6 切片协议）**；**A 画像向量为阶段 3 增强**（候选人级筛选） | 核心实现 |
 | 6 元数据 | resume_id/section/index/parent | 已有结构映射：Document=简历、Paragraph.title=区块、meta 可扩 | 打通时补 `ResumeFile.document_id` |
@@ -113,7 +113,7 @@
 
 ```
 简历文件
-  ├─ L0 文本提取（已有）：docx→python-docx 段落拼接（按 PRD 无表格/无 OCR）；txt→utf-8/gbk
+  ├─ L0 文本提取（已有）：docx→python-docx 段落+表格单元格拼接（2026-08-15 实测数据集 docx 为表格排版、paragraphs 为空 → 必须遍历 tables；合并单元格按 _tc 对象去重）；txt→utf-8/gbk
   ├─ L1 LLM 边界标注（主干，每份 1 次调用）
   │     输入：清洗后全文（带行号）
   │     输出：JSON [{title, start_line, end_line}]
@@ -125,7 +125,7 @@
 
 ### 6.3 输出协议与清洗
 
-- **清洗**（前置）：`sanitize_resume_text()`——删空字节/控制字符、\r\n→\n、压缩连续空格、\n{3,}→\n\n、长度 <20 字判解析失败。
+- **清洗**（前置）：`sanitize_resume_text()`——删空字节/控制字符、\r\n→\n、压缩连续空格、\n{3,}→\n\n、长度 <20 字判解析失败；**OCR 分号流自动转行**（2026-08-15 实测修复：PaddleOCR 单行 `简历；；；姓名；…` 使行号协议失效——当分号 ≥5 且换行 ≤2 时视为分号流，先合并连续分号再 `；`→`\n`，正常多行文本不受影响）。
 - **PII 过滤**（切片后）：正则（电话含 +86/空格/横线变体、邮箱、身份证）命中字段段整段丢弃或 [已脱敏]；入库前二次扫描，仍有 PII → 拒绝入库 + 告警（PRD §6）。
 
 ### 6.4 粒度与检索质量实验（真实模型实测）
@@ -135,7 +135,7 @@
 
 ### 6.5 成本
 
-- LLM 边界标注：每份 1 次（flash-lite 级 ~1.5K token）；3 万份 ≈ 4500 万 token（几元~几十元量级），Celery 异步批处理；
+- LLM 边界标注：每份 1 次（flash-lite 级 ~1.5K token 输入 + ~0.1K 输出；**2026-08-15 实测**：SenseNova 6.8 默认输出 reasoning 推理流会把 max_tokens 耗尽致 content 为空，必须透传 thinking disabled，禁用后 106 tokens 完成切片）；3 万份 ≈ 4500 万 token（几元~几十元量级），Celery 异步批处理；
 - embedding：条目级每份 ~7 段；rerank 仅检索时触发；
 - 超短文本（<300 字）走规则降级省调用。
 
