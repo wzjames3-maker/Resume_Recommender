@@ -79,6 +79,17 @@ def _exclude_documents(knowledge_id):
     ]
 
 
+def _sparse_query(query, max_terms=4):
+    """关键词路查询截断：websearch_to_tsquery 的空格是 AND 语义，长查询会因
+    "所有词都必须出现"而漏召回（实测完整句 0 命中）。取 jieba 切词前 max_terms 个
+    有意义的词（去停用词）作为关键词路查询——BM25 常见做法，dense 路不受影响。"""
+    import jieba
+
+    stopwords = {"的", "了", "有", "和", "与", "过", "做", "在", "人", "我", "你", "他", "是", "会", "熟悉", "精通", "经验", "工作", "候选人", "负责"}
+    terms = [t for t in jieba.lcut(query) if t.strip() and t not in stopwords and len(t) > 1]
+    return " ".join(terms[:max_terms])
+
+
 def _recall_dual(query, knowledge, embedding_model, candidate_k, similarity, use_sparse=True):
     """一次 embed，双路独立召回。返回 {dense: [...], sparse: [...], query_embedding}。
     结果项: {paragraph_id, similarity}"""
@@ -93,9 +104,14 @@ def _recall_dual(query, knowledge, embedding_model, candidate_k, similarity, use
     sparse_results = []
     if use_sparse:
         try:
-            sparse_results = KeywordsSearch().handle(
-                query_set, query, embedding_query, candidate_k, similarity, SearchMode.keywords, [knowledge.id]
-            )
+            sparse_query = _sparse_query(query)
+            if sparse_query:
+                # 关键词路用极低内部阈值（0.01）：websearch_to_tsquery 多词 AND 会稀释
+                # ts_rank 分数（实测 幕墙 0.286 → 幕墙+系统+设计 0.193），若用与 dense 相同的
+                # 0.2 阈值会误过滤高质量多词命中；质量筛选交给 RRF 的 rank 排序。
+                sparse_results = KeywordsSearch().handle(
+                    query_set, sparse_query, embedding_query, candidate_k, 0.01, SearchMode.keywords, [knowledge.id]
+                )
         except Exception:
             sparse_results = []
     return {"dense": dense_results, "sparse": sparse_results, "query_embedding": embedding_query}
@@ -123,17 +139,29 @@ def _rerank(query, fused, rerank_model, top_n):
     try:
         contents = [row.get("content", "") for row in fused]
         results = rerank_model.rerank(query, contents, top_n=top_n)
-        score_by_index = {row.get("index"): row.get("relevance_score", 0) for row in results}
-        for idx, row in enumerate(fused):
-            row["rerank"] = score_by_index.get(idx, 0)
+        # rerank API 返回 results 的 index = 输入 contents 的下标（按相关性降序排列）
+        # 先把分数写回对应行（index 指向 fused 原下标），再按分数排序
+        for item in results:
+            index = item.get("index")
+            if index is not None and 0 <= index < len(fused):
+                fused[index]["rerank"] = item.get("relevance_score", 0)
         ordered = sorted(fused, key=lambda row: row.get("rerank", 0), reverse=True)
         return ordered, True
     except Exception:
         return fused, False
 
 
+def _para_score(p):
+    """段落主导分：rerank 启用且该段有 rerank 分时用 rerank 分，否则用 rrf 分。"""
+    rerank = p.get("rerank")
+    if rerank is not None and rerank > 0:
+        return rerank
+    return p.get("rrf", 0)
+
+
 def _aggregate(paragraphs, hr_role):
-    """Small-to-Big + 简历聚合（模式 A：0.7*max + 0.3*avg 段落分）。返回排序后的简历级结果。"""
+    """Small-to-Big + 简历聚合（模式 A：0.7*max + 0.3*avg 段落主导分）。
+    排序键优先 rerank 分（rerank 启用时），否则 rrf 分——避免 rerank 重排被 rrf 覆盖。"""
     doc_ids = [p.get("document_id") for p in paragraphs if p.get("document_id")]
     resumes = []
     resume_by_doc = {}
@@ -146,15 +174,15 @@ def _aggregate(paragraphs, hr_role):
         resume_map.setdefault(doc_id, []).append(p)
     results = []
     for doc_id, ps in resume_map.items():
-        score = _RESUME_SCORE_MAX_WEIGHT * max(p.get("rrf", 0) for p in ps) + _RESUME_SCORE_AVG_WEIGHT * (
-            sum(p.get("rrf", 0) for p in ps) / len(ps)
+        score = _RESUME_SCORE_MAX_WEIGHT * max(_para_score(p) for p in ps) + _RESUME_SCORE_AVG_WEIGHT * (
+            sum(_para_score(p) for p in ps) / len(ps)
         )
         resume = resume_by_doc.get(doc_id)
         candidate = resume.candidate if resume else None
         results.append({
             "candidate": _mask_for_role(candidate, hr_role),
             "resume": {"id": str(resume.id), "file_name": resume.file_name, "extension": resume.extension} if resume else None,
-            "paragraphs": sorted(ps, key=lambda x: x.get("rrf", 0), reverse=True),
+            "paragraphs": sorted(ps, key=_para_score, reverse=True),
             "document_id": doc_id,
             "score": score,
         })
