@@ -12,7 +12,7 @@ import re
 
 from common.utils.split_model import smart_split_paragraph
 
-_MAX_CHUNK_LENGTH = 800
+_MAX_CHUNK_LENGTH = 500
 _MIN_TEXT_LENGTH = 20
 _TITLE_MAX_LENGTH = 50
 
@@ -34,7 +34,7 @@ _PROMPT_TEMPLATE = """你是中文简历结构分析师。任务：把简历文�
 2. 只给出行号区间和标题，禁止改写、重组、翻译原文任何内容；
 3. 行号必须覆盖全部文本行（空行可归并到相邻段落）；
 4. 标题不超过 20 字，格式：区块-关键词（例如"工作经历-深圳大运置业 后端"）；
-5. 每个段落 50~800 字；超过 800 字的条目允许拆成多个子段落，但元数据行（时间/单位/职务）不得与内容拆开。
+5. 每个段落 50~500 字（embedding 模型输入安全上限实测值）；超过 500 字的条目允许拆成多个子段落，但元数据行（时间/单位/职务）不得与内容拆开。
 
 示例输入：
 1  姓名：张三
@@ -94,8 +94,8 @@ def _parse_chunks(raw):
     return result
 
 
-def _validate(chunks, lines):
-    """L2 校验：行号合法、不重叠、覆盖全部非空行、单段长度上限。"""
+def _validate(chunks, lines, max_length=_MAX_CHUNK_LENGTH):
+    """L2 校验：行号合法、不重叠、覆盖全部非空行、单段行数与字符数上限。"""
     total = len(lines)
     ordered = sorted(chunks, key=lambda c: (c["start_line"], c["end_line"]))
     prev_end = 0
@@ -107,6 +107,8 @@ def _validate(chunks, lines):
         if start <= prev_end:
             return False
         if end - start + 1 > _MAX_CHUNK_LENGTH:
+            return False
+        if len("\n".join(lines[start - 1:end])) > max_length:
             return False
         covered.update(range(start - 1, end))
         prev_end = end
@@ -160,9 +162,9 @@ def split_resume_rules(lines):
 
 
 def _smart_fallback(lines):
-    """L3 降级 2：smart_split_paragraph（1024）兜底。"""
+    """L3 降级 2：smart_split_paragraph（500，embedding 输入安全上限）兜底。"""
     text = "\n".join(lines)
-    return [{"title": "", "content": paragraph} for paragraph in smart_split_paragraph(text, 1024)]
+    return [{"title": "", "content": paragraph} for paragraph in smart_split_paragraph(text, _MAX_CHUNK_LENGTH)]
 
 
 def split_resume_text(text, chat_fn, max_retries=1):
@@ -190,7 +192,11 @@ def split_resume_text(text, chat_fn, max_retries=1):
                 return [{**row, "content": mask_pii(row["content"])} for row in _resolve(chunks, lines)]
         except Exception as exc:
             last_error = exc
-    for fallback in (split_resume_rules(lines), _smart_fallback(lines)):
-        if fallback and _validate(fallback, lines):
+    for fallback in (split_resume_rules(lines),):
+        if fallback and _validate(fallback, lines, max_length=_MAX_CHUNK_LENGTH):
             return [{**row, "content": mask_pii(row["content"])} for row in _resolve(fallback, lines)]
+    # smart 兜底：按字符切分（不依赖行号，拼接==原文由 smart_split_paragraph 性质保证）
+    smart = _smart_fallback(lines)
+    if smart:
+        return [{"title": row["title"], "content": mask_pii(row["content"])} for row in smart]
     raise ValueError(f"简历切片失败: {last_error}")

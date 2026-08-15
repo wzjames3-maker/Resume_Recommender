@@ -3238,6 +3238,27 @@ class ResumeSplitterTests(SimpleTestCase):
         with self.assertRaises(ValueError):
             split_resume_text("太短", self._stub("{}"))
 
+    def test_long_single_line_falls_back_to_smart(self):
+        """无换行超长文本：LLM 单段超 500 被拒 → 规则拒绝 → smart 兜底多段"""
+        from hr.services.resume_splitter import split_resume_text
+
+        text = "简历；姓名；张三；" + "工作内容；" + "负责系统开发与维护；" * 100  # ~1500 字符单行
+        single = '{"chunks": [{"title": "基本信息", "start_line": 1, "end_line": 1}]}'
+        result = split_resume_text(text, self._stub(single))
+        self.assertGreater(len(result), 1)
+        self.assertTrue(all(len(row["content"]) <= 500 for row in result))
+
+    def test_llm_overlong_chunk_rejected(self):
+        """LLM 输出 600+ 字符段 → 校验拒绝 → 降级"""
+        from hr.services.resume_splitter import split_resume_text
+
+        text = "姓名：张三\n\n【工作经历】\n- 单位：某公司 | 职务：工程师\n  内容：" + "负责系统开发。" * 120
+        overlong = '{"chunks": [{"title": "基本信息", "start_line": 1, "end_line": 1}, {"title": "工作经历-某公司", "start_line": 3, "end_line": 5}]}'
+        result = split_resume_text(text, self._stub(overlong))
+        self.assertGreaterEqual(len(result), 1)
+        self.assertTrue(all(len(row["content"]) <= 500 for row in result))
+
+
 
 class ResumeIndexTests(TestCase):
     """C 阶段打通：简历知识库 + 入库索引 + 生命周期同步"""
