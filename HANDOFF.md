@@ -34,7 +34,7 @@ uv run python apps/manage.py migrate --check                   # 未应用迁移
 uv run ruff check apps/hr/
 ```
 
-注意：`--keepdb` 首次跑可能因测试库缺最新迁移报瞬态错误，复跑即通过；不要据此误判代码缺陷。
+注意：`--keepdb` 首次跑可能因测试库缺最新迁移报瞬态错误，复跑即通过；不要据此误判代码缺陷。若测试报「source database maxkb is being accessed by other users」，说明测试库需要重建：`DROP DATABASE test_maxkb;` 后重跑（见第 5.1 节与提交 `fe42c65`）。
 
 ### 1.2 前端验证
 
@@ -103,7 +103,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 
 ### 5.1 部署环境验证（A 阶段关闭前提，处理真实 PII 前必须完成）
 
-- Celery worker+beat 真实调度：**heartbeat.py 硬编码 `/opt/maxkb-app/tmp`**（本机无权限创建导致 worker 起不来；可改为 `MAXKB_WORKER_TMP` 环境变量兼容默认路径）
+- Celery worker+beat 真实调度：**heartbeat.py 硬编码 `/opt/maxkb-app/tmp`**（本机无权限创建导致 worker 起不来；可改为 `MAXKB_WORKER_TMP` 环境变量兼容默认路径）。TTL 清理 beat 任务（`hr-cleanup-orphan-resumes`）在 `apps/hr/task/resume.py` 的 `worker_ready` 信号中注册（勿改回 apps.py ready——那会在应用加载时访问数据库，导致测试库模板克隆被连接占用而失败，见提交 `fe42c65`）
 - 对象存储私有化（当前简历在本地 `data/resume/`）
 - TLS、数据库/备份静态加密、密钥管理
 - 日志/监控脱敏人工检查
