@@ -60,7 +60,12 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
 
 - R1（基础模型与命令服务）、R2（Job 两阶段关闭 STRICT/BULK）、R3（Interview/Offer/Handoff 挂 Application + Offer 接受联动 HIRED）、R4（前端动态 Pipeline 看板）、R5（API 权限/幂等/终态矩阵测试）已完成，HR 全量 419 tests 通过。
 - 新增：`POST/GET /hr/jobs/{job_id}/close(-preview)`、`/hr/applications/{id}/interviews|offers`；`search_resumes` 增加可选 `candidate_id/document_ids` 范围限定；`import_legacy_assignments` 管理命令（幂等迁移存量 CandidateAssignment）。
-- 下一步：D1 Screening Agent（HrAgentRun / HrAgentProposal，Propose→Confirm→Execute）。
+- D1 Screening Agent 已完成：`hr_agent_run` / `hr_agent_proposal` 模型与 0022 迁移、
+  `apps/hr/agents/` 包（Runner 固定顺序工具编排 + PII 上下文投影 + 服务端评分派生建议动作 + Proposal 审批）、
+  Application 创建时 APPLY/REFERRAL 自动触发（celery-once 防重）、并发/速率护栏、LLM 失败降级 run=FAILED 业务零影响；
+  API：`POST /hr/agents/SCREENING/run`、`POST /hr/proposals/{id}/accept|dismiss`、`GET /hr/applications/{id}/proposals`；
+  审计新增 AGENT_RUN/AGENT_DECIDE（HrAuditLog 已补 trace_id）。
+- 下一步：D2 JD 起草 + Interview Copilot（企业知识库工具、前端报告卡）。
 
 ## 5. 测试环境注意
 

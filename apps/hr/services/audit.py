@@ -12,7 +12,8 @@ import uuid_utils.compat as uuid
 from hr.models import HrAccess, HrAuditLog
 
 
-def write_audit_log(workspace_id, user_id, action, object_type="OTHER", object_id="", result="SUCCESS", detail=""):
+def write_audit_log(workspace_id, user_id, action, object_type="OTHER", object_id="", result="SUCCESS", detail="",
+                     trace_id=""):
     """
     写一条审计记录；审计行只增不改。
     :param workspace_id: 工作空间 ID
@@ -22,6 +23,7 @@ def write_audit_log(workspace_id, user_id, action, object_type="OTHER", object_i
     :param object_id:    对象 ID 或描述
     :param result:       SUCCESS / FAILED / DENIED
     :param detail:       简短补充（str 原样入库；dict 序列化为 JSON 字符串，保证可解析）
+    :param trace_id:     链路追踪 ID（如 Agent run id）
     """
     if isinstance(detail, dict):
         detail = json.dumps(detail, ensure_ascii=False)
@@ -33,6 +35,7 @@ def write_audit_log(workspace_id, user_id, action, object_type="OTHER", object_i
         object_id=str(object_id)[:64] if object_id else "",
         result=result,
         detail=detail,
+        trace_id=str(trace_id)[:64],
     )
 
 

@@ -356,6 +356,11 @@ class HrConfig(models.Model):
         max_length=16, choices=HandoffTargetType.choices, default=HandoffTargetType.CHECKLIST
     )
     handoff_webhook_url = models.CharField(max_length=512, blank=True, default="")
+    agent_enable_screening = models.BooleanField(default=False, verbose_name="Screening Agent 开关")
+    agent_max_concurrent_runs = models.PositiveSmallIntegerField(default=2, verbose_name="Agent 并发运行上限")
+    agent_run_rate_limit = models.PositiveSmallIntegerField(default=10, verbose_name="Agent 每小时触发上限")
+    agent_score_version = models.CharField(max_length=32, default="v1", verbose_name="评分函数版本")
+    agent_score_bands = models.JSONField(default=dict, verbose_name="评分分带（advance/hold）")
     create_time = models.DateTimeField(auto_now_add=True)
     update_time = models.DateTimeField(auto_now=True)
 
@@ -417,6 +422,8 @@ class HrAuditAction(models.TextChoices):
     REVOKE_ACCESS = "REVOKE_ACCESS", "Revoke access"
     EXPORT = "EXPORT", "Export"
     SEARCH = "SEARCH", "Resume semantic search"
+    AGENT_RUN = "AGENT_RUN", "Agent run"
+    AGENT_DECIDE = "AGENT_DECIDE", "Agent decide"
     ACCESS_DENIED = "ACCESS_DENIED", "Access denied"
 
 
@@ -461,6 +468,7 @@ class HrAuditLog(models.Model):
     object_id = models.CharField(max_length=64, blank=True, default="")
     result = models.CharField(max_length=8, choices=HrAuditResult.choices, default=HrAuditResult.SUCCESS)
     detail = models.TextField(blank=True, default="")
+    trace_id = models.CharField(max_length=64, blank=True, default="")
     create_time = models.DateTimeField(auto_now_add=True, db_index=True)
 
     class Meta:
@@ -565,5 +573,97 @@ class ApplicationEvent(models.Model):
             models.UniqueConstraint(
                 fields=["workspace_id", "application", "event_type", "idempotency_key"],
                 name="hr_application_event_idempotency_uniq",
+            )
+        ]
+
+
+class HrAgentType(models.TextChoices):
+    SCREENING = "SCREENING", "Screening"
+
+
+class HrAgentTriggerType(models.TextChoices):
+    EVENT = "EVENT", "Event"
+    MANUAL = "MANUAL", "Manual"
+
+
+class HrAgentRunStatus(models.TextChoices):
+    PENDING = "PENDING", "Pending"
+    RUNNING = "RUNNING", "Running"
+    SUCCEEDED = "SUCCEEDED", "Succeeded"
+    FAILED = "FAILED", "Failed"
+    SKIPPED = "SKIPPED", "Skipped"
+
+
+class HrAgentRun(models.Model):
+    """Agent 运行账本：输入摘要 / 工具轨迹 / 输出 / 成本 / 失败，全量留痕（PRD-AGENT-RAG §4.3）。"""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
+    workspace_id = models.CharField(max_length=64, db_index=True)
+    agent_type = models.CharField(max_length=16, choices=HrAgentType.choices, default=HrAgentType.SCREENING)
+    trigger_type = models.CharField(max_length=16, choices=HrAgentTriggerType.choices, default=HrAgentTriggerType.EVENT)
+    ref_object_type = models.CharField(max_length=32, default="APPLICATION")
+    ref_object_id = models.CharField(max_length=64, db_index=True)
+    status = models.CharField(max_length=16, choices=HrAgentRunStatus.choices, default=HrAgentRunStatus.PENDING)
+    input_meta = models.JSONField(default=dict)
+    tool_trace = models.JSONField(default=list)
+    output_json = models.JSONField(null=True, blank=True)
+    error = models.TextField(blank=True, default="")
+    llm_model = models.CharField(max_length=128, blank=True, default="")
+    prompt_tokens = models.IntegerField(default=0)
+    completion_tokens = models.IntegerField(default=0)
+    prompt_version = models.CharField(max_length=32, blank=True, default="")
+    duration_ms = models.IntegerField(default=0)
+    user_id = models.UUIDField(null=True, blank=True)
+    create_time = models.DateTimeField(auto_now_add=True)
+    update_time = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "hr_agent_run"
+        indexes = [
+            models.Index(fields=["workspace_id", "agent_type", "status"], name="hr_agent_run_ws_type_status"),
+            models.Index(fields=["workspace_id", "ref_object_id"], name="hr_agent_run_ws_ref_idx"),
+        ]
+
+
+class HrAgentProposalStatus(models.TextChoices):
+    PENDING = "PENDING", "Pending"
+    ACCEPTED = "ACCEPTED", "Accepted"
+    DISMISSED = "DISMISSED", "Dismissed"
+    EXPIRED = "EXPIRED", "Expired"
+
+
+class HrAgentProposalAction(models.TextChoices):
+    ADVANCE = "ADVANCE", "Advance"
+    DECLINE = "DECLINE", "Decline"
+    HOLD = "HOLD", "Hold"
+    DRAFT = "DRAFT", "Draft"
+
+
+class HrAgentProposal(models.Model):
+    """Agent 提议工件（唯一写出口）：PENDING → ACCEPTED / DISMISSED / EXPIRED。"""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
+    workspace_id = models.CharField(max_length=64, db_index=True)
+    run = models.ForeignKey(HrAgentRun, on_delete=models.SET_NULL, null=True, blank=True, related_name="proposals")
+    target_type = models.CharField(max_length=32, default="APPLICATION")
+    target_id = models.CharField(max_length=64, db_index=True)
+    action = models.CharField(max_length=16, choices=HrAgentProposalAction.choices)
+    payload_json = models.JSONField(default=dict)
+    status = models.CharField(
+        max_length=16, choices=HrAgentProposalStatus.choices, default=HrAgentProposalStatus.PENDING
+    )
+    decided_by = models.UUIDField(null=True, blank=True)
+    decided_at = models.DateTimeField(null=True, blank=True)
+    decision_note = models.TextField(blank=True, default="")
+    user_id = models.UUIDField(null=True, blank=True)
+    create_time = models.DateTimeField(auto_now_add=True)
+    update_time = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "hr_agent_proposal"
+        indexes = [
+            models.Index(
+                fields=["workspace_id", "target_type", "target_id", "status"],
+                name="hr_agent_proposal_ws_target_st",
             )
         ]

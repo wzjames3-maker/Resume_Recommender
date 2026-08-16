@@ -1,0 +1,124 @@
+# coding=utf-8
+"""
+    @project: MaxKB
+    @file： context.py
+    @date：2026/8/17
+    @desc: Agent LLM 上下文投影（PRD-AGENT-RAG §4.2/§9）：
+           进入模型前的工具返回值统一脱敏——剔除 phone/email/note/文件路径/简历原文，
+           证据只保留已脱敏 chunk。只改工具适配器，不改 RAG 链路。
+"""
+
+_MAX_EXCERPT_LENGTH = 500
+_SEARCH_EVIDENCE_LIMIT = 12
+
+
+def _mask_phone(value):
+    if not value:
+        return ""
+    return value[:3] + "****" + value[-4:] if len(value) >= 7 else "****"
+
+
+def _mask_email(value):
+    if not value or "@" not in value:
+        return ""
+    local, domain = value.split("@", 1)
+    masked_local = local[:2] + "***" if len(local) > 2 else "***"
+    return f"{masked_local}@{domain}"
+
+
+def job_to_llm(job):
+    """职位信息投影：纯职位事实，无候选人数据。"""
+    return {
+        "id": str(job.id),
+        "name": job.name,
+        "department": job.department,
+        "city": job.city,
+        "level": job.level,
+        "description": job.description,
+        "skill_requirements": job.skill_requirements,
+    }
+
+
+def candidate_to_llm(candidate):
+    """候选人投影：仅 id/姓名/城市/学历/年限/技能/状态；永不包含联系方式、备注、简历原文。"""
+    if candidate is None:
+        return None
+    return {
+        "id": str(candidate.id),
+        "name": candidate.name,
+        "current_city": candidate.current_city,
+        "target_city": candidate.target_city,
+        "highest_degree": candidate.highest_degree,
+        "years_experience": candidate.years_experience,
+        "skills": candidate.skills,
+        "status": candidate.status,
+    }
+
+
+def structured_filter_to_llm(result):
+    """结构化核对结果投影：条件明细 + hard_met。"""
+    conditions = []
+    for condition in result.get("conditions", []):
+        conditions.append({
+            "requirement": condition.get("requirement", ""),
+            "field": condition.get("field", ""),
+            "met": bool(condition.get("met")),
+            "detail": condition.get("detail", ""),
+        })
+    return {"conditions": conditions, "hard_met": bool(result.get("hard_met"))}
+
+
+def search_to_llm(search_result):
+    """检索结果投影：候选人仅脱敏最小字段；resume 只留 id；证据只保留脱敏 chunk（截断长度）。"""
+    items = []
+    for item in (search_result or {}).get("items", [])[:_SEARCH_EVIDENCE_LIMIT]:
+        candidate = item.get("candidate") or {}
+        resume = item.get("resume") or {}
+        paragraphs = []
+        for paragraph in (item.get("paragraphs") or [])[:3]:
+            content = paragraph.get("content", "")
+            if not isinstance(content, str):
+                content = str(content)
+            paragraphs.append({
+                "paragraph_id": paragraph.get("id") or paragraph.get("paragraph_id"),
+                "title": paragraph.get("title", ""),
+                "content": content[:_MAX_EXCERPT_LENGTH],
+                "score": paragraph.get("score"),
+            })
+        items.append({
+            "candidate": {
+                "id": candidate.get("id"),
+                "name": candidate.get("name"),
+                "current_city": candidate.get("current_city"),
+                "highest_degree": candidate.get("highest_degree"),
+                "years_experience": candidate.get("years_experience"),
+                "skills": candidate.get("skills"),
+                "status": candidate.get("status"),
+                "phone": _mask_phone(candidate.get("phone")),
+                "email": _mask_email(candidate.get("email")),
+            },
+            "resume": {"id": resume.get("id")},
+            "paragraphs": paragraphs,
+            "document_id": item.get("document_id"),
+            "score": item.get("score"),
+        })
+    meta = (search_result or {}).get("meta") or {}
+    return {
+        "items": items,
+        "meta": {
+            "mode": meta.get("mode"),
+            "search_type": meta.get("search_type"),
+            "grouped_resumes": (meta.get("aggregation") or {}).get("grouped_resumes"),
+        },
+    }
+
+
+def sanitize_for_trace(value, maximum=200):
+    """工具轨迹脱敏：仅保留简短摘要（不记录联系方式/简历原文）。"""
+    if isinstance(value, dict):
+        return {k: sanitize_for_trace(v, maximum) for k, v in value.items()}
+    if isinstance(value, list):
+        return [sanitize_for_trace(v, maximum) for v in value[:5]]
+    if not isinstance(value, str):
+        return value
+    return value[:maximum]

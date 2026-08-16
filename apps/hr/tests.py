@@ -1,5 +1,6 @@
 import csv
 import io
+import json
 import os
 import tempfile
 from datetime import timedelta
@@ -23,6 +24,8 @@ from hr.models import (
     ApplicationEvent,
     ApplicationEventType,
     ApplicationStatus,
+    HrAgentProposal,
+    HrAgentRun,
     JobStage,
     AssignmentStatus,
     Candidate,
@@ -47,6 +50,8 @@ from hr.serializers.recruitment import CANDIDATE_EXPORT_FIELDS, RecruitmentServi
 from hr.services.ai_parser import extract_skills, parse_search_conditions
 from hr.services.resume_index import delete_resume_index, get_or_create_resume_knowledge, index_resume, set_resume_index_active
 from hr.services.application_service import ApplicationService
+from hr.agents import scoring
+from hr.agents.proposals import ProposalService
 from knowledge.models import Document, Embedding, Knowledge, KnowledgeFolder, KnowledgeScope, KnowledgeType, Paragraph
 from models_provider.models import Model
 from hr.services.resume_parser import parse_resume_text
@@ -5444,4 +5449,490 @@ class ImportLegacyAssignmentsCommandTests(TestCase):
         self.assertFalse(
             Application.objects.filter(workspace_id=self.workspace_id, candidate=self.candidate, job=self.job).exists()
         )
+
+
+
+class AgentScoringTests(TestCase):
+    """D1 §6.3：服务端评分与建议动作派生（LLM 不可自报 score/action）"""
+
+    def test_advance_when_high_score_and_evidence_ok(self):
+        payload = {
+            "dimensions": [
+                {"name": "技能匹配", "verdict": "强", "evidence": [{"relevance": 0.98}, {"relevance": 0.95}], "confidence": 0.98},
+                {"name": "经验相关性", "verdict": "强", "evidence": [{"relevance": 0.9}], "confidence": 0.9},
+                {"name": "工作年限", "verdict": "够", "evidence": [{"relevance": 0.8}], "confidence": 0.85},
+            ],
+        }
+        decision = scoring.derive_decision(payload, hard_met=True)
+        self.assertEqual(decision["suggested_action"], "ADVANCE")
+        self.assertGreaterEqual(decision["score"], 80)
+        self.assertTrue(decision["evidence_ok"])
+
+    def test_hold_when_mid_score(self):
+        payload = {
+            "dimensions": [
+                {"name": "技能匹配", "verdict": "中", "evidence": [{"relevance": 0.7}], "confidence": 1.0},
+                {"name": "经验相关性", "verdict": "中", "evidence": [{"relevance": 0.6}], "confidence": 1.0},
+            ],
+        }
+        decision = scoring.derive_decision(payload, hard_met=True)
+        self.assertEqual(decision["suggested_action"], "HOLD")
+        self.assertTrue(60 <= decision["score"] < 80)
+
+    def test_hold_when_evidence_missing_despite_high_confidence(self):
+        # 无证据维度不得贡献正分（禁止无证据高分）
+        payload = {
+            "dimensions": [
+                {"name": "技能匹配", "verdict": "强", "evidence": [], "confidence": 0.99},
+                {"name": "经验相关性", "verdict": "强", "evidence": [{"relevance": 0.2}], "confidence": 0.9},
+            ],
+        }
+        decision = scoring.derive_decision(payload, hard_met=True)
+        self.assertIn(decision["suggested_action"], ("HOLD", "DECLINE"))
+        self.assertFalse(decision["evidence_ok"])
+
+    def test_decline_when_low_score(self):
+        payload = {
+            "dimensions": [
+                {"name": "技能匹配", "verdict": "弱", "evidence": [{"relevance": 0.2}], "confidence": 0.5},
+                {"name": "经验相关性", "verdict": "弱", "evidence": [{"relevance": 0.1}], "confidence": 0.5},
+            ],
+        }
+        decision = scoring.derive_decision(payload, hard_met=True)
+        self.assertEqual(decision["suggested_action"], "DECLINE")
+
+    def test_decline_when_hard_not_met(self):
+        payload = {
+            "dimensions": [
+                {"name": "技能匹配", "verdict": "强", "evidence": [{"relevance": 0.9}], "confidence": 0.95},
+                {"name": "经验相关性", "verdict": "强", "evidence": [{"relevance": 0.8}], "confidence": 0.9},
+            ],
+        }
+        decision = scoring.derive_decision(payload, hard_met=False)
+        self.assertEqual(decision["suggested_action"], "DECLINE")
+
+    def test_non_whitelist_dimension_dropped_with_warning(self):
+        payload = {
+            "dimensions": [
+                {"name": "技能匹配", "verdict": "强", "evidence": [{"relevance": 0.9}], "confidence": 0.95},
+                {"name": "年龄", "verdict": "偏大", "evidence": [{"relevance": 0.9}], "confidence": 0.99},
+            ],
+        }
+        decision = scoring.derive_decision(payload, hard_met=True)
+        self.assertTrue(any(item["reason"] == "not in whitelist" for item in decision["warnings"]))
+        names = [item["name"] for item in decision["dimension_details"]]
+        self.assertNotIn("年龄", names)
+        self.assertEqual(len(names), 1)
+
+
+class ScreeningRunnerTests(TestCase):
+    """D1 Runner：固定顺序工具编排 + LLM 评估 + 服务端评分 + propose"""
+
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.workspace_id = "workspace-agent"
+        self.recruitment = RecruitmentService(self.workspace_id, self.user_id, hr_role="ADMIN")
+        HrConfig.objects.update_or_create(
+            workspace_id=self.workspace_id,
+            defaults={
+                "llm_model_id": "fake-llm",
+                "agent_enable_screening": True,
+                "agent_max_concurrent_runs": 2,
+                "agent_run_rate_limit": 100,
+            },
+        )
+        self.candidate = Candidate.objects.create(
+            name="Alice", workspace_id=self.workspace_id, skills=["python"],
+            current_city="上海", highest_degree="硕士", years_experience=5,
+        )
+        job_data = self.recruitment.create_job({
+            "name": "Python Engineer", "department": "Eng", "city": "上海",
+            "skill_requirements": ["Python"],
+        })
+        self.job = Job.objects.get(id=job_data["id"])
+        self.application = self.service_create()
+
+    def service_create(self):
+        service = ApplicationService(self.workspace_id, self.user_id, hr_role="ADMIN")
+        return service.create_application(self.job.id, self.candidate.id, {})
+
+    def _fake_model(self, payload):
+        fake = Mock()
+        fake.invoke.return_value = SimpleNamespace(content=json.dumps(payload, ensure_ascii=False))
+        return fake
+
+    def _valid_facts(self):
+        return {
+            "dimensions": [
+                {"name": "技能匹配", "verdict": "命中 Python", "evidence": [{"paragraph_id": "p1", "excerpt": "熟悉 Python 开发", "relevance": 0.98}, {"paragraph_id": "p1b", "excerpt": "Python 后端", "relevance": 0.95}], "confidence": 0.98},
+                {"name": "经验相关性", "verdict": "相关经验", "evidence": [{"paragraph_id": "p2", "excerpt": "三年后端经验", "relevance": 0.9}], "confidence": 0.9},
+                {"name": "工作年限", "verdict": "满足", "evidence": [{"paragraph_id": "p3", "excerpt": "五年经验", "relevance": 0.8}], "confidence": 0.85},
+            ],
+            "concerns": ["项目规模待确认"],
+            "clarifying_questions": ["能否接受加班"],
+        }
+
+    def _patch_search(self, items=None):
+        return patch("hr.agents.runner.search_resumes", return_value={
+            "items": items or [
+                {
+                    "candidate": {"id": str(self.candidate.id), "name": "Alice", "phone": "13812345678", "email": "a@b.com"},
+                    "resume": {"id": "r1", "file_name": "a.docx"},
+                    "paragraphs": [
+                        {"id": "p1", "title": "工作经历", "content": "熟悉 Python 开发", "score": 0.9},
+                        {"id": "p2", "title": "工作经历", "content": "三年后端经验", "score": 0.7},
+                        {"id": "p3", "title": "工作经历", "content": "五年经验", "score": 0.6},
+                    ],
+                    "document_id": "d1",
+                }
+            ],
+            "meta": {"mode": "phrase", "search_type": "hybrid_rrf", "aggregation": {"grouped_resumes": 1}},
+        })
+
+    def test_success_flow_creates_run_and_proposal(self):
+        from hr.agents.runner import run_screening_agent
+        with patch("hr.agents.runner._load_llm", return_value=(self._fake_model(self._valid_facts()), "fake-llm")), self._patch_search():
+            output = run_screening_agent(self.application["id"], trigger_type="EVENT", user_id=self.user_id)
+        self.assertEqual(output["status"], "SUCCEEDED")
+        self.assertIsNotNone(output["proposal_id"])
+        run = HrAgentRun.objects.get(id=output["run_id"])
+        self.assertEqual(run.agent_type, "SCREENING")
+        self.assertEqual(run.trigger_type, "EVENT")
+        self.assertEqual(run.prompt_version, "screening-v1")
+        self.assertGreater(run.duration_ms, 0)
+        self.assertTrue(run.output_json["decision"]["hard_met"])
+        self.assertEqual(run.output_json["decision"]["suggested_action"], "ADVANCE")
+        tool_names = [item["tool"] for item in run.tool_trace]
+        self.assertEqual(tool_names, ["get_job", "get_candidate_overview", "structured_filter", "search_resumes"])
+        proposal = HrAgentProposal.objects.get(id=output["proposal_id"])
+        self.assertEqual(proposal.action, "ADVANCE")
+        self.assertEqual(proposal.status, "PENDING")
+        self.assertEqual(proposal.target_id, self.application["id"])
+        self.assertTrue(
+            HrAuditLog.objects.filter(workspace_id=self.workspace_id, action="AGENT_RUN", trace_id=run.id).exists()
+        )
+
+    def test_pii_projection_strips_contact_from_trace_and_payload(self):
+        from hr.agents.runner import run_screening_agent
+        with patch("hr.agents.runner._load_llm", return_value=(self._fake_model(self._valid_facts()), "fake-llm")), self._patch_search():
+            output = run_screening_agent(self.application["id"], trigger_type="EVENT", user_id=self.user_id)
+        run = HrAgentRun.objects.get(id=output["run_id"])
+        dumped = json.dumps({"trace": run.tool_trace, "input": run.input_meta, "output": run.output_json}, ensure_ascii=False)
+        self.assertNotIn("13812345678", dumped)
+        self.assertNotIn("a@b.com", dumped)
+        self.assertNotIn("/tmp/", dumped)
+
+    def test_llm_failure_marks_run_failed(self):
+        from hr.agents.runner import run_screening_agent
+        fake = Mock()
+        fake.invoke.return_value = SimpleNamespace(content="not json")
+        with patch("hr.agents.runner._load_llm", return_value=(fake, "fake-llm")), self._patch_search():
+            output = run_screening_agent(self.application["id"], trigger_type="EVENT", user_id=self.user_id)
+        self.assertEqual(output["status"], "FAILED")
+        self.assertIsNone(output["proposal_id"])
+        self.assertTrue(HrAgentRun.objects.get(id=output["run_id"]).error)
+
+    def test_disabled_agent_skips(self):
+        from hr.agents.runner import run_screening_agent
+        HrConfig.objects.filter(workspace_id=self.workspace_id).update(agent_enable_screening=False)
+        output = run_screening_agent(self.application["id"], trigger_type="EVENT", user_id=self.user_id)
+        self.assertEqual(output["status"], "SKIPPED")
+        self.assertIn("disabled", output["error"])
+
+    def test_non_apply_relation_event_skips(self):
+        from hr.agents.runner import run_screening_agent
+        other = Candidate.objects.create(name="Bob", workspace_id=self.workspace_id)
+        application = ApplicationService(self.workspace_id, self.user_id, hr_role="ADMIN").create_application(
+            self.job.id, other.id, {"relation_type": "HEADHUNTER"}
+        )
+        output = run_screening_agent(application["id"], trigger_type="EVENT", user_id=self.user_id)
+        self.assertEqual(output["status"], "SKIPPED")
+        self.assertIn("relation_type", output["error"])
+
+    def test_not_at_applied_stage_skips(self):
+        from hr.agents.runner import run_screening_agent
+        service = ApplicationService(self.workspace_id, self.user_id, hr_role="ADMIN")
+        stage = JobStage.objects.filter(job=self.job).order_by("order")[1]
+        service.move_stage(self.application["id"], stage.id, {"reason_text": "screen"})
+        output = run_screening_agent(self.application["id"], trigger_type="EVENT", user_id=self.user_id)
+        self.assertEqual(output["status"], "SKIPPED")
+        self.assertIn("APPLIED", output["error"])
+
+    def test_concurrent_limit_skips(self):
+        from hr.agents.runner import run_screening_agent
+        HrConfig.objects.filter(workspace_id=self.workspace_id).update(agent_max_concurrent_runs=1)
+        HrAgentRun.objects.create(
+            workspace_id=self.workspace_id, agent_type="SCREENING", trigger_type="EVENT",
+            ref_object_type="APPLICATION", ref_object_id="other", status="RUNNING",
+            prompt_version="v", user_id=self.user_id,
+        )
+        output = run_screening_agent(self.application["id"], trigger_type="EVENT", user_id=self.user_id)
+        self.assertEqual(output["status"], "SKIPPED")
+        self.assertIn("concurrent", output["error"])
+
+    def test_no_model_marks_failed(self):
+        from hr.agents.runner import run_screening_agent
+        with patch("hr.agents.runner._load_llm", return_value=(None, "")), self._patch_search():
+            output = run_screening_agent(self.application["id"], trigger_type="EVENT", user_id=self.user_id)
+        self.assertEqual(output["status"], "FAILED")
+        self.assertIn("LLM", output["error"])
+
+
+class AgentProposalTests(TestCase):
+    """D1 Proposal 审批：Propose → Confirm → Execute（ADVANCE/DECLINE/HOLD + 幂等 + 过期）"""
+
+    def setUp(self):
+        self.owner_id = uuid.uuid7()
+        self.workspace_id = "workspace-proposal"
+        self.recruitment = RecruitmentService(self.workspace_id, self.owner_id, hr_role="ADMIN")
+        HrConfig.objects.update_or_create(
+            workspace_id=self.workspace_id, defaults={"llm_model_id": "fake", "agent_enable_screening": True}
+        )
+        self.candidate = Candidate.objects.create(name="Alice", workspace_id=self.workspace_id, skills=["python"])
+        job_data = self.recruitment.create_job({"name": "Engineer", "headcount": 1, "skill_requirements": ["Python"]})
+        self.job = Job.objects.get(id=job_data["id"])
+        self.application = ApplicationService(self.workspace_id, self.owner_id, hr_role="ADMIN").create_application(
+            self.job.id, self.candidate.id, {}
+        )
+        self.stages = list(JobStage.objects.filter(job=self.job).order_by("order"))
+
+    def _proposal(self, action="ADVANCE", stage_key="APPLIED"):
+        from hr.agents.proposals import propose
+        run = HrAgentRun.objects.create(
+            workspace_id=self.workspace_id, agent_type="SCREENING", trigger_type="EVENT",
+            ref_object_type="APPLICATION", ref_object_id=self.application["id"], status="SUCCEEDED",
+            prompt_version="v", user_id=self.owner_id,
+        )
+        return propose(
+            self.workspace_id, run, self.application["id"], action,
+            {"stage_key": stage_key, "decision": {"score": 90, "suggested_action": action}},
+        )
+
+    def _service(self, hr_role="ADMIN", user_id=None):
+        return ProposalService(self.workspace_id, user_id or self.owner_id, hr_role)
+
+    def test_accept_advance_moves_to_next_stage_with_idempotency_event(self):
+        proposal = self._proposal("ADVANCE")
+        accepted = self._service().accept(proposal.id, {"decision_note": "ok"})
+        self.assertEqual(accepted["status"], "ACCEPTED")
+        self.assertEqual(accepted["decided_by"], str(self.owner_id))
+        application = Application.objects.get(id=self.application["id"])
+        self.assertEqual(application.current_stage.key, "SCREEN")
+        self.assertTrue(
+            ApplicationEvent.objects.filter(
+                application=application, event_type="STAGE_MOVED",
+                idempotency_key=f"proposal:{proposal.id}",
+            ).exists()
+        )
+        self.assertTrue(
+            HrAuditLog.objects.filter(workspace_id=self.workspace_id, action="AGENT_DECIDE").exists()
+        )
+
+    def test_accept_decline_rejects_with_not_fit(self):
+        proposal = self._proposal("DECLINE")
+        self._service().accept(proposal.id, {"decision_note": "不符合"})
+        application = Application.objects.get(id=self.application["id"])
+        self.assertEqual(application.status, "REJECTED")
+        self.assertEqual(application.termination_reason, "NOT_FIT")
+        self.assertTrue(
+            ApplicationEvent.objects.filter(
+                application=application, event_type="REJECTED",
+                idempotency_key=f"proposal:{proposal.id}", reason_code="NOT_FIT",
+            ).exists()
+        )
+
+    def test_accept_hold_does_not_change_state(self):
+        proposal = self._proposal("HOLD")
+        self._service().accept(proposal.id, {"decision_note": "转人工"})
+        application = Application.objects.get(id=self.application["id"])
+        self.assertEqual(application.status, "ACTIVE")
+        self.assertEqual(application.current_stage.key, "APPLIED")
+        self.assertEqual(HrAgentProposal.objects.get(id=proposal.id).status, "ACCEPTED")
+
+    def test_accept_twice_rejected(self):
+        proposal = self._proposal("ADVANCE")
+        self._service().accept(proposal.id, {})
+        with self.assertRaises(AppApiException):
+            self._service().accept(proposal.id, {})
+
+    def test_accept_when_target_moved_expires(self):
+        proposal = self._proposal("ADVANCE")
+        service = ApplicationService(self.workspace_id, self.owner_id, hr_role="ADMIN")
+        service.move_stage(self.application["id"], self.stages[1].id, {"reason_text": "manual"})
+        with self.assertRaises(AppApiException) as ctx:
+            self._service().accept(proposal.id, {})
+        self.assertEqual(ctx.exception.code, 409)
+        self.assertEqual(HrAgentProposal.objects.get(id=proposal.id).status, "EXPIRED")
+
+    def test_decision_permission_owner_or_admin(self):
+        proposal = self._proposal("ADVANCE")
+        stranger = ProposalService(self.workspace_id, uuid.uuid7(), hr_role="OPERATOR")
+        with self.assertRaises(AppUnauthorizedFailed):
+            stranger.accept(proposal.id, {})
+        owner = ProposalService(self.workspace_id, self.owner_id, hr_role="OPERATOR")
+        self.assertEqual(owner.accept(proposal.id, {})["status"], "ACCEPTED")
+
+    def test_dismiss_marks_dismissed(self):
+        proposal = self._proposal("ADVANCE")
+        dismissed = self._service().dismiss(proposal.id, {"decision_note": "暂不处理"})
+        self.assertEqual(dismissed["status"], "DISMISSED")
+        self.assertEqual(dismissed["decision_note"], "暂不处理")
+        with self.assertRaisesRegex(AppApiException, "not pending"):
+            self._service().dismiss(proposal.id, {})
+
+    def test_new_proposal_expires_old_pending(self):
+        first = self._proposal("HOLD")
+        second = self._proposal("ADVANCE")
+        self.assertEqual(HrAgentProposal.objects.get(id=first.id).status, "EXPIRED")
+        self.assertEqual(HrAgentProposal.objects.get(id=second.id).status, "PENDING")
+
+    def test_list_for_application_lazily_expires(self):
+        proposal = self._proposal("ADVANCE")
+        Application.objects.filter(id=self.application["id"]).update(status="REJECTED")
+        records = self._service().list_for_application(self.application["id"])
+        self.assertEqual(records[0]["status"], "EXPIRED")
+        self.assertEqual(HrAgentProposal.objects.get(id=proposal.id).status, "EXPIRED")
+
+
+class AgentTriggerTests(TestCase):
+    """D1 触发点：新建 Application（APPLY/REFERRAL + 开关开启）自动分发"""
+
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.workspace_id = "workspace-trigger"
+        self.recruitment = RecruitmentService(self.workspace_id, self.user_id, hr_role="ADMIN")
+        self.candidate = Candidate.objects.create(name="Alice", workspace_id=self.workspace_id)
+        job_data = self.recruitment.create_job({"name": "Engineer", "headcount": 1})
+        self.job = Job.objects.get(id=job_data["id"])
+
+    def _enable(self, enabled=True):
+        HrConfig.objects.update_or_create(
+            workspace_id=self.workspace_id,
+            defaults={"llm_model_id": "fake", "agent_enable_screening": enabled},
+        )
+
+    def _create(self, relation_type="APPLY"):
+        service = ApplicationService(self.workspace_id, self.user_id, hr_role="ADMIN")
+        return service.create_application(self.job.id, self.candidate.id, {"relation_type": relation_type})
+
+    def test_apply_application_dispatches(self):
+        self._enable()
+        with patch("hr.agents.runner.dispatch_event_screening") as dispatch:
+            application = self._create("APPLY")
+        dispatch.assert_called_once_with(uuid.UUID(application["id"]))
+
+    def test_referral_application_dispatches(self):
+        self._enable()
+        with patch("hr.agents.runner.dispatch_event_screening") as dispatch:
+            application = self._create("REFERRAL")
+        dispatch.assert_called_once_with(uuid.UUID(application["id"]))
+
+    def test_headhunter_application_not_dispatched(self):
+        self._enable()
+        with patch("hr.agents.runner.dispatch_event_screening") as dispatch:
+            self._create("HEADHUNTER")
+        dispatch.assert_not_called()
+
+    def test_disabled_switch_not_dispatched(self):
+        self._enable(enabled=False)
+        with patch("hr.agents.runner.dispatch_event_screening") as dispatch:
+            self._create("APPLY")
+        dispatch.assert_not_called()
+
+
+class AgentApiTests(_HrApiBase):
+    """D1 路由：run / proposals accept|dismiss 与权限"""
+
+    def setUp(self):
+        self.admin = self._user("hr-agent-admin", "HR Agent Admin")
+        self.operator = self._user("hr-agent-operator", "HR Agent Operator")
+        self.viewer = self._user("hr-agent-viewer", "HR Agent Viewer")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.admin.id, role="ADMIN")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.operator.id, role="OPERATOR")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.viewer.id, role="VIEWER")
+        self.service = ApplicationService("workspace-a", self.admin.id, hr_role="ADMIN")
+        recruitment = RecruitmentService("workspace-a", self.admin.id, hr_role="ADMIN")
+        self.candidate = Candidate.objects.create(name="Alice", workspace_id="workspace-a")
+        job_data = recruitment.create_job({"name": "Engineer", "headcount": 1})
+        self.job = Job.objects.get(id=job_data["id"])
+        self.application_id = self.service.create_application(self.job.id, self.candidate.id, {})["id"]
+        HrConfig.objects.update_or_create(
+            workspace_id="workspace-a",
+            defaults={"llm_model_id": "fake", "agent_enable_screening": True},
+        )
+
+    def test_run_requires_operator(self):
+        response = self._client(self.viewer).post(
+            "/admin/api/workspace/workspace-a/hr/agents/SCREENING/run",
+            {"application_id": self.application_id}, content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_run_manual_succeeds(self):
+        facts = {
+            "dimensions": [
+                {"name": "技能匹配", "verdict": "命中", "evidence": [{"relevance": 0.9}], "confidence": 0.9},
+                {"name": "经验相关性", "verdict": "相关", "evidence": [{"relevance": 0.7}], "confidence": 0.9},
+            ],
+            "concerns": [], "clarifying_questions": [],
+        }
+        fake = Mock()
+        fake.invoke.return_value = SimpleNamespace(content=json.dumps(facts))
+        with patch("hr.agents.runner._load_llm", return_value=(fake, "fake-llm")),                 patch("hr.agents.runner.search_resumes", return_value={"items": [], "meta": {}}):
+            response = self._client(self.operator).post(
+                "/admin/api/workspace/workspace-a/hr/agents/SCREENING/run",
+                {"application_id": self.application_id}, content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["data"]["status"], "SUCCEEDED")
+        self.assertEqual(response.json()["data"]["trigger_type"], "MANUAL")
+
+    def test_run_invalid_agent_type(self):
+        response = self._client(self.operator).post(
+            "/admin/api/workspace/workspace-a/hr/agents/JD/run",
+            {"application_id": self.application_id}, content_type="application/json",
+        )
+        self.assertEqual(response.json()["code"], 400)
+
+    def test_proposal_list_and_decision_routes(self):
+        run = HrAgentRun.objects.create(
+            workspace_id="workspace-a", agent_type="SCREENING", trigger_type="MANUAL",
+            ref_object_type="APPLICATION", ref_object_id=self.application_id, status="SUCCEEDED",
+            prompt_version="v", user_id=self.admin.id,
+        )
+        proposal = HrAgentProposal.objects.create(
+            workspace_id="workspace-a", run=run, target_type="APPLICATION",
+            target_id=self.application_id, action="HOLD", status="PENDING",
+            payload_json={"stage_key": "APPLIED"},
+        )
+        response = self._client(self.viewer).get(
+            "/admin/api/workspace/workspace-a/hr/applications/{}/proposals".format(self.application_id)
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()["data"]), 1)
+        response = self._client(self.admin).post(
+            "/admin/api/workspace/workspace-a/hr/proposals/{}/accept".format(proposal.id),
+            {"decision_note": "转人工"}, content_type="application/json",
+        )
+        self.assertEqual(response.json()["data"]["status"], "ACCEPTED")
+        proposal.refresh_from_db()
+        self.assertEqual(proposal.decided_by, self.admin.id)
+        self.assertEqual(proposal.decision_note, "转人工")
+
+    def test_dismiss_route(self):
+        run = HrAgentRun.objects.create(
+            workspace_id="workspace-a", agent_type="SCREENING", trigger_type="MANUAL",
+            ref_object_type="APPLICATION", ref_object_id=self.application_id, status="SUCCEEDED",
+            prompt_version="v", user_id=self.admin.id,
+        )
+        proposal = HrAgentProposal.objects.create(
+            workspace_id="workspace-a", run=run, target_type="APPLICATION",
+            target_id=self.application_id, action="ADVANCE", status="PENDING",
+            payload_json={"stage_key": "APPLIED"},
+        )
+        response = self._client(self.admin).post(
+            "/admin/api/workspace/workspace-a/hr/proposals/{}/dismiss".format(proposal.id),
+            {"decision_note": "忽略"}, content_type="application/json",
+        )
+        self.assertEqual(response.json()["data"]["status"], "DISMISSED")
 
