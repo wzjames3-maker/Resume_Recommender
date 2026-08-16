@@ -1,6 +1,7 @@
-import base64
 import copy
+import ipaddress
 import re
+import socket
 import traceback
 from functools import reduce
 from typing import List, Set
@@ -13,6 +14,37 @@ from markdownify import markdownify
 from common.utils.logger import maxkb_logger
 
 requests.packages.urllib3.disable_warnings()
+
+# SSRF 加固（内核审查 P1-1）：统一请求超时 + 私网/元数据地址黑名单（含重定向跳转）。
+# 注意：DNS 解析为本进程内两次（校验 + requests 自身），存在理论上的 TOCTOU（DNS rebinding）；
+# 对"操作员触发的同步抓取"威胁模型可接受，已注释留档。
+_FORK_TIMEOUT = (5, 20)  # 连接 5s / 读取 20s
+
+
+def _is_private_hostname(url: str) -> bool:
+    """目标 URL 主机解析出的任一 IP 落入私网/回环/链路本地/保留/组播段则拒绝（防内网探测与云元数据）。"""
+    host = urlparse(url).hostname
+    if not host:
+        return True
+    try:
+        infos = socket.getaddrinfo(host, None)
+    except socket.gaierror:
+        return True  # 无法解析视为不可信（防 DNS 悬挂探针）
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+            return True
+    return False
+
+
+class _SafeSession(requests.Session):
+    """每个请求（含重定向跳转，requests 对跳转会再次调用 send）都校验目标地址并施加超时。"""
+
+    def send(self, request, **kwargs):
+        if _is_private_hostname(request.url):
+            raise ValueError(f"blocked non-public address: {request.url}")
+        kwargs.setdefault("timeout", _FORK_TIMEOUT)
+        return super().send(request, **kwargs)
 
 
 class SandboxFetchResponse:
@@ -235,7 +267,7 @@ class Fork:
         import requests
 
         requests.packages.urllib3.disable_warnings()
-        response = requests.get(base_fork_url, verify=False, headers=headers)
+        response = _SafeSession().get(base_fork_url, verify=False, headers=headers)
         return SandboxFetchResponse(
             response.status_code,
             response.content,
