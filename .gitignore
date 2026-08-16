@@ -197,4 +197,6 @@ config.yml
 /数据集/
 /testdata/generated/
 .SANDBOX_BANNED_HOSTS
-copilot-instructions.md
+copilot-instructions.mdapi.txt
+
+api.txt

@@ -187,7 +187,7 @@ def main():
                 last = {"error": f"unexpected: {str(exc)[:200]}"}
                 break
             else:
-                last = result
+                last = result[1]  # _process_one 返回 (name, stats)
                 break
         if last is None:
             last = {"error": "unknown"}
