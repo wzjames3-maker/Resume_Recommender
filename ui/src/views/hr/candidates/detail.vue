@@ -118,6 +118,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import HrApi from '@/api/hr/recruitment'
+import AuthorizationApi from '@/api/system/resource-authorization'
 import type { Candidate, CandidateDetail, ResumeFile } from '@/api/type/hr'
 import {
   assignmentStatusLabels,
@@ -141,15 +142,22 @@ const isHrAdmin = computed(() => user.getHrRole() === 'ADMIN')
 const isHrOperator = computed(() => user.getHrRole() === 'OPERATOR' || user.getHrRole() === 'ADMIN')
 
 const loading = ref(false)
+const members = ref<Array<{ id: string; nick_name: string }>>([])
 const candidate = ref<CandidateDetail | null>(null)
 const resumes = ref<ResumeFile[]>([])
 const resumeLoading = ref(false)
 const contentVisible = ref(false)
 const resumeContent = ref('')
 
-function ownerName(_ownerId: string | null) {
-  // 当前详情页不单独加载成员列表；如需展示负责人可后续接入成员接口
-  return _ownerId || '-'
+function ownerName(ownerId: string | null) {
+  if (!ownerId) return '-'
+  return members.value.find((member) => member.id === ownerId)?.nick_name || ownerId
+}
+
+function loadMembers() {
+  AuthorizationApi.getUserMember(user.getWorkspaceId() || '').then((response) => {
+    members.value = response.data || []
+  }).catch(() => {})
 }
 
 function complianceMissing(candidate: CandidateDetail) {
@@ -254,6 +262,7 @@ function removeResume(resume: ResumeFile) {
 }
 
 onMounted(() => {
+  loadMembers()
   loadDetail()
   loadResumes()
 })

@@ -400,6 +400,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { useRoute } from 'vue-router'
 import { VueDraggable } from 'vue-draggable-plus'
 import AppTable from '@/components/app-table/index.vue'
 import AiSettingDialog from '@/views/hr/components/AiSettingDialog.vue'
@@ -534,6 +535,7 @@ const assignmentEditForm = reactive({
   note: '',
 })
 const { user } = useStore()
+const route = useRoute()
 
 const isRestoreTransition = computed(
   () => statusDialogAssignment.value?.status === 'REJECTED' && statusDialogTarget.value === 'PENDING_SCREEN',
@@ -999,9 +1001,19 @@ function downloadOfferAttachment(offer: Offer) {
   HrApi.downloadOfferAttachment(offer.id, offer.attachment_name || 'offer.pdf')
 }
 
+function openJobFromQuery() {
+  if (route.query.new === '1') {
+    openJobDialog()
+  }
+}
+
 onMounted(() => {
   loadMembers()
   loadJobs()
+  openJobFromQuery()
+})
+watch(() => route.query.new, (isNew) => {
+  if (isNew === '1') openJobDialog()
 })
 </script>
 

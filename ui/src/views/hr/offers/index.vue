@@ -15,7 +15,14 @@
 
     <el-card style="--el-card-padding: 0" v-loading="loading">
       <el-table :data="offers" empty-text="暂无 Offer">
-        <el-table-column prop="candidate_name" label="候选人" min-width="110" />
+        <el-table-column label="候选人" min-width="130">
+          <template #default="{ row }">
+            <el-link v-if="row.candidate_id" type="primary" :underline="false" @click="router.push(`/hr/candidates/${row.candidate_id}`)">
+              {{ row.candidate_name || '-' }}
+            </el-link>
+            <span v-else>{{ row.candidate_name || '-' }}</span>
+          </template>
+        </el-table-column>
         <el-table-column prop="job_name" label="职位" min-width="150" />
         <el-table-column prop="version" label="版本" width="70" />
         <el-table-column label="状态" width="100">
@@ -44,6 +51,7 @@
         </el-table-column>
         <el-table-column label="操作" width="200" fixed="right">
           <template #default="{ row }">
+            <el-button v-if="row.attachment_name" link type="primary" @click="downloadAttachment(row)">附件</el-button>
             <el-button v-if="isHrAdmin && row.status === 'DRAFT'" link type="primary" @click="send(row)">发送</el-button>
             <template v-if="isHrAdmin && row.status === 'SENT'">
               <el-button link type="success" @click="accept(row)">接受</el-button>
@@ -68,6 +76,7 @@
 
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import HrApi from '@/api/hr/recruitment'
 import type { Offer, OfferStatus } from '@/api/type/hr'
 import useStore from '@/stores'
@@ -75,6 +84,7 @@ import { MsgConfirm, MsgSuccess } from '@/utils/message'
 import { offerStatusLabels, offerStatusTag } from '@/views/hr/constants'
 
 const { user } = useStore()
+const router = useRouter()
 const isHrAdmin = computed(() => user.getHrRole() === 'ADMIN')
 
 const loading = ref(false)
@@ -104,6 +114,11 @@ function loadOffers() {
 function refresh() {
   pagination.current_page = 1
   loadOffers()
+}
+
+function downloadAttachment(row: Offer) {
+  if (!row.attachment_name) return
+  HrApi.downloadOfferAttachment(row.id, row.attachment_name)
 }
 
 function send(row: Offer) {

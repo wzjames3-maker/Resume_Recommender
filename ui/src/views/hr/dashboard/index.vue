@@ -12,7 +12,7 @@
         <div class="quick-title">新建候选人</div>
         <div class="quick-desc">录入候选人并完善合规信息</div>
       </el-card>
-      <el-card shadow="never" class="quick-card" @click="router.push('/hr/jobs')">
+      <el-card shadow="never" class="quick-card" @click="router.push('/hr/jobs?new=1')">
         <div class="quick-title">新建职位</div>
         <div class="quick-desc">维护招聘需求与技能要求</div>
       </el-card>
