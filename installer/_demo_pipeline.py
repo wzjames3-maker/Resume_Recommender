@@ -4,10 +4,11 @@ import json
 import math
 import os
 import sys
+import urllib.request
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "apps"))
 
-from hr.services.resume_splitter import sanitize_resume_text, mask_pii, split_resume_text  # noqa: E402
+from hr.services.resume_splitter import sanitize_resume_text, split_resume_text  # noqa: E402
 from openai import OpenAI  # noqa: E402
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -56,9 +57,7 @@ for i, chunk in enumerate(chunks):
     print("  [%d] title=%r (%d字) %s..." % (i + 1, chunk["title"], len(chunk["content"]), chunk["content"][:70].replace("\n", "⏎")))
     if "15004981036" in chunk["content"] or "@" in chunk["content"]:
         print("      ↑ 含 PII，已掩码:", "[已脱敏]" in chunk["content"])
-
 # ---------- 节点 3：向量化 ----------
-import urllib.request
 
 def embed_one(text):
     req = urllib.request.Request(
