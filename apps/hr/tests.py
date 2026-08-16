@@ -3364,6 +3364,56 @@ class CandidateSkillBackfillTests(TestCase):
         self.assertEqual(CandidateSkill.objects.filter(candidate=candidate).count(), 3)  # 幂等
 
 
+class ReindexCommandTests(TestCase):
+    """T6：重嵌/词条命令编排（mock，不跑真实模型）。"""
+
+    def setUp(self):
+        self.workspace_id = "ws-reindex"
+        self.user = User.objects.create(username="re-" + uuid.uuid7().hex[:8], nick_name="r", password="p", role="ADMIN")
+        self.model = Model.objects.create(
+            id=uuid.uuid7(), name="bge-test", status="SUCCESS", model_type="EMBEDDING",
+            model_name="BAAI/bge-large-zh-v1.5", provider="model_openai_provider",
+            credential="{}", meta={}, workspace_id="default",
+        )
+
+    def test_seed_termbase_idempotent(self):
+        from django.core.management import call_command
+
+        from knowledge.models import Knowledge, KnowledgeScope, KnowledgeType, Termbase
+
+        knowledge = Knowledge.objects.create(
+            id=uuid.uuid7(), name="简历语义索引", workspace_id=self.workspace_id,
+            embedding_model_id=self.model.id, user_id=self.user.id,
+            type=KnowledgeType.BASE.value, scope=KnowledgeScope.WORKSPACE.value,
+        )
+        call_command("seed_resume_termbase", "--workspace", self.workspace_id, verbosity=0)
+        count = Termbase.objects.filter(knowledge_id=knowledge.id).count()
+        self.assertGreater(count, 0)
+        self.assertTrue(Termbase.objects.filter(knowledge_id=knowledge.id, content="java").exists())
+        self.assertTrue(Termbase.objects.filter(knowledge_id=knowledge.id, content="k8s").exists())
+        call_command("seed_resume_termbase", "--workspace", self.workspace_id, verbosity=0)
+        self.assertEqual(Termbase.objects.filter(knowledge_id=knowledge.id).count(), count)  # 幂等
+
+    @patch("knowledge.task.embedding.embedding_by_document.delay")
+    def test_reindex_queues_documents(self, mock_delay):
+        from django.core.management import call_command
+
+        from knowledge.models import Document, Knowledge, KnowledgeScope, KnowledgeType
+
+        knowledge = Knowledge.objects.create(
+            id=uuid.uuid7(), name="简历语义索引", workspace_id=self.workspace_id,
+            embedding_model_id=self.model.id, user_id=self.user.id,
+            type=KnowledgeType.BASE.value, scope=KnowledgeScope.WORKSPACE.value,
+        )
+        for i in range(2):
+            Document.objects.create(
+                id=uuid.uuid7(), knowledge_id=knowledge.id, name=f"r{i}.txt",
+                char_length=10, user_id=self.user.id,
+            )
+        call_command("reindex_resume_knowledge", "--workspace", self.workspace_id, verbosity=0)
+        self.assertEqual(mock_delay.call_count, 2)
+
+
 class ResumeIndexTests(TestCase):
     """C 阶段打通：简历知识库 + 入库索引 + 生命周期同步"""
 
