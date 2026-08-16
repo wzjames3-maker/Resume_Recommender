@@ -67,7 +67,6 @@ _RESUME_SCORE_MAX_WEIGHT = 0.7
 _RESUME_SCORE_AVG_WEIGHT = 0.3
 # 结构化预筛上限（T4）：预筛文档集超过该值则放弃预筛转全量语义（避免误伤大库）；可用环境变量覆盖
 _PREFILTER_MAX = _env_int("MAXKB_HR_MAX_PREFILTER", 2000)
-_PREFILTER_MAX = 2000
 # 姓名快速通道（T4）：纯 2-4 字中文查询走 name__icontains 并置顶
 _NAME_RE = re.compile(r"^[\u4e00-\u9fa5]{2,4}$")
 
@@ -432,7 +431,10 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
         or bool(slots["cities"])
         or bool(skill_norms)
     )
-    if mode in ("phrase", "hybrid", "skills") and hard:
+    # skills 模式门控只认硬条件槽位（年限/学历/城市）：技能词恒非空会使 hard 恒真，
+    # 空条件时不应触发全量预筛（避免大库全量 IN 子句与误导性 applied 标记，复审 P3-1）
+    hard_slots = slots["years_min"] is not None or slots["degree_level"] is not None or bool(slots["cities"])
+    if (mode in ("phrase", "hybrid") and hard) or (mode == "skills" and hard_slots):
         q = Q()
         if slots["years_min"] is not None:
             # 年限未知（NULL）纳入但排序靠后（years_unknown 标记），不静默消失（R2）

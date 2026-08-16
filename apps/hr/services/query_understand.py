@@ -49,9 +49,9 @@ def extract_slots(query, city_list=None):
         norm = norm_city(city)
         if norm and norm in semantic:
             cities.append(city)
-            # F7 修复：先替换完整城市串再替换归一形（长度降序处理），
-            # 避免「北京市」先被 norm「北京」替换残留「市」字污染语义词
-            semantic = semantic.replace(city, " ").replace(norm, " ")
+            # F7/F3-2 修复：长度降序处理；先替换「归一形+市」形态，再替换完整城市串、归一形——
+            # 无论 city_list 只有「北京」还是「北京市」，查询「北京市」都不残留「市」字污染语义词
+            semantic = semantic.replace(norm + "市", " ").replace(city, " ").replace(norm, " ")
     semantic = re.sub(r"\s+", " ", semantic).strip()
     return {
         "years_min": years_min,

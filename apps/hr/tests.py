@@ -3321,9 +3321,23 @@ class EnvOverrideTests(SimpleTestCase):
         with mock.patch.dict(os.environ, {"MAXKB_HR_MAX_PREFILTER": "many"}, clear=False):
             self.assertEqual(rs._env_int("MAXKB_HR_MAX_PREFILTER", 2000), 2000)
 
+    def test_module_constants_read_env(self):
+        """F6 复审（P2-A）：模块常量在导入时读取环境变量（reload 级断言，防残留行再次覆盖）。"""
+        import importlib
+        from unittest import mock
+
+        import hr.services.resume_search as rs
+        with mock.patch.dict(os.environ,
+                             {"MAXKB_HR_EVIDENCE_LAMBDA": "0.25", "MAXKB_HR_MAX_PREFILTER": "5000"}, clear=False):
+            rs = importlib.reload(rs)
+            self.assertEqual(rs._EVIDENCE_LAMBDA, 0.25)
+            self.assertEqual(rs._PREFILTER_MAX, 5000)
+        rs = importlib.reload(rs)  # 还原默认环境下的常量，避免影响后续用例
+        self.assertEqual(rs._EVIDENCE_LAMBDA, 0.0)
+        self.assertEqual(rs._PREFILTER_MAX, 2000)
+
 
 class QueryUnderstandTests(SimpleTestCase):
-    """T4：规则槽位抽取（年限/学历/城市/语义词）。"""
     """T4：规则槽位抽取（年限/学历/城市/语义词）。"""
 
     def test_extract_slots_years(self):
@@ -3351,6 +3365,17 @@ class QueryUnderstandTests(SimpleTestCase):
         self.assertEqual(slots["years_min"], 10)
         self.assertEqual(slots["degree_level"], 3)
         self.assertEqual(slots["cities"], ["深圳"])
+        self.assertEqual(slots["semantic_query"], "")
+
+    def test_extract_slots_city_one_sided(self):
+        """F7 复审（P3-2）：city_list 只有「北京」时查询「北京市」不残留「市」字。"""
+        from hr.services.query_understand import extract_slots
+
+        slots = extract_slots("北京市 5年以上", city_list=["北京"])
+        self.assertEqual(slots["cities"], ["北京"])
+        self.assertEqual(slots["semantic_query"], "")
+        slots = extract_slots("北京市 5年以上", city_list=["北京市"])
+        self.assertEqual(slots["cities"], ["北京市"])
         self.assertEqual(slots["semantic_query"], "")
 
 
@@ -4107,6 +4132,20 @@ class ResumeSearchTests(TestCase):
         self.assertEqual(result["meta"]["search_type"], "hybrid_rrf")  # 无 rerank 模型时的模式 A 检索
         self.assertNotEqual(result["meta"]["search_type"], "prefilter_empty")
         self.assertGreaterEqual(len(result["items"]), 1)
+
+    def test_prefilter_candidate_count_dedup(self):
+        """F4 复审（P3-5）：技能维度联表 __in 在无 distinct 时重复计数——断言 distinct 后计数正确。"""
+        from django.db.models import Q, QuerySet
+        from hr.models import Candidate, CandidateSkill, CandidateStatus
+
+        cand, _, _ = self._extra_candidate("双技能", 6, skills=["java", "python"])
+        CandidateSkill.objects.create(candidate=cand, skill_norm="java", skill_raw="java")
+        CandidateSkill.objects.create(candidate=cand, skill_norm="python", skill_raw="python")
+        qs = QuerySet(Candidate).filter(
+            workspace_id=self.workspace_id, status=CandidateStatus.ACTIVE
+        ).filter(Q(skill_rows__skill_norm__in=["java", "python"]))
+        self.assertEqual(len(list(qs.values_list("id", flat=True))), 2)  # 无 distinct 会重复
+        self.assertEqual(len(list(qs.values_list("id", flat=True).distinct())), 1)  # distinct 后 1
 
     def test_prefilter_skipped_over_threshold(self):
         """F7：预筛文档集超过 _PREFILTER_MAX → 放弃预筛转全量语义（meta.prefilter_skipped，不误伤大库）。"""
