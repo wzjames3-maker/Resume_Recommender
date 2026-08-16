@@ -32,6 +32,7 @@ from hr.services.flow_log import delete_flow_logs, log_flow
 from hr.services.resume_index import delete_resume_index, set_resume_index_active
 from hr.services.resume_parser import extract_text_from_docx, extract_text_from_txt
 from hr.services.audit import write_audit_log
+from hr.services.application_service import create_default_stages
 from hr.services.storage import get_storage
 from hr.task.resume import parse_resume_task
 from users.models.user import User
@@ -658,6 +659,7 @@ class RecruitmentService:
             description=self._optional_string(data, "description", 4096),
             skill_requirements=self._skill_requirements(data),
         )
+        create_default_stages(self.workspace_id, job, self.user_id)
         write_audit_log(self.workspace_id, self.user_id, "CREATE", "JOB", job.id)
         return self._job_output(job)
 

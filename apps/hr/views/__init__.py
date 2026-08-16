@@ -28,6 +28,15 @@ from .offer_views import (
     OfferDetailAPI,
     OfferListAPI,
 )
+from .application_views import (
+    ApplicationEventAPI,
+    ApplicationListAPI,
+    ApplicationMoveStageAPI,
+    ApplicationPageAPI,
+    ApplicationRestoreAPI,
+    ApplicationTerminalAPI,
+    JobStageListAPI,
+)
 
 __all__ = [
     "AssignmentAPI",
@@ -62,4 +71,11 @@ __all__ = [
     "OfferListAPI",
     "CandidateImportAPI",
     "CandidateImportTemplateAPI",
+    "ApplicationEventAPI",
+    "ApplicationListAPI",
+    "ApplicationMoveStageAPI",
+    "ApplicationPageAPI",
+    "ApplicationRestoreAPI",
+    "ApplicationTerminalAPI",
+    "JobStageListAPI",
 ]

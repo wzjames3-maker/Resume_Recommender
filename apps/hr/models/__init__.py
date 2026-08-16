@@ -1,5 +1,10 @@
 from .recruitment import (
     ACTIVE_ASSIGNMENT_STATUSES,
+    Application,
+    ApplicationEvent,
+    ApplicationEventType,
+    ApplicationStatus,
+    JobStage,
     AssignmentStatus,
     Candidate,
     CandidateAssignment,
@@ -35,7 +40,12 @@ from .recruitment import (
 
 __all__ = [
     "ACTIVE_ASSIGNMENT_STATUSES",
+    "Application",
+    "ApplicationEvent",
+    "ApplicationEventType",
+    "ApplicationStatus",
     "AssignmentStatus",
+    "JobStage",
     "Candidate",
     "CandidateAssignment",
     "CandidateSkill",

@@ -447,3 +447,104 @@ class HrAuditLog(models.Model):
 
     class Meta:
         db_table = "hr_audit_log"
+
+
+class ApplicationStatus(models.TextChoices):
+    ACTIVE = "ACTIVE", "Active"
+    HIRED = "HIRED", "Hired"
+    REJECTED = "REJECTED", "Rejected"
+    WITHDRAWN = "WITHDRAWN", "Withdrawn"
+    CLOSED = "CLOSED", "Closed"
+
+
+class ApplicationEventType(models.TextChoices):
+    CREATED = "CREATED", "Created"
+    STAGE_MOVED = "STAGE_MOVED", "Stage moved"
+    HIRED = "HIRED", "Hired"
+    REJECTED = "REJECTED", "Rejected"
+    WITHDRAWN = "WITHDRAWN", "Withdrawn"
+    CLOSED = "CLOSED", "Closed"
+    RESTORED = "RESTORED", "Restored"
+
+
+class JobStage(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
+    workspace_id = models.CharField(max_length=64, db_index=True)
+    job = models.ForeignKey(Job, on_delete=models.CASCADE, related_name="stages")
+    key = models.CharField(max_length=32)
+    name = models.CharField(max_length=64)
+    color = models.CharField(max_length=16, blank=True, default="")
+    order = models.PositiveSmallIntegerField()
+    is_system = models.BooleanField(default=False)
+    user_id = models.UUIDField(null=True, blank=True)
+    create_time = models.DateTimeField(auto_now_add=True)
+    update_time = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "hr_job_stage"
+        constraints = [
+            models.UniqueConstraint(fields=["job", "order"], name="hr_job_stage_job_order_uniq"),
+            models.UniqueConstraint(fields=["job", "key"], name="hr_job_stage_job_key_uniq"),
+            models.UniqueConstraint(fields=["job", "name"], name="hr_job_stage_job_name_uniq"),
+        ]
+
+
+class Application(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
+    workspace_id = models.CharField(max_length=64, db_index=True)
+    candidate = models.ForeignKey(Candidate, on_delete=models.PROTECT, related_name="applications")
+    job = models.ForeignKey(Job, on_delete=models.PROTECT, related_name="applications")
+    current_stage = models.ForeignKey(JobStage, on_delete=models.PROTECT, null=True, blank=True)
+    status = models.CharField(max_length=16, choices=ApplicationStatus.choices, default=ApplicationStatus.ACTIVE)
+    relation_type = models.CharField(max_length=16, choices=RelationType.choices, default=RelationType.APPLY)
+    channel = models.CharField(max_length=20, choices=ResumeChannel.choices, default=ResumeChannel.OTHER)
+    channel_detail = models.CharField(max_length=128, blank=True, default="")
+    applied_at = models.DateTimeField(default=timezone.now)
+    owner_id = models.UUIDField(null=True, blank=True)
+    recruiter_id = models.UUIDField(null=True, blank=True)
+    termination_reason = models.CharField(max_length=20, choices=TerminationReason.choices, null=True, blank=True)
+    terminated_at = models.DateTimeField(null=True, blank=True)
+    reapply_of = models.ForeignKey("self", on_delete=models.SET_NULL, null=True, blank=True)
+    reapply_no = models.PositiveSmallIntegerField(default=0)
+    rehire_confirmed = models.BooleanField(default=False)
+    rehire_reason = models.TextField(blank=True, default="")
+    note = models.TextField(blank=True, default="")
+    user_id = models.UUIDField(null=True, blank=True)
+    create_time = models.DateTimeField(auto_now_add=True)
+    update_time = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "hr_application"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace_id", "candidate", "job"],
+                condition=Q(status=ApplicationStatus.ACTIVE),
+                name="hr_application_one_active_per_candidate_job",
+            )
+        ]
+
+
+class ApplicationEvent(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
+    workspace_id = models.CharField(max_length=64, db_index=True)
+    application = models.ForeignKey(Application, on_delete=models.CASCADE, related_name="events")
+    event_type = models.CharField(max_length=32, choices=ApplicationEventType.choices)
+    from_stage = models.ForeignKey(JobStage, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    to_stage = models.ForeignKey(JobStage, on_delete=models.SET_NULL, null=True, blank=True, related_name="+")
+    from_status = models.CharField(max_length=16, blank=True, default="")
+    to_status = models.CharField(max_length=16, blank=True, default="")
+    actor_id = models.UUIDField(null=True, blank=True)
+    reason_code = models.CharField(max_length=32, blank=True, default="")
+    reason_text = models.TextField(blank=True, default="")
+    idempotency_key = models.CharField(max_length=128, blank=True, default="")
+    trace_id = models.CharField(max_length=64, blank=True, default="")
+    create_time = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "hr_application_event"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace_id", "application", "event_type", "idempotency_key"],
+                name="hr_application_event_idempotency_uniq",
+            )
+        ]

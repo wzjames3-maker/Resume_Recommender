@@ -19,6 +19,9 @@ from django.db.models import Value
 from unittest.mock import Mock
 
 from hr.models import (
+    ApplicationEvent,
+    ApplicationStatus,
+    JobStage,
     AssignmentStatus,
     Candidate,
     CandidateAssignment,
@@ -41,6 +44,7 @@ from hr.serializers.offer import OfferService, OnboardingService
 from hr.serializers.recruitment import CANDIDATE_EXPORT_FIELDS, RecruitmentService
 from hr.services.ai_parser import extract_skills, parse_search_conditions
 from hr.services.resume_index import delete_resume_index, get_or_create_resume_knowledge, index_resume, set_resume_index_active
+from hr.services.application_service import ApplicationService
 from knowledge.models import Document, Embedding, Knowledge, KnowledgeFolder, KnowledgeScope, KnowledgeType, Paragraph
 from models_provider.models import Model
 from hr.services.resume_parser import parse_resume_text
@@ -4717,3 +4721,77 @@ class ResumeSearchTests(TestCase):
         self.assertEqual(result["items"][0]["score"]["hit_vec"], [1, 1])  # java 语义 + python 结构化
         self.assertEqual(len(result["items"][0]["paragraphs"]), 1)  # 段落不重复
 
+
+
+class ApplicationV2Tests(TestCase):
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.workspace_id = "workspace-a"
+        self.recruitment = RecruitmentService(
+            workspace_id=self.workspace_id,
+            user_id=self.user_id,
+            hr_role="ADMIN",
+        )
+        self.candidate = Candidate.objects.create(name="Alice", workspace_id=self.workspace_id)
+        job_data = self.recruitment.create_job({
+            "name": "Python Engineer",
+            "department": "Engineering",
+            "headcount": 1,
+        })
+        self.job = Job.objects.get(id=job_data["id"])
+        self.service = ApplicationService(
+            workspace_id=self.workspace_id,
+            user_id=self.user_id,
+            hr_role="ADMIN",
+        )
+
+    def _stages(self):
+        return list(JobStage.objects.filter(job=self.job).order_by("order"))
+
+    def test_create_job_creates_default_stages(self):
+        stages = self._stages()
+        self.assertEqual([s.key for s in stages], ["APPLIED", "SCREEN", "INTERVIEW", "OFFER"])
+
+    def test_create_application_and_move_forward(self):
+        app = self.service.create_application(self.job.id, self.candidate.id, {})
+        self.assertEqual(app["status"], ApplicationStatus.ACTIVE)
+        first = self._stages()[0]
+        self.assertEqual(app["current_stage"]["key"], first.key)
+        second = self._stages()[1]
+        moved = self.service.move_stage(app["id"], second.id, {"reason_text": "pass"})
+        self.assertEqual(moved["current_stage"]["key"], second.key)
+        self.assertEqual(ApplicationEvent.objects.filter(application_id=app["id"]).count(), 2)
+
+    def test_cannot_create_second_active_application(self):
+        self.service.create_application(self.job.id, self.candidate.id, {})
+        with self.assertRaisesRegex(AppApiException, "active application"):
+            self.service.create_application(self.job.id, self.candidate.id, {})
+
+    def test_backward_move_requires_admin_or_owner(self):
+        first = self._stages()[0]
+        second = self._stages()[1]
+        app = self.service.create_application(self.job.id, self.candidate.id, {})
+        self.service.move_stage(app["id"], second.id, {"reason_text": "forward"})
+        operator_service = ApplicationService(
+            workspace_id=self.workspace_id,
+            user_id=uuid.uuid7(),
+            hr_role="OPERATOR",
+        )
+        with self.assertRaises(AppUnauthorizedFailed):
+            operator_service.move_stage(app["id"], first.id, {"reason_text": "back"})
+
+    def test_reject_requires_allowed_reason(self):
+        app = self.service.create_application(self.job.id, self.candidate.id, {})
+        with self.assertRaisesRegex(AppApiException, "not allowed"):
+            self.service.reject_application(app["id"], {"termination_reason": "JOB_CLOSED"})
+        rejected = self.service.reject_application(
+            app["id"], {"termination_reason": "NOT_FIT", "reason_text": "not fit"}
+        )
+        self.assertEqual(rejected["status"], "REJECTED")
+
+    def test_restore_rejected_by_admin(self):
+        app = self.service.create_application(self.job.id, self.candidate.id, {})
+        self.service.reject_application(app["id"], {"termination_reason": "NOT_FIT"})
+        restored = self.service.restore_application(app["id"], {"reason_text": "restore"})
+        self.assertEqual(restored["status"], "ACTIVE")
+        self.assertIsNone(restored["termination_reason"])

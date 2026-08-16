@@ -54,5 +54,12 @@ urlpatterns = [
     path("workspace/<str:workspace_id>/hr/import/candidates", views.CandidateImportAPI.as_view()),
     path("workspace/<str:workspace_id>/hr/access", views.HrAccessAPI.as_view()),
     path("workspace/<str:workspace_id>/hr/access/me", views.HrAccessMeAPI.as_view()),
+    path("workspace/<str:workspace_id>/hr/jobs/<str:job_id>/stages", views.JobStageListAPI.as_view()),
+    path("workspace/<str:workspace_id>/hr/applications", views.ApplicationListAPI.as_view()),
+    path("workspace/<str:workspace_id>/hr/applications/page/<int:current_page>/<int:page_size>", views.ApplicationPageAPI.as_view()),
+    path("workspace/<str:workspace_id>/hr/applications/<str:application_id>/move-stage", views.ApplicationMoveStageAPI.as_view()),
+    path("workspace/<str:workspace_id>/hr/applications/<str:application_id>/terminal", views.ApplicationTerminalAPI.as_view()),
+    path("workspace/<str:workspace_id>/hr/applications/<str:application_id>/restore", views.ApplicationRestoreAPI.as_view()),
+    path("workspace/<str:workspace_id>/hr/applications/<str:application_id>/events", views.ApplicationEventAPI.as_view()),
     path("workspace/<str:workspace_id>/hr/audit-logs", views.HrAuditLogAPI.as_view()),
 ]
