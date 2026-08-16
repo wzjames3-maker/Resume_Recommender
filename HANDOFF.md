@@ -160,6 +160,8 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 
 **运行要点**：web `python main.py dev`；celery `PATH=.venv/bin:$PATH MAXKB_WORKER_TMP=/tmp/maxkb-worker python main.py dev celery`；冒烟 `RUN_REAL_MODEL=1 REAL_MODEL_STAGE=1 SENSENOVA_API_KEY=... SILICONFLOW_API_KEY=... python installer/real_model_smoke.py`；检索冒烟/评测 `SENSENOVA_API_KEY=... python installer/resume_search_smoke.py`、`python installer/resume_search_eval.py`（语料入库 `python installer/resume_ingest_30.py`，幂等）。冒烟用户 `smoke-admin`（ADMIN 角色，密码 Smoke@123，仅本机）；模型/知识库/应用 API 只认 `default` 工作区（HR 模块才用自定义 workspace + HrAccess）。
 
+**前端闭环（2026-08-16）**：新增独立菜单 `/hr/search` 简历语义检索页；AI 设置支持 Rerank 模型；候选人简历弹窗支持索引状态、流转日志、删除；审计日志标签补齐 SEARCH/OFFER/HANDOFF/IMPORT/MERGE；`vue-tsc`、admin/chat 双构建通过。
+
 ## 5.4 已修复的核心层 bug（2026-08-15，冒烟暴露）
 
 - `to_application_knowledge_mapping`/`reset_application_version` 缺 self → 应用创建/发布必 500，已 @staticmethod 修复（96afbd0）
