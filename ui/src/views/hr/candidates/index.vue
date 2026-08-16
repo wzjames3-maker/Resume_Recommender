@@ -8,6 +8,7 @@
       <el-button v-if="isHrOperator" type="primary" @click="openCandidateDialog()">新建候选人</el-button>
       <el-button v-if="isHrOperator" type="primary" plain @click="openResumeUpload()">上传简历</el-button>
       <el-button v-if="isHrAdmin" plain @click="aiSettingVisible = true">AI 设置</el-button>
+      <el-button plain @click="router.push('/hr/search')">语义检索</el-button>
       <el-button v-if="isHrAdmin" plain :loading="exporting" @click="exportCandidates">导出</el-button>
       <el-button v-if="isHrAdmin" plain @click="importDialogVisible = true">批量导入</el-button>
       <input ref="resumeInputRef" type="file" multiple accept=".docx,.txt" class="hidden-input" @change="handleResumeFiles" />
@@ -264,13 +265,21 @@
             </el-tag>
           </template>
         </el-table-column>
+        <el-table-column label="索引" width="80">
+          <template #default="{ row }">
+            <el-tag v-if="row.document_id" type="success" size="small">已索引</el-tag>
+            <el-tag v-else type="info" size="small">未索引</el-tag>
+          </template>
+        </el-table-column>
         <el-table-column prop="create_time" label="上传时间" min-width="150">
           <template #default="{ row }">{{ new Date(row.create_time).toLocaleString() }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="130">
+        <el-table-column label="操作" width="270">
           <template #default="{ row }">
             <el-button v-if="isHrOperator" link type="primary" size="small" :disabled="row.status !== 'SUCCESS'" @click="viewResumeContent(row)">查看</el-button>
             <el-button v-if="isHrOperator" link type="primary" size="small" @click="downloadResumeFile(row)">下载</el-button>
+            <el-button v-if="isHrOperator" link type="primary" size="small" @click="openFlowLogs(row)">流转日志</el-button>
+            <el-button v-if="isHrAdmin" link type="danger" size="small" @click="removeResume(row)">删除</el-button>
           </template>
         </el-table-column>
       </el-table>
@@ -279,6 +288,43 @@
 
     <el-dialog v-model="resumeContentVisible" title="简历原文" width="640px">
       <pre class="resume-content">{{ resumeContent }}</pre>
+    </el-dialog>
+
+    <el-dialog v-model="flowLogVisible" title="简历流转日志" width="860px">
+      <div v-loading="flowLogLoading" class="flow-log-wrapper">
+      <el-alert
+        v-if="!flowLogLoading && flowLogs.length === 0"
+        title="暂无流转日志"
+        type="info"
+        :closable="false"
+        class="mb-16"
+      />
+      <el-table v-else :data="flowLogs" size="small" max-height="480">
+        <el-table-column label="节点" width="110">
+          <template #default="{ row }">
+            <el-tag :type="row.status === 'SUCCESS' ? 'success' : 'danger'" size="small">{{ flowLogNodeLabels[row.node] || row.node }}</el-tag>
+          </template>
+        </el-table-column>
+        <el-table-column label="状态" width="80">
+          <template #default="{ row }">{{ row.status === 'SUCCESS' ? '成功' : '失败' }}</template>
+        </el-table-column>
+        <el-table-column prop="create_time" label="时间" width="170">
+          <template #default="{ row }">{{ new Date(row.create_time).toLocaleString() }}</template>
+        </el-table-column>
+        <el-table-column prop="document_id" label="文档 ID" min-width="150" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.document_id || '-' }}</template>
+        </el-table-column>
+        <el-table-column label="详情" min-width="220">
+          <template #default="{ row }">
+            <pre class="flow-log-detail">{{ formatFlowLogDetail(row.detail) }}</pre>
+          </template>
+        </el-table-column>
+        <el-table-column label="错误" min-width="160" show-overflow-tooltip>
+          <template #default="{ row }">{{ row.error_message || '-' }}</template>
+        </el-table-column>
+      </el-table>
+      </div>
+      <template #footer><el-button @click="flowLogVisible = false">关闭</el-button></template>
     </el-dialog>
 
     <el-dialog v-model="mergeDialogVisible" title="合并候选人" width="480px">
@@ -300,12 +346,13 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import AppTable from '@/components/app-table/index.vue'
 import AiSettingDialog from '@/views/hr/components/AiSettingDialog.vue'
 import HrApi from '@/api/hr/recruitment'
 import AuthorizationApi from '@/api/system/resource-authorization'
 import type { UploadFile } from 'element-plus'
-import type { Candidate, CandidateDetail, ConsentStatus, ContactPreference, ImportReport, Job, RelationType, ResumeChannel, ResumeFile, ResumeUploadResult } from '@/api/type/hr'
+import type { Candidate, CandidateDetail, ConsentStatus, ContactPreference, ImportReport, Job, RelationType, ResumeChannel, ResumeFile, ResumeFlowLog, ResumeUploadResult } from '@/api/type/hr'
 import useStore from '@/stores'
 import { MsgConfirm, MsgError, MsgSuccess } from '@/utils/message'
 
@@ -385,6 +432,8 @@ const assignmentChannel = ref<ResumeChannel>('OTHER')
 const assignmentOwnerId = ref<string | null>(null)
 const skillsText = ref('')
 const { user } = useStore()
+const route = useRoute()
+const router = useRouter()
 const isHrAdmin = computed(() => user.getHrRole() === 'ADMIN')
 const isHrOperator = computed(() => user.getHrRole() === 'OPERATOR' || user.getHrRole() === 'ADMIN')
 const candidateForm = reactive({
@@ -687,6 +736,17 @@ const resumeListVisible = ref(false)
 const candidateResumes = ref<ResumeFile[]>([])
 const resumeContentVisible = ref(false)
 const resumeContent = ref('')
+const flowLogVisible = ref(false)
+const flowLogLoading = ref(false)
+const flowLogs = ref<ResumeFlowLog[]>([])
+const flowLogNodeLabels: Record<string, string> = {
+  UPLOAD: '上传',
+  EXTRACT: '提取',
+  SANITIZE: '清洗',
+  SPLIT: '切片',
+  DOCUMENT: '建索引',
+  LIFECYCLE: '生命周期',
+}
 const mergingCandidate = ref<Candidate | null>(null)
 const mergeDialogVisible = ref(false)
 const mergeTargetId = ref('')
@@ -710,6 +770,50 @@ function viewResumeContent(resume: ResumeFile) {
 
 function downloadResumeFile(resume: ResumeFile) {
   HrApi.downloadResume(resume.id, resume.file_name)
+}
+
+function removeResume(resume: ResumeFile) {
+  MsgConfirm(
+    '删除简历',
+    `确认删除简历「${resume.file_name}」？该操作会同时删除语义索引与流转日志，不可恢复。`,
+    { confirmButtonClass: 'danger' },
+  )
+    .then(() => HrApi.deleteResume(resume.id))
+    .then(() => {
+      MsgSuccess('简历已删除')
+      if (candidateResumes.value.length) {
+        const candidateId = candidateResumes.value[0]?.candidate_id
+        if (candidateId) {
+          HrApi.getCandidateResumes(candidateId).then((response) => {
+            candidateResumes.value = response.data
+          })
+        }
+      }
+      refresh()
+    })
+    .catch(() => {})
+}
+
+function openFlowLogs(resume: ResumeFile) {
+  flowLogs.value = []
+  flowLogLoading.value = true
+  flowLogVisible.value = true
+  HrApi.getResumeFlowLogs(resume.id)
+    .then((response) => {
+      flowLogs.value = response.data
+    })
+    .catch(() => MsgError('加载流转日志失败'))
+    .finally(() => {
+      flowLogLoading.value = false
+    })
+}
+
+function formatFlowLogDetail(detail: Record<string, unknown>) {
+  try {
+    return JSON.stringify(detail, null, 2)
+  } catch {
+    return String(detail)
+  }
 }
 
 function openMergeDialog(candidate: Candidate) {
@@ -736,9 +840,22 @@ function confirmMerge() {
     })
 }
 
+function openCandidateFromQuery() {
+  const candidateId = route.query.candidate_id
+  if (typeof candidateId === 'string' && candidateId) {
+    openCandidateDetail({ id: candidateId } as Candidate)
+  }
+}
+
 onMounted(() => {
   loadMembers()
   loadCandidates()
+  openCandidateFromQuery()
+})
+watch(() => route.query.candidate_id, (candidateId) => {
+  if (typeof candidateId === 'string' && candidateId) {
+    openCandidateDetail({ id: candidateId } as Candidate)
+  }
 })
 watch(uploadDialogVisible, (visible) => {
   if (!visible) stopResumePolling()
@@ -758,5 +875,16 @@ onUnmounted(stopResumePolling)
   max-height: 480px;
   overflow-y: auto;
   margin: 0;
+}
+.flow-log-wrapper {
+  min-height: 120px;
+}
+.flow-log-detail {
+  white-space: pre-wrap;
+  word-break: break-all;
+  margin: 0;
+  max-height: 120px;
+  overflow-y: auto;
+  font-size: 12px;
 }
 </style>

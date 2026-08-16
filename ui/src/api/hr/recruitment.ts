@@ -25,6 +25,9 @@ import type {
   PageResult,
   ResumeBatchStatus,
   ResumeFile,
+  ResumeFlowLog,
+  ResumeSearchMode,
+  ResumeSearchResponse,
   ResumeUploadResult,
 } from '@/api/type/hr'
 import type { pageRequest } from '@/api/type/common'
@@ -191,6 +194,18 @@ const getResumeBatchStatus = (ids: string[]) =>
 const getResumeContent = (resumeId: string) =>
   get(`${prefix.value}/resumes/${resumeId}/content`) as Promise<Result<{ content: string }>>
 
+const getResumeFlowLogs = (resumeId: string) =>
+  get(`${prefix.value}/resumes/${resumeId}/flow-logs`) as Promise<Result<ResumeFlowLog[]>>
+
+const searchResumes = (data: {
+  query: string
+  top_k?: number
+  recall_k?: number
+  similarity?: number
+  mode?: ResumeSearchMode
+}) =>
+  post(`${prefix.value}/resumes/search`, data) as Promise<Result<ResumeSearchResponse>>
+
 const downloadResume = (resumeId: string, fileName: string) =>
   exportFile(fileName, `${prefix.value}/resumes/${resumeId}/download`, {}, undefined)
 
@@ -255,7 +270,9 @@ export default {
   getOffers,
   getResumeBatchStatus,
   getResumeContent,
+  getResumeFlowLogs,
   mergeCandidates,
+  searchResumes,
   parseSearch,
   putAiConfig,
   putHandoffConfig,

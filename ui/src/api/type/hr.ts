@@ -212,6 +212,7 @@ export interface ResumeFile {
   source_channel: ResumeChannel
   status: ResumeStatus
   error_message: string
+  document_id: string | null
   candidate_id: string | null
   create_time: string
   update_time: string
@@ -224,11 +225,93 @@ export interface ResumeUploadResult {
   sha256: string
   duplicate: boolean
   candidate_id: string | null
+  document_id: string | null
   error_message: string
 }
 
 export interface HrConfig {
   llm_model_id: string | null
+  rerank_model_id: string | null
+}
+
+export type ResumeSearchMode = 'auto' | 'hybrid' | 'dense' | 'phrase' | 'skills'
+
+export interface ResumeSearchCandidate {
+  id: string
+  name: string
+  phone: string
+  email: string | null
+  highest_degree: string
+  years_experience: number | null
+  years_unknown?: boolean
+  skills: string[]
+  status: string
+}
+
+export interface ResumeSearchResume {
+  id: string
+  file_name: string
+  extension: string
+}
+
+export interface ResumeSearchParagraph {
+  id: string
+  title: string
+  content: string
+  score: number
+}
+
+export interface ResumeSearchScore {
+  resume?: number
+  rerank?: number
+  rrf?: number
+  dense?: number
+  sparse?: number
+  hit_vec?: number[]
+  hit_count?: number
+  name_match?: boolean
+  structured?: boolean
+}
+
+export interface ResumeSearchItem {
+  rank: number
+  candidate: ResumeSearchCandidate | null
+  resume: ResumeSearchResume | null
+  score: ResumeSearchScore
+  paragraphs: ResumeSearchParagraph[]
+  document_id: string | null
+}
+
+export interface ResumeSearchMeta {
+  mode: ResumeSearchMode
+  search_type: string
+  skills?: string[]
+  skills_truncated?: boolean
+  slots?: Record<string, unknown>
+  prefilter?: Record<string, unknown>
+  recall?: Record<string, unknown>
+  rerank?: Record<string, unknown>
+  aggregation?: Record<string, unknown>
+  elapsed_ms?: Record<string, number>
+  query?: { length: number; truncated: boolean }
+  name_matched?: number
+}
+
+export interface ResumeSearchResponse {
+  items: ResumeSearchItem[]
+  meta: ResumeSearchMeta
+}
+
+export type ResumeFlowLogNode = 'UPLOAD' | 'EXTRACT' | 'SANITIZE' | 'SPLIT' | 'DOCUMENT' | 'LIFECYCLE'
+
+export interface ResumeFlowLog {
+  id: string
+  node: string
+  status: 'SUCCESS' | 'FAILED'
+  detail: Record<string, unknown>
+  error_message: string
+  document_id: string | null
+  create_time: string
 }
 
 export interface ResumeBatchStatus {
@@ -236,6 +319,7 @@ export interface ResumeBatchStatus {
   file_name: string
   status: 'PENDING' | 'SUCCESS' | 'FAILED'
   candidate_id: string | null
+  document_id: string | null
   error_message: string
 }
 
@@ -282,6 +366,15 @@ export type HrAuditAction =
   | 'GRANT_ACCESS'
   | 'REVOKE_ACCESS'
   | 'EXPORT'
+  | 'INTERVIEW_FEEDBACK'
+  | 'OFFER_SEND'
+  | 'OFFER_ACCEPT'
+  | 'OFFER_REJECT'
+  | 'OFFER_WITHDRAW'
+  | 'OFFER_APPROVE'
+  | 'HANDOFF'
+  | 'IMPORT'
+  | 'SEARCH'
   | 'ACCESS_DENIED'
 
 export type HrAuditObjectType = 'CANDIDATE' | 'JOB' | 'ASSIGNMENT' | 'RESUME' | 'HR_ACCESS' | 'OTHER'
@@ -299,7 +392,7 @@ export interface HrAuditLog {
   create_time: string
 }
 
-export interface HrAuditLogPage extends PageResult<HrAuditLog> {}
+export type HrAuditLogPage = PageResult<HrAuditLog>
 
 export interface HrAccessSetItem {
   user_id: string
