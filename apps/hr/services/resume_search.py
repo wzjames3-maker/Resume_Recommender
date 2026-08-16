@@ -426,6 +426,7 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
             .filter(workspace_id=workspace_id, status=CandidateStatus.ACTIVE)
             .filter(q)
             .values_list("id", flat=True)
+            .distinct()  # F4：技能维度联表 __in 可能产生重复行（防御性，当前路径最多 1 个技能词）
         )
         meta["prefilter"]["candidate_count"] = len(candidate_ids)
         doc_ids = []
@@ -573,6 +574,8 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
             if len(items) >= top_k:
                 break
         items = name_hits + items[: max(0, top_k - len(name_hits))]
+        for i, item in enumerate(items, 1):
+            item["rank"] = i  # F5：姓名置顶后统一重排 rank
         meta["search_type"] = "structured_only"
         meta["name_matched"] = len(name_hits)
         meta["aggregation"] = {"grouped_resumes": len(items)}
@@ -652,6 +655,8 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
         seen_candidates = {item["candidate"]["id"] for item in items if item["candidate"]}
         prepend = [h for h in name_hits if h["candidate"] and h["candidate"]["id"] not in seen_candidates]
         items = prepend + items[: max(0, top_k - len(prepend))]
+        for i, item in enumerate(items, 1):
+            item["rank"] = i  # F5：姓名置顶后统一重排 rank
         meta["name_matched"] = len(prepend)
     meta["elapsed_ms"]["total"] = int((time.time() - t0) * 1000)
     _write_search_audit(workspace_id, user_id, query, top_k, meta, len(items))

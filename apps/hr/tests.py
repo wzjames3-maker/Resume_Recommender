@@ -4097,6 +4097,23 @@ class ResumeSearchTests(TestCase):
         self.assertGreaterEqual(len(result["items"]), 1)
         self.assertTrue(result["items"][0]["score"].get("name_match"))
 
+    def test_name_fast_path_rank_contiguous(self):
+        """F5：姓名命中置顶后所有项 rank 连续 1..n（此前置顶项无 rank、原 rank 错位）。"""
+        from hr.services.resume_search import search_resumes
+        paragraph = self._paragraph("Java 后端")
+        self._embedding(paragraph)
+        self._extra_candidate("李冠光", 5)  # 同名的另一候选人（无语义命中，仅姓名通道）
+        with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()), \
+                patch("hr.services.resume_search.EmbeddingSearch") as m_emb, \
+                patch("hr.services.resume_search.KeywordsSearch") as m_key:
+            m_emb.return_value.handle.return_value = [{"paragraph_id": str(paragraph.id), "similarity": 0.9}]
+            m_key.return_value.handle.return_value = []
+            result = search_resumes(self.workspace_id, "李冠光", mode="phrase",
+                                    hr_role="ADMIN", user_id=self.user.id)
+        self.assertGreaterEqual(len(result["items"]), 1)
+        ranks = [item.get("rank") for item in result["items"]]
+        self.assertEqual(ranks, list(range(1, len(ranks) + 1)))  # 连续 1..n
+        self.assertEqual(result["items"][0]["rank"], 1)
     def test_empty_result(self):
         from hr.services.resume_search import search_resumes
         with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()), \
