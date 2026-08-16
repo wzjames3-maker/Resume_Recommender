@@ -206,6 +206,9 @@ def split_resume_text(text, chat_fn, max_retries=1, stats=None):
     text = sanitize_resume_text(text)
     if len(text) < _MIN_TEXT_LENGTH:
         raise ValueError("提取文本过短，无法切片")
+    # PII 掩码前置（T1）：先于任何 LLM 调用。掩码均为行内替换、不含换行，行数不变，
+    # 行号边界协议不受影响；保真语义 = 相对掩码后原文保真（scan_residual_pii 仍作入库 backstop）。
+    text = mask_pii(text)
     lines = text.split("\n")
     numbered_text = "\n".join(f"{index + 1}  {line}" for index, line in enumerate(lines))
     prompt = _PROMPT_TEMPLATE.format(numbered_text=numbered_text)
@@ -220,7 +223,7 @@ def split_resume_text(text, chat_fn, max_retries=1, stats=None):
                 if stats is not None:
                     stats["path"] = "llm"
                     stats["llm_calls"] = llm_calls
-                return [{**row, "content": mask_pii(row["content"])} for row in _resolve(chunks, lines)]
+                return _resolve(chunks, lines)
         except Exception as exc:
             last_error = exc
     for fallback in (split_resume_rules(lines),):
@@ -228,12 +231,12 @@ def split_resume_text(text, chat_fn, max_retries=1, stats=None):
             if stats is not None:
                 stats["path"] = "rules"
                 stats["llm_calls"] = llm_calls
-            return [{**row, "content": mask_pii(row["content"])} for row in _resolve(fallback, lines)]
+            return _resolve(fallback, lines)
     # smart 兜底：按字符切分（不依赖行号，拼接==原文由 smart_split_paragraph 性质保证）
     smart = _smart_fallback(lines)
     if smart:
         if stats is not None:
             stats["path"] = "smart"
             stats["llm_calls"] = llm_calls
-        return [{"title": row["title"], "content": mask_pii(row["content"])} for row in smart]
+        return smart
     raise ValueError(f"简历切片失败: {last_error}")

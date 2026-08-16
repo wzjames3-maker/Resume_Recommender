@@ -3161,6 +3161,28 @@ class ResumeSplitterTests(SimpleTestCase):
         # 带分隔符的手机号变体
         self.assertNotIn("138 1234 5678", mask_pii("电话：138 1234 5678"))
 
+    def test_mask_front_preserves_line_count(self):
+        """T1：掩码前置后行数不变 → LLM 行号边界协议不受影响；内容已掩码、不依赖返回点后处理。"""
+        from hr.services.resume_splitter import split_resume_text
+
+        text = "姓名：李冠光\n电话：13812345678\n邮箱：a@b.com\n\n【教育经历】\n- 院校：北京师范大学"
+        payload = (
+            '{"chunks": ['
+            '{"title": "基本信息", "start_line": 1, "end_line": 3},'
+            '{"title": "教育经历-北京师范大学", "start_line": 5, "end_line": 6}'
+            "]}"
+        )
+        result = split_resume_text(text, self._stub(payload))
+        self.assertEqual(len(result), 2)
+        joined = "\n".join(row["content"] for row in result)
+        # 非空行数与原文一致（掩码不改变行结构）
+        self.assertEqual(len([l for l in joined.split("\n") if l.strip()]),
+                         len([l for l in text.split("\n") if l.strip()]))
+        self.assertIn("[已脱敏]", result[0]["content"])
+        self.assertNotIn("13812345678", joined)
+        self.assertNotIn("a@b.com", joined)
+        self.assertIn("北京师范大学", result[1]["content"])
+
     def test_llm_split_ok(self):
         from hr.services.resume_splitter import split_resume_text
 
