@@ -108,6 +108,24 @@ def _mask_for_role(candidate, hr_role):
     return out
 
 
+def _candidate_matches_hard_slots(candidate, slots):
+    """预筛超阈值跳过后的硬条件后置过滤（与 L1 SQL 语义一致）：
+    年限 NULL 按满足计（线上 R2 语义）；学历按词表层级；城市按归一形双向匹配。"""
+    if candidate is None:
+        return False
+    if slots["years_min"] is not None:
+        if candidate.years_experience is not None and candidate.years_experience < slots["years_min"]:
+            return False
+    if slots["degree_level"] is not None:
+        if candidate.highest_degree not in degree_words(slots["degree_level"]):
+            return False
+    for city in slots["cities"]:
+        norm = norm_city(city)
+        if norm_city(candidate.current_city or "") not in {norm, city, norm + "市"}:
+            return False
+    return True
+
+
 def _parse_skills(query, llm_model):
     """LLM 查询分解为有序技能列表（重要在前，≤10）。失败抛异常（调用方捕获退模式 A）。"""
     return parse_search_skills(llm_model, query)
@@ -120,7 +138,7 @@ def _exclude_documents(knowledge_id):
     ]
 
 
-def _sparse_query(query, max_terms=4):
+def _sparse_query(query, max_terms=6):
     """关键词路查询截断：websearch_to_tsquery 的空格是 AND 语义，长查询会因
     "所有词都必须出现"而漏召回（实测完整句 0 命中）。取 jieba 切词前 max_terms 个
     有意义的词（去停用词）作为关键词路查询——BM25 常见做法，dense 路不受影响。"""
@@ -396,6 +414,7 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
     meta["prefilter"] = {"applied": False, "candidate_count": 0, "resume_count": 0,
                          "skipped": False, "empty": False}
     prefilter_ids = None
+    prefilter_skipped = False
 
     # ---------- 查询理解：技能分解（模式 B 判定） ----------
     skills = []
@@ -472,7 +491,39 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
             _write_search_audit(workspace_id, user_id, query, top_k, meta, 0)
             return {"items": [], "meta": meta}
         if len(doc_ids) > _PREFILTER_MAX:
+            # 超阈值跳过 IN 限定：语义路径靠检索后硬条件过滤保证精确率；
+            # 纯条件查询（无语义词）不调 embed，直接按已算出的 candidate_ids 走结构化 top_k。
             meta["prefilter"]["skipped"] = True
+            prefilter_skipped = True
+            if not slots["semantic_query"]:
+                structured_resumes = list(
+                    QuerySet(ResumeFile)
+                    .filter(candidate_id__in=candidate_ids, document_id__isnull=False)
+                    .select_related("candidate")
+                    .order_by(F("candidate__years_experience").desc(nulls_last=True), "-update_time")
+                )
+                items = []
+                seen = set()
+                for rf in structured_resumes:
+                    if str(rf.document_id) in seen:
+                        continue
+                    seen.add(str(rf.document_id))
+                    items.append({
+                        "rank": len(items) + 1,
+                        "candidate": _mask_for_role(rf.candidate, hr_role),
+                        "resume": {"id": str(rf.id), "file_name": rf.file_name, "extension": rf.extension},
+                        "score": {"structured": True},
+                        "paragraphs": [],
+                        "document_id": str(rf.document_id),
+                    })
+                    if len(items) >= top_k:
+                        break
+                meta["search_type"] = "structured_only"
+                meta["name_matched"] = 0
+                meta["aggregation"] = {"grouped_resumes": len(items)}
+                meta["elapsed_ms"]["total"] = int((time.time() - t0) * 1000)
+                _write_search_audit(workspace_id, user_id, query, top_k, meta, len(items))
+                return {"items": items, "meta": meta}
         else:
             meta["prefilter"]["applied"] = True
             prefilter_ids = doc_ids
@@ -493,6 +544,17 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
                           "structured_hits": structured_hits}
         # 候选段落：按 hit_vec 排序取前 candidate_k 简历的最优段落（Small-to-Big 回溯到段落）
         cand_docs = [doc_id for doc_id, _ in ordered[: max(top_k * 3, recall_k)]]
+        if prefilter_skipped and hard_slots:
+            # 超阈值跳过 IN 限定：候选文档先按硬条件过滤，避免返回不满足年限/学历/城市的弱命中
+            cand_resumes = {
+                str(rf.document_id): rf
+                for rf in QuerySet(ResumeFile).filter(document_id__in=cand_docs).select_related("candidate")
+            }
+            cand_docs = [
+                doc_id for doc_id in cand_docs
+                if doc_id in cand_resumes and cand_resumes[doc_id].candidate is not None
+                and _candidate_matches_hard_slots(cand_resumes[doc_id].candidate, slots)
+            ]
         cand_paras = []
         for doc_id in cand_docs:
             best = None
@@ -535,8 +597,11 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
             for doc_id, hit_vec in sorted(structured_only.items(), key=lambda kv: tuple(kv[1]), reverse=True):
                 if doc_id in seen_docs:
                     continue
-                seen_docs.add(doc_id)
                 resume = QuerySet(ResumeFile).filter(document_id=doc_id).select_related("candidate").first()
+                if prefilter_skipped and hard_slots:
+                    if resume is None or resume.candidate is None or not _candidate_matches_hard_slots(resume.candidate, slots):
+                        continue
+                seen_docs.add(doc_id)
                 items.append({
                     "rank": len(items) + 1,
                     "candidate": _mask_for_role(resume.candidate if resume else None, hr_role),
@@ -647,6 +712,20 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
 
     # 简历聚合
     aggregated = _aggregate(fused, hr_role)
+    if prefilter_skipped and hard_slots:
+        # 超阈值跳过 IN 限定：聚合后仍按硬条件过滤，保证 conditional 精确率。
+        # aggregated 中的 candidate 是脱敏 dict（无 current_city），需回表取 ORM Candidate 判断。
+        agg_doc_ids = [a["document_id"] for a in aggregated if a.get("document_id")]
+        agg_resumes = {
+            str(rf.document_id): rf
+            for rf in QuerySet(ResumeFile).filter(document_id__in=agg_doc_ids).select_related("candidate")
+        }
+        aggregated = [
+            a for a in aggregated
+            if a.get("document_id") in agg_resumes
+            and agg_resumes[a["document_id"]].candidate is not None
+            and _candidate_matches_hard_slots(agg_resumes[a["document_id"]].candidate, slots)
+        ]
     orphan_count = sum(1 for p in fused if not p.get("document_id"))
     meta["aggregation"] = {
         "grouped_resumes": len(aggregated),

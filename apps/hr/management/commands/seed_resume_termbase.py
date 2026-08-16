@@ -16,7 +16,9 @@ from django.db.models import QuerySet
 
 from knowledge.models import Knowledge, Termbase
 
+from hr.models import Job
 from hr.services.resume_index import _KNOWLEDGE_NAME, get_resume_knowledge
+from hr.services.skill_normalize import normalize_skill
 
 # 词条源：skill_alias 别名（变体）→ 规范形；另附高频规范技能词（查询侧到词条的直接命中）
 _EXTRA_TERMS = [
@@ -51,6 +53,13 @@ class Command(BaseCommand):
             for alias, canonical in _ALIAS_TERMS():
                 terms.add(alias)
                 terms.add(canonical)
+            # 数据驱动补充：Job.skill_requirements 中出现的技能原词与归一形都进词条
+            for raw in _job_terms(workspace_id):
+                if raw:
+                    terms.add(raw)
+                    norm = normalize_skill(raw)
+                    if norm:
+                        terms.add(norm)
             existing = set(
                 QuerySet(Termbase).filter(knowledge_id=knowledge.id).values_list("content", flat=True)
             )
@@ -77,3 +86,16 @@ def _ALIAS_TERMS():
     with open(path, encoding="utf-8") as f:
         data = json.load(f)
     return list(data.items())
+
+
+def _job_terms(workspace_id):
+    """聚合指定工作区 Job.skill_requirements 中的技能原词（T6 数据源补充）。"""
+    terms = set()
+    rows = QuerySet(Job).filter(workspace_id=workspace_id).values_list("skill_requirements", flat=True)
+    for skill_list in rows:
+        if not isinstance(skill_list, list):
+            continue
+        for skill in skill_list:
+            if isinstance(skill, str) and skill.strip():
+                terms.add(skill.strip())
+    return terms

@@ -69,6 +69,21 @@ def index_resume(workspace_id, user_id, resume, text, chat_fn, stats=None):
     """
     knowledge = get_or_create_resume_knowledge(workspace_id, user_id)
     chunks = split_resume_text(text, chat_fn, stats=stats)
+    # 入库前二次扫描（设计 §6.8）：掩码未覆盖的 PII 变体 → 拒绝入库（不阻塞候选人建档，错误经任务记入 error_message）
+    # 注意：先扫描后写 SPLIT 日志，避免被拒绝的残留 PII 进入流转日志。
+    for chunk in chunks:
+        if scan_residual_pii(chunk["content"]):
+            log_flow(
+                workspace_id, "SPLIT", status="FAILURE", resume_id=resume.id,
+                detail={
+                    "path": (stats or {}).get("path", "?"),
+                    "llm_calls": (stats or {}).get("llm_calls", 0),
+                    "chunks_count": len(chunks),
+                    "error_message": f"切片内容仍包含未掩码的 PII（{chunk['title']}），拒绝入库",
+                },
+                error_message=f"切片内容仍包含未掩码的 PII（{chunk['title']}），拒绝入库",
+            )
+            raise ValueError(f"切片内容仍包含未掩码的 PII（{chunk['title']}），拒绝入库")
     log_flow(
         workspace_id, "SPLIT", resume_id=resume.id,
         detail={
@@ -86,10 +101,6 @@ def index_resume(workspace_id, user_id, resume, text, chat_fn, stats=None):
             ],
         },
     )
-    # 入库前二次扫描（设计 §6.8）：掩码未覆盖的 PII 变体 → 拒绝入库（不阻塞候选人建档，错误经任务记入 error_message）
-    for chunk in chunks:
-        if scan_residual_pii(chunk["content"]):
-            raise ValueError(f"切片内容仍包含未掩码的 PII（{chunk['title']}），拒绝入库")
     if resume.document_id:
         _delete_document(str(resume.document_id))
     # T2：HR 自建 Document/Paragraph（chunks 携带 "{title}\n" 前缀参与向量化/分词，

@@ -3448,6 +3448,29 @@ class ReindexCommandTests(TestCase):
         call_command("seed_resume_termbase", "--workspace", self.workspace_id, verbosity=0)
         self.assertEqual(Termbase.objects.filter(knowledge_id=knowledge.id).count(), count)  # 幂等
 
+    def test_seed_termbase_includes_job_skill_requirements(self):
+        """P3 复审：Termbase 词条聚合 Job.skill_requirements，且幂等。"""
+        from django.core.management import call_command
+
+        from knowledge.models import Knowledge, KnowledgeScope, KnowledgeType, Termbase
+
+        knowledge = Knowledge.objects.create(
+            id=uuid.uuid7(), name="简历语义索引", workspace_id=self.workspace_id,
+            embedding_model_id=self.model.id, user_id=self.user.id,
+            type=KnowledgeType.BASE.value, scope=KnowledgeScope.WORKSPACE.value,
+        )
+        Job.objects.create(
+            workspace_id=self.workspace_id, name="后端", headcount=1,
+            skill_requirements=["GoLang", "Rust"],
+        )
+        call_command("seed_resume_termbase", "--workspace", self.workspace_id, verbosity=0)
+        contents = set(Termbase.objects.filter(knowledge_id=knowledge.id).values_list("content", flat=True))
+        self.assertIn("GoLang", contents)   # 原词
+        self.assertIn("golang", contents)   # 归一形
+        self.assertIn("Rust", contents)
+        call_command("seed_resume_termbase", "--workspace", self.workspace_id, verbosity=0)
+        self.assertEqual(Termbase.objects.filter(knowledge_id=knowledge.id).count(), len(contents))
+
     @patch("knowledge.task.embedding.embedding_by_document.delay")
     def test_reindex_queues_documents(self, mock_delay):
         from django.core.management import call_command
@@ -3565,6 +3588,20 @@ class ResumeIndexTests(TestCase):
             index_resume(self.workspace_id, self.user_id, resume, text, self._stub_chat())
         self.assertIn("PII", str(ctx.exception))
         self.assertIsNone(resume.document_id)
+
+    def test_index_resume_rejects_residual_pii_without_pii_flow_log(self):
+        """P2 复审：残留 PII 拒绝入库时，SPLIT 流转日志不得包含未掩码正文。"""
+        from hr.models import ResumeFlowLog
+
+        resume = self._resume()
+        text = "姓名：李冠光\n\n【基本信息】\n- 身份证：110101900101123\n- 其他：无"
+        with self.assertRaises(ValueError):
+            index_resume(self.workspace_id, self.user_id, resume, text, self._stub_chat())
+        logs = ResumeFlowLog.objects.filter(resume_id=resume.id, node="SPLIT")
+        self.assertTrue(logs.exists())  # 应有失败日志
+        for log in logs:
+            self.assertNotIn("110101900101123", str(log.detail))
+            self.assertNotIn("110101900101123", log.error_message or "")
 
     def test_index_resume_accepts_masked_content(self):
         """修复回归（审查 P2）：掩码已覆盖内容（电话/邮箱/18 位身份证）不触发二次扫描拒绝。"""
@@ -4166,6 +4203,40 @@ class ResumeSearchTests(TestCase):
         self.assertFalse(result["meta"]["prefilter"]["applied"])
         self.assertNotEqual(result["meta"]["search_type"], "prefilter_empty")  # 转全量语义而非空
 
+    def test_prefilter_skipped_still_filters_hard_conditions(self):
+        """P1 复审：预筛超阈值跳过后，语义路径仍按硬条件过滤返回项。"""
+        from hr.services.resume_search import search_resumes
+
+        _, doc_low, _ = self._extra_candidate("低年限", 3)
+        _, doc_high, _ = self._extra_candidate("高年限", 8)
+        p_low = Paragraph.objects.create(
+            id=uuid.uuid7(), document_id=doc_low.id, knowledge_id=self.knowledge.id,
+            content="Java 开发", title="工作经历", status="SUCCESS",
+        )
+        p_high = Paragraph.objects.create(
+            id=uuid.uuid7(), document_id=doc_high.id, knowledge_id=self.knowledge.id,
+            content="Java 架构", title="工作经历", status="SUCCESS",
+        )
+        for doc_id, paragraph in ((doc_low.id, p_low), (doc_high.id, p_high)):
+            Embedding.objects.create(
+                id=uuid.uuid7(), document_id=doc_id, paragraph_id=paragraph.id,
+                knowledge_id=self.knowledge.id, embedding=[0.1] * 8,
+                search_vector=SearchVector(Value("java")), is_active=True,
+            )
+        with                 patch("hr.services.resume_search._PREFILTER_MAX", 1),                 patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()),                 patch("hr.services.resume_search.EmbeddingSearch") as m_emb,                 patch("hr.services.resume_search.KeywordsSearch") as m_key:
+            # 语义路同时召回低年限与高年限两份简历
+            m_emb.return_value.handle.return_value = [
+                {"paragraph_id": str(p_low.id), "similarity": 0.9},
+                {"paragraph_id": str(p_high.id), "similarity": 0.85},
+            ]
+            m_key.return_value.handle.return_value = []
+            result = search_resumes(self.workspace_id, "6年以上 Java", mode="phrase",
+                                    hr_role="ADMIN", user_id=self.user.id)
+        self.assertTrue(result["meta"]["prefilter"]["skipped"])
+        names = [it["candidate"]["name"] for it in result["items"] if it["candidate"]]
+        self.assertIn("高年限", names)
+        self.assertNotIn("低年限", names)
+
     def test_prefilter_city_normalization(self):
         """F7：城市双向归一——存「北京市」查「北京」命中、存「北京」查「北京市」命中。"""
         from hr.services.resume_search import search_resumes
@@ -4229,6 +4300,14 @@ class ResumeSearchTests(TestCase):
             result = search_resumes(self.workspace_id, "nothing")
         self.assertEqual(result["items"], [])
         self.assertEqual(result["meta"]["search_type"], "empty")
+
+    def test_sparse_query_max_six_terms(self):
+        """P3 复审：稀疏词上限与 v2 设计对齐为 6。"""
+        from hr.services.resume_search import _sparse_query
+
+        query = "熟悉 Java Spring Boot Docker Kubernetes React Vue 开发"
+        sparse = _sparse_query(query)
+        self.assertLessEqual(len(sparse.split()), 6)
 
     def test_skill_and_mode_ordered(self):
         """模式 B：技能有序 → 命中向量字典序 → 命中靠前技能优先"""

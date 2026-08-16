@@ -334,10 +334,12 @@ def _search_skill_and(skills, structured_hits, knowledge, embedding_model, candi
 | title 入向量 | ✅ 已实现（T2）：chunks 带 title 前缀（HR 自建段落，内核零改动） | content 保持原文（保真/展示/回溯不变） |
 | 证据合成 | ✅ 已实现（T3，仅模式 A）：(0.7*max+0.3*avg)(段分)+λ·log2(1+命中段数) | **λ 默认 0**（= 旧行为 0.7*max+0.3*avg，审查修复 F2 恢复基准并加公式锁定断言）；λ=0.15 开启证据加分；MAXKB_HR_EVIDENCE_LAMBDA 可调 |
 | 技能归一表 | ✅ 已实现（T5）：candidate_skill（skill_alias ~100 条 + 幂等回填） | 表空回退 Candidate.skills JSON 路径（迁移期兼容） |
-| Termbase 词条 | ✅ 已实现（T6）：seed_resume_termbase 108 词条幂等写入 | KeywordsSearch 内部已自动生效；需全量重嵌使 search_vector 分词一致 |
+| Termbase 词条 | ✅ 已实现（T6）：seed_resume_termbase 108 词条幂等写入 | 修复计划执行后补充聚合 Job.skill_requirements（原词+归一形）；KeywordsSearch 内部已自动生效；需全量重嵌使 search_vector 分词一致 |
 | PII 掩码前置 | ✅ 已实现（T1）：掩码先于 LLM 调用 | 修复本文档 §9.3-3；行内替换不改行号 |
 | 查询理解 LLM 版（合并调用） | ⚠️ 后置（P3） | 当前为规则版（extract_slots） |
 | 城市槽匹配精度 | ⚠️ 已知限制：子串匹配可误中（"北京"命中"北京师范大学"） | 评测暴露后收紧 |
 | 重嵌存量 | ⚠️ 待项目方执行：reindex_resume_knowledge（一次覆盖 T2 存量 + T6 词条） | 重嵌窗口检索降级 seq scan，低峰执行 |
 | 模式 B 接入预筛 | ✅ 已实现（审查修复 F1）：skills 模式预筛接入年限/学历/城市 | 技能维度不进预筛（归模式 B 自身结构化路+语义路，防回填稀疏期误杀）；预筛空 → prefilter_empty |
+| 超阈值跳过 | ✅ 修复计划执行后：`prefilter_skipped` 时语义路径增加检索后硬条件过滤；纯条件查询直接走结构化 top_k | 保证规模验证 G3 的 conditional 精确率不在大库降级 |
+| sparse 词上限 | ✅ 修复计划执行后：`_sparse_query` 默认 max_terms 由 4 调整为 6 | 对齐 v2 设计 §3.6 |
 | dense 模式契约 | ⚠️ 显式 dense 不接预筛 | 消融纯净性（评测口径依赖），代码注释已声明 |

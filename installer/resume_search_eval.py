@@ -195,6 +195,9 @@ def main():
     for name, _ in modes:
         rows = results[name]
         ok = [r for r in rows if isinstance(r, tuple)]
+        if not ok:
+            print(f"{name:>12}: 无可用锚点（全部异常或被剔除）")
+            continue
         recall5 = sum(1 for r in ok if r[0]) / len(ok)
         recall3 = sum(1 for r in ok if any(v <= 3 for v in r[1].values())) / len(ok)
         top1 = sum(1 for r in ok if any(v == 1 for v in r[1].values())) / len(ok)
