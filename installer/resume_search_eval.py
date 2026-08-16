@@ -88,14 +88,87 @@ def build_typed_anchors(count: int = 10):
 
 
 def load_anchors():
-    """基础锚点 + （--typed [N] 时）程序化 typed 锚点。"""
+    """基础锚点 + （--typed [N]）typed 锚点 + （--semantic-anchors PATH）语义锚点（规模验证 §3）。"""
+    anchors = ANCHORS
     if "--typed" in sys.argv:
         count = 10
         idx = sys.argv.index("--typed")
         if idx + 1 < len(sys.argv) and sys.argv[idx + 1].isdigit():
             count = int(sys.argv[idx + 1])
-        return ANCHORS + build_typed_anchors(count)
-    return ANCHORS
+        anchors = anchors + build_typed_anchors(count)
+    if "--semantic-anchors" in sys.argv:
+        import json
+
+        idx = sys.argv.index("--semantic-anchors")
+        path = sys.argv[idx + 1] if idx + 1 < len(sys.argv) else ""
+        if not path or not os.path.exists(path):
+            raise SystemExit(f"--semantic-anchors 文件不存在: {path}")
+        with open(path, encoding="utf-8") as fh:
+            semantic = json.load(fh)
+        if not isinstance(semantic, list) or not semantic:
+            raise SystemExit(f"--semantic-anchors 内容为空或非数组: {path}")
+        anchors = anchors + semantic
+    return anchors
+
+
+def check_anchors_grounded(anchors):
+    """G6 锚点-语料自检（规模验证 §3.4）：每个锚点 targets 至少 1 个存在于已入库简历集合。
+    缺失 > 0 即中止——避免「锚点失效但评测静默通过」的假阳性。返回缺失清单。"""
+    from django.db.models import QuerySet
+
+    from hr.models import ResumeFile
+
+    known = set(QuerySet(ResumeFile).filter(workspace_id=WORKSPACE).values_list("file_name", flat=True))
+    missing = sorted({t for a in anchors for t in a["targets"]} - known)
+    if missing:
+        print(f"G6 自检失败：{len(missing)} 个目标文件未入库（假阳性风险），前 10 个：{missing[:10]}")
+    else:
+        print(f"G6 自检通过：{len(anchors)} 锚点，全部 targets 已入库")
+    return missing
+
+
+def run_latency(anchors, service):
+    """规模验证 §4.5：随机 N 个锚点逐个计时（meta.elapsed_ms.total，含 rerank），输出 p50/p95；
+    附 DB 侧核验：paragraph/embedding 行数与简历份数一致性、简历知识库 hnsw 索引存在性。"""
+    import random
+
+    from django.db.models import QuerySet
+
+    from common.db.sql_execute import sql_execute
+    from hr.models import ResumeFile
+    from knowledge.models import Embedding, Paragraph
+
+    n = 50
+    idx = sys.argv.index("--latency")
+    if idx + 1 < len(sys.argv) and sys.argv[idx + 1].isdigit():
+        n = int(sys.argv[idx + 1])
+    rng = random.Random(42)
+    picked = rng.sample(anchors, min(n, len(anchors)))
+    llm = service._model_or_none()
+    rerank = service._rerank_model_or_none()
+    times = []
+    for a in picked:
+        try:
+            result = search_resumes(WORKSPACE, a["q"], top_k=5, mode="auto", hr_role="ADMIN",
+                                    user_id=None, llm_model=llm, rerank_model=rerank)
+            ms = result["meta"]["elapsed_ms"]["total"]
+        except Exception as exc:
+            print(f"  [latency-err] {a['q']}: {str(exc)[:80]}")
+            continue
+        times.append(ms)
+        print(f"  {a['q'][:32]:<34} {ms}ms")
+    if times:
+        times.sort()
+        p50 = times[len(times) // 2]
+        p95 = times[int(len(times) * 0.95) - 1]
+        print(f"延迟 {len(times)} 次: p50={p50}ms p95={p95}ms max={times[-1]}ms")
+    resume_qs = QuerySet(ResumeFile).filter(workspace_id=WORKSPACE, document_id__isnull=False)
+    n_resume = resume_qs.count()
+    n_para = QuerySet(Paragraph).filter(document_id__in=resume_qs.values("document_id")).count()
+    n_emb = QuerySet(Embedding).filter(document_id__in=resume_qs.values("document_id")).count()
+    print(f"DB 核验: 简历 {n_resume} / 段落 {n_para} / 向量 {n_emb}")
+    rows = sql_execute("SELECT indexname FROM pg_indexes WHERE tablename='embedding' AND indexname LIKE %s", ["embedding_hnsw_idx_%"])
+    print("hnsw 索引:", [r.get("indexname") for r in rows] or "（无，需触发 create_knowledge_index）")
 
 
 def main():
@@ -104,6 +177,9 @@ def main():
         print("SENSENOVA_API_KEY is required")
         return 2
     anchors = load_anchors()
+    # G6 自检：锚点 targets 必须已入库（缺失即中止，防假阳性）
+    if check_anchors_grounded(anchors):
+        return 3
     service = AiService(workspace_id=WORKSPACE, user_id=None, hr_role="ADMIN")
     llm = service._model_or_none()
     rerank = service._rerank_model_or_none()
@@ -264,6 +340,11 @@ def main():
                 if ok:
                     satisfy += 1
         print(f"{name:>12}: {satisfy}/{total} = {satisfy / total:.2f}" if total else f"{name:>12}: 无返回项")
+    if "--latency" in sys.argv:
+        print("\n" + "=" * 70)
+        print("延迟测量（§4.5，mode=auto，meta.elapsed_ms.total）")
+        print("=" * 70)
+        run_latency(anchors, service)
     return 0
 
 

@@ -91,23 +91,37 @@ SENSENOVA_API_KEY=<key1> .venv/bin/python installer/resume_ingest_n.py 200 42 > 
 tail -25 /tmp/ingest200.log   # 失败率/吞吐/超时
 ```
 
-### 4.3 锚点生成（§3）+ 自检
-
-### 4.4 typed 评测（两轮 λ 消融）
+### 4.3 锚点生成（§3）+ 自检（脚本已就位：installer/resume_search_anchor_gen.py，方案 A）
 
 ```bash
-# 双轮：先 λ=0.15（包装脚本 patch _EVIDENCE_LAMBDA），后 λ=0（默认）；同一进程内锚点顺序固定
-SENSENOVA_API_KEY=<key1> .venv/bin/python /tmp/eval_v2.py > /tmp/eval200_a.txt 2>&1
-SENSENOVA_API_KEY=<key1> .venv/bin/python /tmp/eval_v2.py > /tmp/eval200_b.txt 2>&1
-# Skill-AND 列方差处置（§5）：该模式再单独跑 2 次，取 3 次中位数
-grep -A 10 '汇总' /tmp/eval200_a.txt /tmp/eval200_b.txt
+# 语义锚点生成（LLM 切片 + LLM 生成查询；抽样与入库同 seed，targets 必在 200 份内）
+SENSENOVA_API_KEY=<key1> .venv/bin/python installer/resume_search_anchor_gen.py --count 40 --seed 42
+# 输出：/tmp/eval200_semantic_anchors.json + /tmp/anchor_review.txt（抽检清单）
+# 人工抽检 ≥10 条：核对查询与简历内容相符，不符者从锚点 JSON 删除该条（防幻觉）
+# G6 自检已内置评测脚本（check_anchors_grounded）：targets 未入库即退出码 3
 ```
 
-### 4.5 性能测量
+### 4.4 typed 评测（两轮 λ 消融；脚本已就位：resume_search_eval.py --typed/--semantic-anchors/--latency）
+
+```bash
+# 双轮：λ 覆盖走环境变量（F6，替代包装脚本）；锚点 = 基础 12 + typed + 语义锚点
+SENSENOVA_API_KEY=<key1> MAXKB_HR_EVIDENCE_LAMBDA=0.15 .venv/bin/python installer/resume_search_eval.py --typed 30 --semantic-anchors /tmp/eval200_semantic_anchors.json > /tmp/eval200_a.txt 2>&1
+SENSENOVA_API_KEY=<key1> .venv/bin/python installer/resume_search_eval.py --typed 30 --semantic-anchors /tmp/eval200_semantic_anchors.json > /tmp/eval200_b.txt 2>&1
+# Skill-AND 列方差处置（§5）：该模式再单独跑 2 次，取 3 次中位数
+grep -A 10 '汇总' /tmp/eval200_a.txt /tmp/eval200_b.txt
+# 注意：G6 自检要求全部 targets 已入库；语义锚点文件须先经抽检（§4.3）
+```
+
+### 4.5 性能测量（已内置评测脚本 --latency）
+
+```bash
+# 检索延迟：随机 50 锚点逐个计时（mode=auto，meta.elapsed_ms.total，含 rerank），输出 p50/p95；
+# 同时输出 DB 核验：简历/段落/向量行数一致性 + 简历知识库 hnsw 索引存在性
+SENSENOVA_API_KEY=<key1> .venv/bin/python installer/resume_search_eval.py --latency 50 > /tmp/eval200_latency.txt 2>&1
+tail -20 /tmp/eval200_latency.txt
+```
 
 - 入库吞吐：4.2 汇总输出；
-- 检索延迟：50 个随机锚点逐个计时（meta.elapsed_ms.total，含 rerank 外部调用），输出 p50/p95；
-- DB 侧核验：embedding / paragraph 行数与入库份数一致性；pg_indexes 确认简历知识库 hnsw 索引存在。
 
 ## 5. 指标口径与方差处置
 
@@ -151,10 +165,12 @@ grep -A 10 '汇总' /tmp/eval200_a.txt /tmp/eval200_b.txt
 
 ## 9. 产出物
 
-1. installer/resume_ingest_n.py（参数化入库，含超时/重试/统计/自检）；
-2. 语义锚点清单 + 抽检记录（方案 A）；
-3. 报告 docs/superpowers/audits/2026-08-16-scale-verification.md（模板见附录 A）；
-4. 原始输出留档 installer/ingest200.log、installer/eval200_*.txt（未跟踪，按惯例）。
+1. installer/resume_ingest_n.py（参数化入库，含超时/重试/统计/自检；已就位）；
+2. installer/resume_search_anchor_gen.py（语义锚点生成方案 A + 抽检清单；已就位）；
+3. resume_search_eval.py 扩展：--typed / --semantic-anchors / --latency / G6 自检（已就位）；
+4. 语义锚点清单 + 抽检记录（方案 A）；
+5. 报告 docs/superpowers/audits/2026-08-16-scale-verification.md（模板见附录 A）；
+6. 原始输出留档 installer/ingest200.log、installer/eval200_*.txt（未跟踪，按惯例）。
 
 ## 10. 执行前 checklist
 
