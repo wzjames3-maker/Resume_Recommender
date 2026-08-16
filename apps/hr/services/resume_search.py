@@ -9,6 +9,7 @@
           降级链：rerank → RRF → dense 单路 → 空结果+meta。
           设计见 docs/superpowers/specs/2026-08-15-hr-resume-search-design.md。
 """
+import math
 import time
 
 from django.db.models import QuerySet
@@ -27,8 +28,8 @@ _RRF_K = 60
 _MAX_SKILLS = 10
 _DEFAULT_SIMILARITY = 0.2
 _MAX_QUERY_LENGTH = 2000
-_RESUME_SCORE_MAX_WEIGHT = 0.7
-_RESUME_SCORE_AVG_WEIGHT = 0.3
+# 证据合成（T3，仅模式 A）：score = max(段分) + λ·log2(1 + 命中段数)。置 0 即回退旧行为（0.7*max+0.3*avg）。
+_EVIDENCE_LAMBDA = 0.15
 
 _MODE_CHOICES = {"auto", "hybrid", "dense", "phrase", "skills"}
 
@@ -167,8 +168,9 @@ def _para_score(p):
 
 
 def _aggregate(paragraphs, hr_role):
-    """Small-to-Big + 简历聚合（模式 A：0.7*max + 0.3*avg 段落主导分）。
-    排序键优先 rerank 分（rerank 启用时），否则 rrf 分——避免 rerank 重排被 rrf 覆盖。"""
+    """Small-to-Big + 简历聚合（模式 A，T3 证据合成）：
+    score = max(段分) + λ·log2(1 + 命中段数)——多段证据加分（"金融背景"命中工作+项目两段 > 只命中一段）。
+    段分优先 rerank 分（rerank 启用时），否则 rrf 分——避免 rerank 重排被 rrf 覆盖。"""
     doc_ids = [p.get("document_id") for p in paragraphs if p.get("document_id")]
     resumes = []
     resume_by_doc = {}
@@ -181,9 +183,7 @@ def _aggregate(paragraphs, hr_role):
         resume_map.setdefault(doc_id, []).append(p)
     results = []
     for doc_id, ps in resume_map.items():
-        score = _RESUME_SCORE_MAX_WEIGHT * max(_para_score(p) for p in ps) + _RESUME_SCORE_AVG_WEIGHT * (
-            sum(_para_score(p) for p in ps) / len(ps)
-        )
+        score = max(_para_score(p) for p in ps) + _EVIDENCE_LAMBDA * math.log2(1 + len(ps))
         resume = resume_by_doc.get(doc_id)
         candidate = resume.candidate if resume else None
         results.append({
@@ -441,7 +441,12 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
     # 简历聚合
     aggregated = _aggregate(fused, hr_role)
     orphan_count = sum(1 for p in fused if not p.get("document_id"))
-    meta["aggregation"] = {"grouped_resumes": len(aggregated), "dropped_orphan_paragraphs": orphan_count}
+    meta["aggregation"] = {
+        "grouped_resumes": len(aggregated),
+        "dropped_orphan_paragraphs": orphan_count,
+        "evidence_lambda": _EVIDENCE_LAMBDA,
+        "multi_hit_boosted": sum(1 for a in aggregated if len(a["paragraphs"]) > 1),
+    }
 
     items = []
     for idx, a in enumerate(aggregated[:top_k], 1):

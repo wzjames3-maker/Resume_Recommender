@@ -3801,6 +3801,38 @@ class ResumeSearchTests(TestCase):
         self.assertEqual(len(result["items"]), 1)  # 同一简历合并
         self.assertEqual(len(result["items"][0]["paragraphs"]), 2)
 
+    def test_aggregate_evidence_synthesis(self):
+        """T3：证据合成——多段命中的简历（低分段）胜过单段高分；λ=0 恢复旧排序。"""
+        from hr.services.resume_search import _aggregate
+
+        doc_a = Document.objects.create(
+            id=uuid.uuid7(), knowledge_id=self.knowledge.id, name="a.docx", char_length=1, user_id=self.user.id
+        )
+        doc_b = Document.objects.create(
+            id=uuid.uuid7(), knowledge_id=self.knowledge.id, name="b.docx", char_length=1, user_id=self.user.id
+        )
+        cand_a = Candidate.objects.create(workspace_id=self.workspace_id, user_id=self.user.id, name="甲")
+        cand_b = Candidate.objects.create(workspace_id=self.workspace_id, user_id=self.user.id, name="乙")
+        for doc, cand, sha in ((doc_a, cand_a, "sha-a"), (doc_b, cand_b, "sha-b")):
+            ResumeFile.objects.create(
+                workspace_id=self.workspace_id, file_name=doc.name, extension="docx",
+                file_path="/tmp/" + doc.name, file_size=1, sha256=sha, source_channel="OTHER",
+                status=ResumeStatus.SUCCESS, user_id=self.user.id, candidate=cand, document_id=doc.id,
+            )
+        # doc_a 单段 0.90 → 0.90 + 0.15*log2(2) = 1.05
+        # doc_b 两段 0.89/0.88 → 0.89 + 0.15*log2(3) ≈ 1.128 > 1.05 → 证据合成使 doc_b 胜出
+        paras = [
+            {"document_id": str(doc_a.id), "rerank": 0.90},
+            {"document_id": str(doc_b.id), "rerank": 0.89},
+            {"document_id": str(doc_b.id), "rerank": 0.88},
+        ]
+        results = _aggregate(paras, hr_role="ADMIN")
+        self.assertEqual([r["document_id"] for r in results], [str(doc_b.id), str(doc_a.id)])
+        self.assertGreater(results[0]["score"], results[1]["score"])
+        with patch("hr.services.resume_search._EVIDENCE_LAMBDA", 0):
+            results0 = _aggregate(paras, hr_role="ADMIN")
+        self.assertEqual([r["document_id"] for r in results0], [str(doc_a.id), str(doc_b.id)])
+
     def test_empty_result(self):
         from hr.services.resume_search import search_resumes
         with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()), \
