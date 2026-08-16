@@ -10,6 +10,7 @@
           设计见 docs/superpowers/specs/2026-08-15-hr-resume-search-design.md。
 """
 import math
+import os
 import re
 import time
 
@@ -26,6 +27,30 @@ from hr.services.audit import write_audit_log
 from hr.services.query_understand import degree_words, extract_slots, norm_city
 from hr.services.resume_index import get_resume_knowledge
 from hr.services.skill_normalize import normalize_skill
+def _env_float(name, default):
+    """环境变量覆盖（F6）：解析失败回退默认并告警，避免非法值静默生效。"""
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        return float(raw)
+    except ValueError:
+        import logging
+        logging.getLogger("hr").warning("环境变量 %s 非法（%r），使用默认 %s", name, raw, default)
+        return default
+
+
+def _env_int(name, default):
+    raw = os.environ.get(name)
+    if raw is None or not raw.strip():
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        import logging
+        logging.getLogger("hr").warning("环境变量 %s 非法（%r），使用默认 %s", name, raw, default)
+        return default
+
 
 _RRF_K = 60
 _MAX_SKILLS = 10
@@ -36,12 +61,12 @@ _MAX_QUERY_LENGTH = 2000
 # λ 默认 0（关闭）：真实模型消融（2026-08-16，12 锚点 × 31 语料，installer/eval_v2_report.txt）显示
 # λ=0.15 综合劣于 λ=0：recall@5 主指标全面下降（dense 0.75→0.67；RRF+rerank 0.92→0.83），
 # 但 RRF 无 rerank 的 recall@5（0.67→0.75）与 RRF+rerank 的 Top-1/MRR（0.58→0.67 / 0.680→0.705）三格回升；
-# 样本 12 锚点不足显著判定，保守置 0，机制保留待规模验证 G4 裁决。
-_EVIDENCE_LAMBDA = 0
+_EVIDENCE_LAMBDA = _env_float("MAXKB_HR_EVIDENCE_LAMBDA", 0.0)
 # 聚合权重（与 be6e659 实施前行为一致；tests 有公式锁定断言防再次静默漂移）
 _RESUME_SCORE_MAX_WEIGHT = 0.7
 _RESUME_SCORE_AVG_WEIGHT = 0.3
-# 结构化预筛上限（T4）：预筛文档集超过该值则放弃预筛转全量语义（避免误伤大库）
+# 结构化预筛上限（T4）：预筛文档集超过该值则放弃预筛转全量语义（避免误伤大库）；可用环境变量覆盖
+_PREFILTER_MAX = _env_int("MAXKB_HR_MAX_PREFILTER", 2000)
 _PREFILTER_MAX = 2000
 # 姓名快速通道（T4）：纯 2-4 字中文查询走 name__icontains 并置顶
 _NAME_RE = re.compile(r"^[\u4e00-\u9fa5]{2,4}$")

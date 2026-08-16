@@ -49,6 +49,9 @@ PYTHONPATH=apps SERVER_NAME=web DJANGO_SETTINGS_MODULE=maxkb.settings .venv/bin/
 # 验证
 python apps/manage.py check
 python apps/manage.py makemigrations --check --dry-run
+# 检索调参（可选，v2 审查修复 F6）：不重启代码发版即可调整
+#   MAXKB_HR_EVIDENCE_LAMBDA=0.15    # 证据合成权重（默认 0=关闭，见 T3 消融结论）
+#   MAXKB_HR_MAX_PREFILTER=5000      # 结构化预筛文档集上限（默认 2000，超限转全量语义）
 .venv/bin/python apps/manage.py test application.tests knowledge.tests models_provider.tests --keepdb
 
 # 前端（表面检查 + 类型检查 + 构建）

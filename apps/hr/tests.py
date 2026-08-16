@@ -3298,8 +3298,32 @@ class ResumeSplitterTests(SimpleTestCase):
         self.assertTrue(all(len(row["content"]) <= 500 for row in result))
 
 
+class EnvOverrideTests(SimpleTestCase):
+    """F6：MAXKB_HR_* 环境变量覆盖 λ 与预筛阈值（合法值生效、非法值回退默认）。"""
+
+    def test_env_float_valid_and_invalid(self):
+        from unittest import mock
+
+        import hr.services.resume_search as rs
+        with mock.patch.dict(os.environ, {"MAXKB_HR_EVIDENCE_LAMBDA": "0.25"}, clear=False):
+            self.assertEqual(rs._env_float("MAXKB_HR_EVIDENCE_LAMBDA", 0.0), 0.25)
+        with mock.patch.dict(os.environ, {"MAXKB_HR_EVIDENCE_LAMBDA": "abc"}, clear=False):
+            self.assertEqual(rs._env_float("MAXKB_HR_EVIDENCE_LAMBDA", 0.0), 0.0)
+        with mock.patch.dict(os.environ, {}, clear=False):
+            self.assertEqual(rs._env_float("MAXKB_HR_EVIDENCE_LAMBDA", 0.0), 0.0)
+
+    def test_env_int_valid_and_invalid(self):
+        from unittest import mock
+
+        import hr.services.resume_search as rs
+        with mock.patch.dict(os.environ, {"MAXKB_HR_MAX_PREFILTER": "5000"}, clear=False):
+            self.assertEqual(rs._env_int("MAXKB_HR_MAX_PREFILTER", 2000), 5000)
+        with mock.patch.dict(os.environ, {"MAXKB_HR_MAX_PREFILTER": "many"}, clear=False):
+            self.assertEqual(rs._env_int("MAXKB_HR_MAX_PREFILTER", 2000), 2000)
+
 
 class QueryUnderstandTests(SimpleTestCase):
+    """T4：规则槽位抽取（年限/学历/城市/语义词）。"""
     """T4：规则槽位抽取（年限/学历/城市/语义词）。"""
 
     def test_extract_slots_years(self):
