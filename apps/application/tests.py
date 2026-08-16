@@ -121,6 +121,8 @@ class SearchDatasetStepNormalizeTests(TestCase):
                    return_value=str(self.model.id)), \
                 patch("application.chat_pipeline.step.search_dataset_step.impl.base_search_dataset_step.get_model_by_id",
                       return_value=fake_model), \
+                patch("application.chat_pipeline.step.search_dataset_step.impl.base_search_dataset_step.get_model_default_params",
+                      return_value={}), \
                 patch("application.chat_pipeline.step.search_dataset_step.impl.base_search_dataset_step.ModelManage.get_model",
                       return_value=fake_model):
             step.execute(
@@ -134,7 +136,7 @@ class SearchDatasetStepNormalizeTests(TestCase):
                 search_mode="embedding",
                 manage=SimpleNamespace(context={}),
             )
-        self.assertEqual(captured, ["Java开发"])  # emoji 剥离 + 空白压缩
+        self.assertEqual(captured, ["Java 开发"])  # emoji 剥离 + 空白压缩为单空格
 
 
 class WorkflowApplicationRejectionTests(TestCase):
