@@ -178,6 +178,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 - 未关联简历允许存在（TTL 兜底）；`ResumeFile.candidate` 为 SET_NULL
 - 入职交接为同步投递（accept_offer 请求内），目标 webhook 超时 10s；大批量场景需异步化（未排期）
 - PRD 明确：`HIRED` 后不得新建职位关联；仅 REJECTED/WITHDRAWN/CLOSED 可重新投递
+- 前端语义检索暂不提供调试模式折叠与 dense/sparse 分数列（G4②③ 默认不做，保留模式下拉与综合/Rerank/RRF 展示）
 
 ## 7. 提交流程与账本
 
