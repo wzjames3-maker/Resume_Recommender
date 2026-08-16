@@ -284,7 +284,8 @@ def event_content(
             maxkb_logger.error(f"Generator was closed (client disconnected)")
         else:
             maxkb_logger.error(f"{str(e)}:{traceback.format_exc()}")
-            all_text = "Exception:" + str(e)
+            # 内核审查 P1-3：异常细节只进日志，回答内容为通用文案（不泄露内部错误、不污染 chat_record）
+            all_text = _("Sorry, failed to generate the answer, please try again later")
         write_context(step, manage, 0, 0, all_text)
         post_response_handler.handler(
             chat_id,
@@ -704,7 +705,8 @@ class BaseChatStep(IChatStep):
                 },
             )
         except Exception as e:
-            all_text = "Exception:" + str(e)
+            # 内核审查 P1-3：异常细节只进日志，回答内容为通用文案（不泄露内部错误、不污染 chat_record）
+            all_text = _("Sorry, failed to generate the answer, please try again later")
             write_context(self, manage, 0, 0, all_text)
             post_response_handler.handler(
                 chat_id,

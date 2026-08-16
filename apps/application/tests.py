@@ -32,6 +32,53 @@ class SimpleChatRuntimeTests(SimpleTestCase):
         self.assertEqual(result.content, "ok")
 
 
+class ChatStepExceptionTextTests(SimpleTestCase):
+    """K3：模型异常时回答内容为通用文案，不泄露内部异常细节（修复前为 "Exception:"+str(e) 直出）。"""
+
+    class _BoomModel:
+        def invoke(self, messages):
+            raise RuntimeError("secret internal detail: db connection refused")
+
+    class _FakePostHandler:
+        def handler(self, *args, **kwargs):
+            pass
+
+    def test_block_failure_returns_generic_message(self):
+        from application.chat_pipeline.step.chat_step.impl.base_chat_step import BaseChatStep
+
+        captured = {}
+
+        class FakeToResponse:
+            def to_block_response(self, *args, **kwargs):
+                captured["text"] = args[2]
+                return "RESP"
+
+        class FakeManage:
+            context = {"application_id": None, "start_time": __import__("time").time(),
+                       "run_time": 0, "message_tokens": 0, "answer_tokens": 0}
+            debug = True
+
+            def get_base_to_response(self):
+                return FakeToResponse()
+
+        step = BaseChatStep()
+        step.context = {"start_time": __import__("time").time(), "message_tokens": 0, "answer_tokens": 0}
+        step.execute_block(
+            message_list=[],
+            chat_id="c1",
+            problem_text="p",
+            post_response_handler=self._FakePostHandler(),
+            chat_model=self._BoomModel(),
+            paragraph_list=[],
+            manage=FakeManage(),
+            no_references_setting={"status": "ai_questioning"},
+            model_setting={},
+        )
+        self.assertNotIn("Exception:", captured["text"])
+        self.assertNotIn("secret internal detail", captured["text"])
+        self.assertIn("Sorry", captured["text"])
+
+
 class WorkflowApplicationRejectionTests(TestCase):
     def setUp(self):
         ApplicationFolder.objects.create(id="default", name="root", workspace_id="default")
