@@ -300,6 +300,29 @@ class ResumeParserTests(TestCase):
         self.assertEqual(result["phone"], "")
         self.assertEqual(result["skills"], [])
 
+    def test_ocr_semicolon_flow_city_and_skills(self):
+        """A2 增强：OCR 分号流（籍贯/户籍/个人技能 + 「；」分隔）抽取城市与技能，城市粒度归一。"""
+        text = (
+            "简历；姓名；李冠光；出生年月；1933年10月；籍贯；新疆省阿克苏市；政治面貌；群众；"
+            "户籍；澳门省澳门市；个人技能；吃饭喝茶；办公软件；教育背景；"
+        )
+        result = parse_resume_text(text)
+        self.assertEqual(result["current_city"], "阿克苏")  # 去「省」前缀与「市」后缀
+        self.assertEqual(result["skills"], ["吃饭喝茶", "办公软件"])
+
+    def test_ocr_city_variants_normalized(self):
+        """A2 增强：直辖市与「X省Y市」形态归一（北京市→北京、河南省信阳市→信阳、上海→上海）。"""
+        for raw, expect in (
+            ("现居城市：北京市", "北京"),
+            ("籍贯：河南省信阳市", "信阳"),
+            ("户口：上海", "上海"),
+            ("所在地区：台湾省高雄市", "高雄"),
+            ("户籍；北京市朝阳区", "北京"),
+        ):
+            result = parse_resume_text(raw + "\n工作年限：2年")
+            self.assertEqual(result["current_city"], expect, raw)
+            self.assertEqual(result["years_experience"], 2, raw)
+
 
 class ResumeFileModelTests(TestCase):
     def test_duplicate_sha256_in_same_workspace_rejected(self):

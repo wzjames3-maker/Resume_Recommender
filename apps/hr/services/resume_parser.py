@@ -8,6 +8,24 @@ import re
 
 _DEGREES = ["博士", "硕士", "本科", "大专", "中专", "高中"]
 
+# OCR 分号流/表格简历的关键词覆盖（A2 增强）：现居/籍贯/户籍等 + 技能变体
+_CITY_KEYWORDS = r"(?:现居城市|现居|现居住|所在城市|籍贯|户籍|户口|家庭住址|所在地区)"
+_SKILL_KEYWORDS = r"(?:个人技能|技能特长|专业技能|掌握技能|技能|特长)"
+
+
+def _normalize_city(raw):
+    """城市粒度归一：去省/自治区/特别行政区前缀与「市」后缀（「新疆省阿克苏市」→「阿克苏」、「北京市」→「北京」）。"""
+    text = raw.strip()
+    for token in ("特别行政区", "自治区", "省"):
+        idx = text.find(token)
+        if idx != -1:
+            text = text[idx + len(token):]
+            break
+    for city in ("北京", "上海", "天津", "重庆"):
+        if text.startswith(city + "市"):
+            return city
+    return text.rstrip("市")
+
 
 def _extract_after(text, patterns):
     for pattern in patterns:
@@ -30,16 +48,20 @@ def parse_resume_text(text):
     name = _extract_after(text, [r"姓名[:：]\s*([^\n]{2,8})", r"(?m)^([\u4e00-\u9fa5]{2,4})$"])
     email_match = re.search(r"[\w.+-]+@[\w-]+\.[\w.-]+", text)
     phone_match = re.search(r"(?:\+?86[- ]?)?1[3-9]\d{9}", text)
-    current_city = _extract_after(text, [r"(?:现居城市|现居|现居住|所在城市)[:：]?\s*([\u4e00-\u9fa5]{2,10})"])
-    target_city = _extract_after(text, [r"(?:期望城市|意向城市|目标城市)[:：]\s*([\u4e00-\u9fa5]{2,10})"])
+    current_city = _normalize_city(_extract_after(text, [_CITY_KEYWORDS + r"[:：;；]?\s*([\u4e00-\u9fa5]{2,12})"]))
+    target_city = _normalize_city(_extract_after(text, [r"(?:期望城市|意向城市|目标城市)[:：;；]\s*([\u4e00-\u9fa5]{2,12})"]))
     degree = ""
     for value in _DEGREES:
         if re.search(re.escape(value), text):
             degree = value
             break
-    years_match = re.search(r"(\d+)\s*年(?:工作经验|经验|工作经历)|工作\s*(\d+)\s*年", text)
+    years_match = re.search(
+        r"(\d+)\s*年(?:工作经验|经验|工作经历|以上)|工作(?:年限|年数)?[:：;；]?\s*(\d+)\s*年", text
+    )
     years = int(years_match.group(1) or years_match.group(2)) if years_match else None
-    skills = _split_skills(_extract_after(text, [r"(?:技能|专业技能|掌握技能)[:：]\s*([^\n]{1,500})"]))
+    skills = _split_skills(_extract_after(text, [
+        _SKILL_KEYWORDS + r"[:：;；]?\s*([^\n]{1,500}?)(?=\s*(?:教育背景|工作经历|项目经验|项目经历|自我评价|个人优势|兴趣爱好|期望职位|出生年月|$))"
+    ]))
 
     note_parts = []
     for section_name, patterns in (
