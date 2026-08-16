@@ -225,6 +225,7 @@
         </el-form-item>
         <el-form-item label="上传结果">
           <div class="w-full">
+            <el-empty v-if="!uploadResults.length" description="请选择要上传的简历文件" :image-size="60" />
             <div v-for="record in uploadResults" :key="record.resume_id" class="upload-result">
               <el-tag :type="record.status === 'SUCCESS' ? 'success' : record.status === 'FAILED' ? 'danger' : 'info'" size="small">
                 {{ record.status === 'SUCCESS' ? '成功' : record.status === 'FAILED' ? '失败' : '解析中' }}
@@ -238,7 +239,7 @@
       </el-form>
       <template #footer>
         <el-button @click="uploadDialogVisible = false">关闭</el-button>
-        <el-button type="primary" @click="openResumeUpload()">继续上传</el-button>
+        <el-button type="primary" @click="openResumeUpload()">{{ uploadResults.length ? '继续上传' : '选择文件' }}</el-button>
       </template>
     </el-dialog>
 
@@ -842,6 +843,10 @@ function openCandidateFromQuery() {
   if (route.query.new === '1') {
     openCandidateDialog()
   }
+  if (route.query.upload === '1') {
+    uploadResults.value = []
+    uploadDialogVisible.value = true
+  }
 }
 
 onMounted(() => {
@@ -863,6 +868,12 @@ watch(() => route.query.edit_candidate, (editCandidateId) => {
 })
 watch(() => route.query.new, (isNew) => {
   if (isNew === '1') openCandidateDialog()
+})
+watch(() => route.query.upload, (isUpload) => {
+  if (isUpload === '1') {
+    uploadResults.value = []
+    uploadDialogVisible.value = true
+  }
 })
 watch(uploadDialogVisible, (visible) => {
   if (!visible) stopResumePolling()

@@ -8,9 +8,9 @@
     </div>
 
     <div class="quick-grid mb-16">
-      <el-card shadow="never" class="quick-card" @click="router.push('/hr/candidates?new=1')">
-        <div class="quick-title">新建候选人</div>
-        <div class="quick-desc">录入候选人并完善合规信息</div>
+      <el-card shadow="never" class="quick-card" @click="router.push('/hr/candidates?upload=1')">
+        <div class="quick-title">批量上传简历</div>
+        <div class="quick-desc">上传 docx/txt 简历并自动解析关联候选人</div>
       </el-card>
       <el-card shadow="never" class="quick-card" @click="router.push('/hr/jobs?new=1')">
         <div class="quick-title">新建职位</div>
@@ -24,6 +24,9 @@
         <div class="quick-title">我的面试</div>
         <div class="quick-desc">查看反馈截止与逾期状态</div>
       </el-card>
+      <div class="quick-secondary">
+        需要手动建档？<el-link type="primary" :underline="false" @click="router.push('/hr/candidates?new=1')">新建候选人</el-link>
+      </div>
     </div>
 
     <el-row :gutter="16">
@@ -130,6 +133,7 @@ onMounted(loadDashboard)
 .quick-card:hover { box-shadow: var(--el-box-shadow-light); }
 .quick-title { font-weight: 600; margin-bottom: 6px; }
 .quick-desc { font-size: 12px; color: var(--el-text-color-secondary); }
+.quick-secondary { grid-column: 1 / -1; font-size: 13px; color: var(--el-text-color-secondary); }
 .p-16 { padding: 16px; }
 .todo-list { display: flex; flex-direction: column; gap: 12px; }
 .todo-item {
