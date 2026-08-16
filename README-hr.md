@@ -182,15 +182,15 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
 - **简历 RAG v2 重构（2026-08-16，T1-T7，16 例回归，383/383 PASS（HR 349））**：设计 specs/2026-08-16-resume-rag-v2-design.md、方案 plans/2026-08-16-resume-rag-v2-implementation.md（提交 538a8a8..3797bfe）：
   - **T1 PII 掩码前置**：掩码先于任何 LLM 调用（行内替换不改行号，行号边界协议不受影响）；保真语义更新为「相对掩码后原文」；scan_residual_pii 仍为入库 backstop；**修复已知限制 9.3-3（LLM 不再收到未脱敏全文）**；
   - **T2 title 入 chunks**：HR 自建 Document/Paragraph（content 保真、chunks 带 title 前缀参与向量化/分词），显式触发向量化；内核零改动；
-  - **T3 证据合成**（仅模式 A）：score = max(段分) + λ·log2(1+命中段数)，λ=0.15（置 0 回退旧行为）；meta.aggregation 新增 evidence_lambda/multi_hit_boosted；
+  - **T3 证据合成**（仅模式 A）：score = (0.7*max+0.3*avg)(段分) + λ·log2(1+命中段数)，**λ 默认 0**（= 旧行为 0.7*max+0.3*avg；λ=0.15 开启证据加分；环境变量 MAXKB_HR_EVIDENCE_LAMBDA 可调，审查修复 F2/F6）；meta.aggregation 新增 evidence_lambda/base_formula/multi_hit_boosted；
   - **T4 查询理解 v1 + 结构化预筛**：规则槽位（年限 1-2 位数字+年+以上、防年份误抽、学历、城市双向归一）→ Candidate SQL 预筛 → document 集限定召回；纯条件查询走纯结构化检索（杜绝 embed_query 空串）；NULL 年限纳入并标记 years_unknown；姓名快速通道（2-4 字中文 → name__icontains 置顶）；prefilter_empty 明确返回空不误导；
   - **T5 candidate_skill 技能归一表**：skill_alias.json ~100 条别名 + backfill_candidate_skills 幂等回填；Skill-AND 结构化路 SQL 化（表空回退 JSON 路径）；
   - **T6 Termbase 词条 + 重嵌命令**：seed_resume_termbase（108 词条，幂等，KeywordsSearch 内部已自动生效）+ reindex_resume_knowledge（dry-run；一次重嵌覆盖 T2 存量 + T6 词条；重嵌窗口检索降级 seq scan，低峰执行；真实执行由项目方操作）；
-  - **T7 技能预筛**：LLM 解析技能（auto→phrase）AND candidate_skill EXISTS，与向量 Skill-AND 并存；
+  - **T7 技能预筛**：LLM 解析技能（auto→phrase）AND candidate_skill EXISTS，与向量 Skill-AND 并存；**模式 B 预筛接入（审查修复 F1）：skills 模式限定年限/学历/城市（技能维度归模式 B 自身，防回填稀疏期误杀），预筛空 → prefilter_empty；显式 dense 模式不接预筛（消融契约）**；
   - 已知限制同步：phone/email 语义查找因掩码设计性不可行（v1 不做，产品确认点）；查询理解为规则版（LLM 版并入 P3 合并调用）；城市槽子串匹配可能误中（评测暴露后收紧）。
 - **v2 真实模型评测（2026-08-16，项目方授权后执行；完整输出 installer/eval_v2_report.txt）**：
   - **T1 切片复测**：dataset30 30/30 成功、29/30 LLM 路径、30/30 保真、26/30 PII 掩码、最长段 470 ≤ 500——与基线一致，**掩码前置无质量损失**；顺手修复脚本覆盖度指标（未掩码行 vs 掩码内容必然失配，改为掩码后行比对，实测覆盖 29/30）；
   - **T2 重建验证**：30 份语料按当前代码重建（title 前缀 chunks 100% 生效）+ 同步向量化 30/30 成功；
-  - **检索量化（12 锚点 × 4 模式，λ 消融）**：λ=0.15 使 dense/RRF 全面下降（dense recall@5 0.67/MRR 0.33 vs λ=0 的 0.75/0.51；RRF+rerank recall@5 0.83 vs 0.92）→ **λ 默认置 0（证据合成机制保留待更大样本评测）**；λ=0 下 RRF+rerank recall@5=0.92 / recall@3=0.83 与审计基线持平（Top-1/MRR 略低，属重切分随机性 + title 前缀双重因素，需更大样本确认）；Skill-AND recall@5=0.67（基线 0.75，同样归因切片/技能分解随机性）；
+  - **检索量化（12 锚点 × 4 模式，λ 消融）**：λ=0.15 综合劣于 λ=0——recall@5 主指标全面下降（dense recall@5 0.67/MRR 0.33 vs λ=0 的 0.75/0.51；RRF+rerank recall@5 0.83 vs 0.92），但 RRF 无 rerank 的 recall@5（0.67→0.75）与 RRF+rerank 的 Top-1/MRR（0.58→0.67 / 0.680→0.705）三格回升；样本 12 锚点不足显著判定 → **λ 默认置 0（证据合成机制保留待规模验证 G4 裁决）**；λ=0 下 RRF+rerank recall@5=0.92 / recall@3=0.83 与审计基线持平（Top-1/MRR 略低，属重切分随机性 + title 前缀双重因素，需更大样本确认）；Skill-AND recall@5=0.67（基线 0.75，同样归因切片/技能分解随机性）；
   - **T7 真实数据暴露缺陷并修复**：candidate_skill 表空时技能预筛 EXISTS 空表误杀整条查询（Skill-AND 从 0.75 崩到 0.25）→ 表空回退技能维度（提交后复测恢复）；backfill_candidate_skills 实测 31 候选人 0 行（语料 skills 字段为空，与旧评测「结构化基线 0.00」一致）。
 - 设计/计划：docs/superpowers/specs/2026-08-15-end-to-end-pipeline-combined-design.md（权威）、docs/superpowers/specs/2026-08-15-hr-resume-search-design.md（检索设计 v2）、docs/superpowers/specs/2026-08-16-resume-rag-v2-design.md（v2 目标态）、docs/superpowers/plans/2026-08-16-resume-rag-v2-implementation.md（v2 实施）、docs/superpowers/plans/2026-08-15-c-stage-resume-rag.md（阶段 3 已完成）。

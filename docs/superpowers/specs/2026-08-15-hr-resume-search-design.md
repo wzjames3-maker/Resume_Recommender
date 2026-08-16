@@ -332,10 +332,12 @@ def _search_skill_and(skills, structured_hits, knowledge, embedding_model, candi
 | 纯条件检索 | ✅ 已实现（T4）：semantic_query 空→纯结构化检索（structured_only），杜绝 embed_query("") | 排序 years desc nulls_last + update_time desc |
 | 姓名快速通道 | ✅ 已实现（T4）：2-4 字中文→name__icontains 置顶（name_match） | phone/email 查找因掩码设计性不可行，v1 不做（产品确认点） |
 | title 入向量 | ✅ 已实现（T2）：chunks 带 title 前缀（HR 自建段落，内核零改动） | content 保持原文（保真/展示/回溯不变） |
-| 证据合成 | ✅ 已实现（T3，仅模式 A）：max(段分)+λ·log2(1+命中段数) | λ=0.15 可配，置 0 回退 0.7*max+0.3*avg |
+| 证据合成 | ✅ 已实现（T3，仅模式 A）：(0.7*max+0.3*avg)(段分)+λ·log2(1+命中段数) | **λ 默认 0**（= 旧行为 0.7*max+0.3*avg，审查修复 F2 恢复基准并加公式锁定断言）；λ=0.15 开启证据加分；MAXKB_HR_EVIDENCE_LAMBDA 可调 |
 | 技能归一表 | ✅ 已实现（T5）：candidate_skill（skill_alias ~100 条 + 幂等回填） | 表空回退 Candidate.skills JSON 路径（迁移期兼容） |
 | Termbase 词条 | ✅ 已实现（T6）：seed_resume_termbase 108 词条幂等写入 | KeywordsSearch 内部已自动生效；需全量重嵌使 search_vector 分词一致 |
 | PII 掩码前置 | ✅ 已实现（T1）：掩码先于 LLM 调用 | 修复本文档 §9.3-3；行内替换不改行号 |
 | 查询理解 LLM 版（合并调用） | ⚠️ 后置（P3） | 当前为规则版（extract_slots） |
 | 城市槽匹配精度 | ⚠️ 已知限制：子串匹配可误中（"北京"命中"北京师范大学"） | 评测暴露后收紧 |
 | 重嵌存量 | ⚠️ 待项目方执行：reindex_resume_knowledge（一次覆盖 T2 存量 + T6 词条） | 重嵌窗口检索降级 seq scan，低峰执行 |
+| 模式 B 接入预筛 | ✅ 已实现（审查修复 F1）：skills 模式预筛接入年限/学历/城市 | 技能维度不进预筛（归模式 B 自身结构化路+语义路，防回填稀疏期误杀）；预筛空 → prefilter_empty |
+| dense 模式契约 | ⚠️ 显式 dense 不接预筛 | 消融纯净性（评测口径依赖），代码注释已声明 |

@@ -28,7 +28,7 @@ export MAXKB_CONFIG_TYPE=ENV \
   MAXKB_REDIS_DB=0 MAXKB_REDIS_MAX_CONNECTIONS=10
 
 uv run python apps/manage.py test hr.tests --keepdb            # HR 全量
-uv run python apps/manage.py test hr.tests application.tests knowledge.tests models_provider.tests ops.tests --keepdb  # 四 app + ops 全量
+uv run python apps/manage.py test hr.tests application.tests knowledge.tests models_provider.tests ops.tests common.tests --keepdb  # 五 app + ops 全量（403 口径 = 四 app+ops 393 + common 10）
 uv run python apps/manage.py makemigrations --check --dry-run  # 迁移漂移检查
 uv run python apps/manage.py migrate --check                   # 未应用迁移检查
 uv run ruff check apps/hr/
@@ -57,7 +57,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 | `README-hr.md` | 各期验收记录（一期到 A 阶段，含测试数演进） |
 | `docs/superpowers/specs/2026-08-13-*.md` | 二至七期规格（简历/搜索匹配/AI/异步/合并） |
 
-## 3. 已完成（当前测试基线：四 app + ops 383/383 PASS，HR 349）
+## 3. 已完成（当前测试基线：五 app + ops 403/403 PASS（HR 358 + 内核 45），审查修复后）
 
 ### 3.1 PRD 七期（基础能力）
 
@@ -151,7 +151,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
   - **T6 Termbase 词条 + 重嵌命令**：seed_resume_termbase（108 词条，幂等，KeywordsSearch 内部已自动生效）+ reindex_resume_knowledge（dry-run 支持；一次重嵌覆盖 T2 存量 + T6 词条；重嵌窗口检索降级 seq scan，低峰执行；真实执行由项目方操作）；
   - **T7 技能预筛**：LLM 解析技能（auto→phrase）AND candidate_skill EXISTS，与向量 Skill-AND 并存。
   - 已知限制同步：phone/email 语义查找因掩码设计性不可行（v1 不做，产品确认点）；查询理解为规则版（LLM 版并入 P3 合并调用）；城市槽子串匹配可能误中（评测暴露后收紧）。
-  - **真实模型评测（2026-08-16，项目方授权）：T1 切片复测 30/30 保真无回归（覆盖指标修复后 29/30）；T2 重建 30/30（title-chunks 全生效）；检索 λ 消融：λ=0.15 全面劣于 λ=0（dense 0.75→0.67）→ λ 默认置 0；λ=0 下 RRF+rerank recall@5=0.92/recall@3=0.83 持平审计基线；T7 表空误杀缺陷被评测暴露并修复（Skill-AND 0.25→0.75）。完整输出 installer/eval_v2_report.txt**
+  - **真实模型评测（2026-08-16，项目方授权）：T1 切片复测 30/30 保真无回归（覆盖指标修复后 29/30）；T2 重建 30/30（title-chunks 全生效）；检索 λ 消融：λ=0.15 综合劣于 λ=0（recall@5 主指标下降：dense 0.75→0.67、RRF+rerank 0.92→0.83；但 RRF recall@5 与 RRF+rerank Top-1/MRR 三格回升，样本 12 锚点不足显著判定）→ λ 默认置 0，机制保留待 G4 裁决；λ=0 下 RRF+rerank recall@5=0.92/recall@3=0.83 持平审计基线；T7 表空误杀缺陷被评测暴露并修复（Skill-AND 0.25→0.75）。完整输出 installer/eval_v2_report.txt**
 - ✅ **内核 P1 修复（2026-08-16，3 提交，基线 392/392）**：K1 Fork 抓取 SSRF 加固（8638956：超时 5s/20s + 私网/云元数据黑名单含重定向跳转，阻断内网探测；4 新测试）；K2 Web 同步网络抓取移出事务（6fc68c5：慢站点不再长占 DB 连接/锁，成功/失败路径行为保持，3 新测试）；K3 聊天异常文本不回传用户（99292fa：异常细节仅入日志，回答与 chat_record 为通用文案，1 新测试）。
 - ✅ **内核 P2 修复（2026-08-16，2 提交，基线 401/401）**：P2-4/5/6 解析边界加固（29222d2：PIL 像素上限 50MP 防解压炸弹 OOM；zip 总量 200MB/单文件 50MB 上限 + 失败文件记日志不再静默；split_model 切点字符表半角修正与 4096 死代码清理，与设计 §6.1 对齐）；P2-7/8 任务与索引健壮性（bbaa1c6：embedding 派发失败记日志；索引 DDL IF NOT EXISTS/IF EXISTS 防并发竞态）。P2-9（简历库管理员旁路）为产品决策项未动。
 - ✅ **内核 P3 低风险项（2026-08-16，基线 403/403）**：P3-10 双轨 normalize 一致（chat 查询先 normalize，与 hit_test 对齐）+ P3-12 _batch_save Termbase 预取一次消除 N+1（822330b）。评测脚本升级：typed 锚点程序化生成（lookup/conditional，--typed N）+ 分类型 recall@5/MRR（0963d04）；生产落地脚本 installer/production_landing.sh（迁移/回填/词条/重嵌一键，0963d04）。P3-11 blend 尺度、P3-13 截断语义、P3-15 ruff chore 未立项。
@@ -180,7 +180,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 ## 7. 提交流程与账本
 
 - 每期：docs 规格提交 → docs 实现计划提交 → 实现（TDD）→ 全量验收 → 审查 → 修复
-- 测试数演进：23→31→39→47→76→86→107（一期至七期，四 app 口径）→141→183→207→215（A 阶段，切 HR 单 app 口径）→227（四 app = HR 215 + 内核 12）→231（+ops 4）→240（+候选恢复 9）→255（+面试协作 15）→287（+Offer/交接 32）→301（+批量导入 14，B 阶段完成，2026-08-15）→336（C 阶段收尾，6c022e4 文档同步基线，HR 302）→342（HR 308 + 内核 34，2026-08-15：切片器超长降级 2 + docx 表格 1 + 流转日志 3）→**355（HR 321 + 内核 34，2026-08-16 实测：四 app + ops 355/355，342 后新增 13 例 = ResumeSearchTests 11 + AiService 配置扩展 2）**→357（HR 323 + 内核 34，742fafe 审查修复 4 处）→**367（HR 333 + 内核 34，2026-08-16 第二轮审查修复后实测：四 app + ops 367/367，357 后新增 10 例 = 删除清理 2 + PII 二次扫描 2 + 结构化路 2 + 参数 clamp 1 + embedding 友好错误 2 + mode 退化 meta 1）**→**383（HR 349 + 内核 34，2026-08-16 v2 重构实测：四 app + ops 383/383，367 后新增 16 例 = T1 掩码前置 1 + T2 title-chunks 1 + T3 证据合成 1 + T4 查询理解/预筛 7 + T5 技能归一 3 + T6 重嵌命令 2 + T7 技能预筛 1）**
+- 测试数演进：23→31→39→47→76→86→107（一期至七期，四 app 口径）→141→183→207→215（A 阶段，切 HR 单 app 口径）→227（四 app = HR 215 + 内核 12）→231（+ops 4）→240（+候选恢复 9）→255（+面试协作 15）→287（+Offer/交接 32）→301（+批量导入 14，B 阶段完成，2026-08-15）→336（C 阶段收尾，6c022e4 文档同步基线，HR 302）→342（HR 308 + 内核 34，2026-08-15：切片器超长降级 2 + docx 表格 1 + 流转日志 3）→**355（HR 321 + 内核 34，2026-08-16 实测：四 app + ops 355/355，342 后新增 13 例 = ResumeSearchTests 11 + AiService 配置扩展 2）**→357（HR 323 + 内核 34，742fafe 审查修复 4 处）→**367（HR 333 + 内核 34，2026-08-16 第二轮审查修复后实测：四 app + ops 367/367，357 后新增 10 例 = 删除清理 2 + PII 二次扫描 2 + 结构化路 2 + 参数 clamp 1 + embedding 友好错误 2 + mode 退化 meta 1）**→**383（HR 349 + 内核 34，2026-08-16 v2 重构实测：四 app + ops 383/383，367 后新增 16 例 = T1 掩码前置 1 + T2 title-chunks 1 + T3 证据合成 1 + T4 查询理解/预筛 7 + T5 技能归一 3 + T6 重嵌命令 2 + T7 技能预筛 1）**→**403（五 app + ops = 四 app+ops 393 + common 10，2026-08-16 内核 P3 修复后实测：common.tests 为本轮新增文件）**→**审查修复后 408（HR 358：F2 公式锁定 1 + F1 模式 B 预筛 3 + F5 rank 1 + F6 env 2 + F7 预筛阈值/城市归一 2）**
 - 规格/计划/验收文档路径规范：`docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`、`docs/superpowers/plans/`、`docs/superpowers/audits/YYYY-MM-DD-<topic>-baseline.md`
 - 提交信息：`feat(人事)/fix(人事)/docs(人事)/test(人事): 中文描述`
 
