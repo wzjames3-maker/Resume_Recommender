@@ -4275,6 +4275,62 @@ class ResumeSearchTests(TestCase):
         self.assertIn(str(doc2.id), dict(ordered))
         self.assertIn(str(doc2.id), b_meta["structured_only"])
 
+    def test_skill_mode_prefilter_years(self):
+        """F1：skills 模式接入结构化预筛——年限硬条件对结构化路生效（技能命中但年限不足者不返回）。"""
+        from hr.models import CandidateSkill
+        from hr.services.resume_search import search_resumes
+        cand_b, doc_b, _ = self._extra_candidate("年限不足", 3, skills=["java", "python"])
+        cand_c, doc_c, _ = self._extra_candidate("年限足够", 8, skills=["java", "python"])
+        for cand in (cand_b, cand_c):
+            for skill in ("java", "python"):
+                CandidateSkill.objects.create(candidate=cand, skill_norm=skill, skill_raw=skill)
+        with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()), \
+                patch("hr.services.resume_search._parse_skills", return_value=["java", "python"]), \
+                patch("hr.services.resume_search.EmbeddingSearch") as m_emb, \
+                patch("hr.services.resume_search.KeywordsSearch") as m_key:
+            m_emb.return_value.handle.return_value = []  # 无语义命中，验证结构化路
+            m_key.return_value.handle.return_value = []
+            result = search_resumes(self.workspace_id, "java python 5年以上", mode="auto",
+                                    llm_model=Mock(), user_id=self.user.id)
+        self.assertEqual(result["meta"]["mode"], "skills")
+        self.assertTrue(result["meta"]["prefilter"]["applied"])
+        names = [it["candidate"]["name"] for it in result["items"] if it["candidate"]]
+        self.assertIn("年限足够", names)
+        self.assertNotIn("年限不足", names)
+
+    def test_skill_mode_prefilter_empty(self):
+        """F1：skills 模式预筛为空 → prefilter_empty 提前返回（不做语义兜底）。"""
+        from hr.services.resume_search import search_resumes
+        with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()), \
+                patch("hr.services.resume_search._parse_skills", return_value=["java", "python"]):
+            result = search_resumes(self.workspace_id, "java python 博士", mode="skills",
+                                    llm_model=Mock(), user_id=self.user.id)
+        self.assertEqual(result["meta"]["search_type"], "prefilter_empty")
+        self.assertEqual(result["items"], [])
+
+    def test_skill_mode_recall_limited_by_document_ids(self):
+        """F1：skills 模式语义路召回限定在预筛文档集（EmbeddingSearch 收到的 query_set 带 document_id 过滤）。"""
+        from hr.services.resume_search import search_resumes
+        paragraph = self._paragraph()
+        self._embedding(paragraph)
+        self._extra_candidate("低年限", 3, skills=["java", "python"])
+        with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()), \
+                patch("hr.services.resume_search._parse_skills", return_value=["java", "python"]), \
+                patch("hr.services.resume_search.EmbeddingSearch") as m_emb, \
+                patch("hr.services.resume_search.KeywordsSearch") as m_key:
+            m_emb.return_value.handle.return_value = [{"paragraph_id": str(paragraph.id), "similarity": 0.9}]
+            m_key.return_value.handle.return_value = []
+            result = search_resumes(self.workspace_id, "java python 5年以上", mode="skills",
+                                    llm_model=Mock(), user_id=self.user.id)
+        calls = m_emb.return_value.handle.call_args_list
+        self.assertTrue(calls)
+        qs = calls[0][0][0]  # 第一个位置参数 = query_set
+        self.assertIn("document_id", str(qs.query))
+        # 预筛集只含 self.document（李冠光 years NULL 纳入；低年限 3 被排除）
+        self.assertEqual(result["meta"]["prefilter"]["resume_count"], 1)
+        self.assertEqual(result["meta"]["search_type"], "skill_ordered")
+
+
 
 
     # ---------- 审查修复回归（2026-08-16 第二轮） ----------

@@ -220,17 +220,19 @@ def _aggregate(paragraphs, hr_role):
     return results
 
 
-def _search_skill_and(skills, workspace_id, knowledge, embedding_model, candidate_k, similarity, top_k):
+def _search_skill_and(skills, workspace_id, knowledge, embedding_model, candidate_k, similarity, top_k, document_ids=None):
     """模式 B 主干：语义路（按序逐技能双路召回，每技能一次 embed）→ 候选池累积（不截断）
     + 结构化路（Candidate.skills 精确命中，设计 §2 步骤2）→ 命中向量 OR 合并
     → 字典序排序 → 返回 [(doc_id, hit_vec)]。
+    document_ids（F1）：结构化预筛文档集（skills 模式的年限/学历/城市硬条件），
+    语义路与结构化路均限定在该集内；None 表示不限定。
     相对阈值原因：短技能词（java/fastapi/rag）对任意段落的 dense 相似度都在 0.2~0.42 区间，
     固定阈值会导致人人命中、命中向量失去区分度（实测）。"""
     pool = {}            # paragraph_id(str) -> row
     doc_skill_vec = {}   # document_id(str) -> hit_vec
     sparse_failed = False
     for skill_index, skill in enumerate(skills):
-        recall = _recall_dual(skill, knowledge, embedding_model, candidate_k, similarity)
+        recall = _recall_dual(skill, knowledge, embedding_model, candidate_k, similarity, document_ids=document_ids)
         sparse_failed = sparse_failed or recall.get("sparse_failed", False)
         fused = _rrf_fuse(recall["dense"], recall["sparse"])
         for row in fused:
@@ -294,8 +296,12 @@ def _search_skill_and(skills, workspace_id, knowledge, embedding_model, candidat
             if any(vec):
                 hit_candidate_ids.append((candidate.id, vec))
     if hit_candidate_ids:
-        resumes = list(QuerySet(ResumeFile).filter(
-            candidate_id__in=[candidate_id for candidate_id, _ in hit_candidate_ids], document_id__isnull=False))
+        resumes_qs = QuerySet(ResumeFile).filter(
+            candidate_id__in=[candidate_id for candidate_id, _ in hit_candidate_ids], document_id__isnull=False)
+        if document_ids:
+            # F1：结构化路与预筛文档集求交（年限/学历/城市硬条件对结构化命中同样生效）
+            resumes_qs = resumes_qs.filter(document_id__in=document_ids)
+        resumes = list(resumes_qs)
         resume_by_candidate = {}
         for rf in resumes:
             resume_by_candidate.setdefault(str(rf.candidate_id), rf)
@@ -389,8 +395,11 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
         mode = "phrase"
         meta["mode"] = "phrase"
 
-    # ---------- 结构化预筛（T4/T7，仅整句/混合模式；G1：精确条件由 SQL 保证） ----------
-    # T7：技能维度——LLM 已解析出技能（模式 auto→phrase 且技能 <2 时）则 AND 上 candidate_skill EXISTS
+    # ---------- 结构化预筛（T4/T7，整句/混合/Skills 模式；G1：精确条件由 SQL 保证） ----------
+    # 技能维度仅整句/混合模式接入（T7：LLM 已解析出技能且 <2 时 AND 上 candidate_skill EXISTS）；
+    # skills 模式的技能命中由模式 B 自身（结构化路 + 语义路 OR 合并）负责，预筛只保年限/学历/城市——
+    # 避免与 candidate_skill EXISTS 双重收窄、回填稀疏期误杀（审查修复 F1，owner 决策：不含技能维度）。
+    # 显式 dense 模式不接预筛（消融纯净性，评测口径依赖该契约）。
     skill_norms = [normalize_skill(s) for s in skills]
     hard = (
         slots["years_min"] is not None
@@ -398,7 +407,7 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
         or bool(slots["cities"])
         or bool(skill_norms)
     )
-    if mode in ("phrase", "hybrid") and hard:
+    if mode in ("phrase", "hybrid", "skills") and hard:
         q = Q()
         if slots["years_min"] is not None:
             # 年限未知（NULL）纳入但排序靠后（years_unknown 标记），不静默消失（R2）
@@ -407,7 +416,7 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
             q &= Q(highest_degree__in=degree_words(slots["degree_level"]))
         for city in slots["cities"]:
             q &= Q(current_city=city) | Q(current_city=norm_city(city)) | Q(current_city=norm_city(city) + "市")
-        if skill_norms and QuerySet(CandidateSkill).filter(
+        if mode in ("phrase", "hybrid") and skill_norms and QuerySet(CandidateSkill).filter(
             candidate__workspace_id=workspace_id, candidate__status=CandidateStatus.ACTIVE
         ).exists():
             # 表空（未回填/语料无技能）时跳过技能维度，避免 EXISTS 空表误杀整条查询（迁移期兼容）
@@ -443,7 +452,8 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
     # ---------- 模式 B：Skill-AND ----------
     if mode == "skills" and len(skills) >= 2:
         ordered, b_meta = _search_skill_and(
-            skills, workspace_id, knowledge, embedding_model, recall_k, similarity, top_k
+            skills, workspace_id, knowledge, embedding_model, recall_k, similarity, top_k,
+            document_ids=prefilter_ids,
         )
         doc_paragraphs = b_meta.pop("doc_paragraphs", {})
         structured_only = b_meta.pop("structured_only", {})
