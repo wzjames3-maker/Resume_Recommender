@@ -52,11 +52,58 @@ ANCHORS = [
 ]
 
 
+def build_typed_anchors(count: int = 10):
+    """程序化生成 typed 锚点（无需人工标注，v2 评测 §6）：
+    lookup：候选人姓名（验证姓名快速通道）；conditional：年限/学历/城市槽位（验证结构化预筛）。
+    目标 = 该候选人当前简历文件。"""
+    import random
+
+    from django.db.models import QuerySet
+
+    from hr.models import Candidate, ResumeFile
+
+    anchors = []
+    candidates = list(QuerySet(Candidate).filter(workspace_id=WORKSPACE, status="ACTIVE"))
+    rng = random.Random(42)
+    rng.shuffle(candidates)
+    picked = candidates[:count]
+    for cand in picked:
+        rf = QuerySet(ResumeFile).filter(candidate_id=cand.id, document_id__isnull=False).first()
+        if rf is None:
+            continue
+        target = rf.file_name
+        base = {"skills": None, "degree": None, "years": None}
+        if cand.name:
+            anchors.append({"q": cand.name, "targets": [target], "type": "lookup", "structured": base})
+        if cand.years_experience:
+            anchors.append({"q": f"{cand.years_experience}年以上", "targets": [target], "type": "conditional",
+                            "structured": {**base, "years": cand.years_experience}})
+        if cand.highest_degree:
+            anchors.append({"q": cand.highest_degree, "targets": [target], "type": "conditional",
+                            "structured": {**base, "degree": cand.highest_degree}})
+        if cand.current_city:
+            anchors.append({"q": cand.current_city, "targets": [target], "type": "conditional",
+                            "structured": base})
+    return anchors
+
+
+def load_anchors():
+    """基础锚点 + （--typed [N] 时）程序化 typed 锚点。"""
+    if "--typed" in sys.argv:
+        count = 10
+        idx = sys.argv.index("--typed")
+        if idx + 1 < len(sys.argv) and sys.argv[idx + 1].isdigit():
+            count = int(sys.argv[idx + 1])
+        return ANCHORS + build_typed_anchors(count)
+    return ANCHORS
+
+
 def main():
     sense_key = os.environ.get("SENSENOVA_API_KEY", "")
     if not sense_key:
         print("SENSENOVA_API_KEY is required")
         return 2
+    anchors = load_anchors()
     service = AiService(workspace_id=WORKSPACE, user_id=None, hr_role="ADMIN")
     llm = service._model_or_none()
     rerank = service._rerank_model_or_none()
@@ -104,7 +151,7 @@ def main():
     from hr.models import Candidate
     from django.db.models import QuerySet
     struct_results = []
-    for anchor in ANCHORS:
+    for anchor in anchors:
         cond = anchor["structured"]
         skills = [s.lower() for s in (cond["skills"] or [])]
         cands = list(QuerySet(Candidate).filter(workspace_id=WORKSPACE, status="ACTIVE"))
@@ -128,7 +175,7 @@ def main():
 
     # 汇总
     print("\n" + "=" * 70)
-    print("汇总（12 锚点查询）")
+    print(f"汇总（{len(anchors)} 锚点查询）")
     print("=" * 70)
     for name, _ in modes:
         rows = results[name]
@@ -146,6 +193,24 @@ def main():
     top1 = sum(1 for r in ok if r[1] == 1) / len(ok)
     mrr = sum(1.0 / r[1] for r in ok if r[1]) / len(ok)
     print(f"{'结构化基线':>12}: recall@5={recall5:.2f} recall@3={recall3:.2f} Top-1={top1:.2f} MRR={mrr:.3f}")
+
+    # 分类型指标（v2 评测 §6）：每种锚点类型 × 每种模式的 recall@5/MRR
+    print("\n分类型指标（recall@5 / MRR）")
+    types = sorted({a["type"] for a in anchors})
+    header = "".join(f" {name:>16}" for name, _ in modes)
+    print(f"{'类型':<12}{header}")
+    for t in types:
+        row = f"{t:<12}"
+        for name, _ in modes:
+            rows = [results[name][i] for i, a in enumerate(anchors)
+                    if a["type"] == t and isinstance(results[name][i], tuple)]
+            if rows:
+                r5 = sum(1 for r in rows if r[0]) / len(rows)
+                mrr = sum(r[2] for r in rows) / len(rows)
+                row += f" {r5:.2f}/{mrr:.3f}".rjust(17)
+            else:
+                row += f" {'-':>16}"
+        print(row)
     return 0
 
 
