@@ -26,6 +26,11 @@ _KNOWLEDGE_NAME = "简历语义索引"
 _DEFAULT_FOLDER_ID = "default"
 
 
+class ResidualPIIError(ValueError):
+    """残留 PII 拒绝入库（设计 §6.8）。专用异常供 task 层识别：index_resume 已在
+    抛错前记录 SPLIT FAILED 详情日志，task 层不再重复写（避免双日志，P2 修复）。"""
+
+
 def get_resume_knowledge(workspace_id):
     """按工作区查找简历语义知识库。"""
     return QuerySet(Knowledge).filter(workspace_id=workspace_id, name=_KNOWLEDGE_NAME).first()
@@ -74,7 +79,7 @@ def index_resume(workspace_id, user_id, resume, text, chat_fn, stats=None):
     for chunk in chunks:
         if scan_residual_pii(chunk["content"]):
             log_flow(
-                workspace_id, "SPLIT", status="FAILURE", resume_id=resume.id,
+                workspace_id, "SPLIT", status="FAILED", resume_id=resume.id,
                 detail={
                     "path": (stats or {}).get("path", "?"),
                     "llm_calls": (stats or {}).get("llm_calls", 0),
@@ -83,7 +88,7 @@ def index_resume(workspace_id, user_id, resume, text, chat_fn, stats=None):
                 },
                 error_message=f"切片内容仍包含未掩码的 PII（{chunk['title']}），拒绝入库",
             )
-            raise ValueError(f"切片内容仍包含未掩码的 PII（{chunk['title']}），拒绝入库")
+            raise ResidualPIIError(f"切片内容仍包含未掩码的 PII（{chunk['title']}），拒绝入库")
     log_flow(
         workspace_id, "SPLIT", resume_id=resume.id,
         detail={

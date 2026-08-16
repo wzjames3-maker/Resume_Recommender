@@ -3590,7 +3590,7 @@ class ResumeIndexTests(TestCase):
         self.assertIsNone(resume.document_id)
 
     def test_index_resume_rejects_residual_pii_without_pii_flow_log(self):
-        """P2 复审：残留 PII 拒绝入库时，SPLIT 流转日志不得包含未掩码正文。"""
+        """P2 复审：残留 PII 拒绝入库时，SPLIT 流转日志不得包含未掩码正文（且仅一条 FAILED，枚举一致）。"""
         from hr.models import ResumeFlowLog
 
         resume = self._resume()
@@ -3598,10 +3598,43 @@ class ResumeIndexTests(TestCase):
         with self.assertRaises(ValueError):
             index_resume(self.workspace_id, self.user_id, resume, text, self._stub_chat())
         logs = ResumeFlowLog.objects.filter(resume_id=resume.id, node="SPLIT")
-        self.assertTrue(logs.exists())  # 应有失败日志
+        self.assertEqual(len(logs), 1)  # 内层一条（含详情），不出现第二条
+        self.assertEqual(logs[0].status, "FAILED")  # 与 task 层失败日志枚举一致（不用 FAILURE）
         for log in logs:
             self.assertNotIn("110101900101123", str(log.detail))
             self.assertNotIn("110101900101123", log.error_message or "")
+
+    def test_task_index_skips_duplicate_log_on_residual_pii(self):
+        """P2 修复：_index_resume 捕获 ResidualPIIError 时不再重复写 SPLIT 日志（内层已记录）。"""
+        from hr.models import ResumeFlowLog
+        from hr.services.resume_index import ResidualPIIError
+        from hr.task.resume import _index_resume
+
+        resume = self._resume()
+        with patch("hr.task.resume._llm_chat_fn", return_value=lambda prompt: ""), \
+                patch("hr.task.resume.sanitize_resume_text", return_value="text"), \
+                patch("hr.task.resume.index_resume",
+                      side_effect=ResidualPIIError("切片内容仍包含未掩码的 PII（基本信息），拒绝入库")):
+            _index_resume(resume, "text")
+        resume.refresh_from_db()
+        self.assertIn("语义索引失败", resume.error_message)
+        self.assertEqual(ResumeFlowLog.objects.filter(resume_id=resume.id, node="SPLIT").count(), 0)
+
+    def test_task_index_logs_generic_failure(self):
+        """P2 修复对照：普通异常仍由 task 层写一条 SPLIT FAILED（不误跳）。"""
+        from hr.models import ResumeFlowLog
+        from hr.task.resume import _index_resume
+
+        resume = self._resume()
+        with patch("hr.task.resume._llm_chat_fn", return_value=lambda prompt: ""), \
+                patch("hr.task.resume.sanitize_resume_text", return_value="text"), \
+                patch("hr.task.resume.index_resume", side_effect=RuntimeError("boom")):
+            _index_resume(resume, "text")
+        resume.refresh_from_db()
+        self.assertIn("语义索引失败", resume.error_message)
+        logs = ResumeFlowLog.objects.filter(resume_id=resume.id, node="SPLIT")
+        self.assertEqual(logs.count(), 1)
+        self.assertEqual(logs[0].status, "FAILED")
 
     def test_index_resume_accepts_masked_content(self):
         """修复回归（审查 P2）：掩码已覆盖内容（电话/邮箱/18 位身份证）不触发二次扫描拒绝。"""

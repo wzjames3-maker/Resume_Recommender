@@ -14,7 +14,7 @@ from hr.models import Candidate, HrConfig, ResumeFile, ResumeStatus
 from knowledge.models import Document, Paragraph
 from hr.services.audit import write_audit_log
 from hr.services.flow_log import log_flow
-from hr.services.resume_index import delete_resume_index, index_resume
+from hr.services.resume_index import ResidualPIIError, delete_resume_index, index_resume
 from hr.services.resume_parser import extract_text_from_docx, extract_text_from_txt, parse_resume_text
 from hr.services.resume_splitter import sanitize_resume_text
 from models_provider.tools import get_model_instance_by_model_workspace_id
@@ -149,6 +149,8 @@ def _index_resume(resume, text):
         resume.error_message = ""
         resume.save(update_fields=["error_message", "update_time"])
     except Exception as exc:
-        log_flow(resume.workspace_id, "SPLIT", status="FAILED", resume_id=resume.id, error_message=str(exc))
+        if not isinstance(exc, ResidualPIIError):
+            # 残留 PII 拒绝已在 index_resume 内记录 SPLIT FAILED（含 path/llm_calls 详情），不重复写日志
+            log_flow(resume.workspace_id, "SPLIT", status="FAILED", resume_id=resume.id, error_message=str(exc))
         resume.error_message = f"语义索引失败: {exc}"
         resume.save(update_fields=["error_message", "update_time"])
