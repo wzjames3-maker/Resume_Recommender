@@ -84,6 +84,7 @@ def build_typed_anchors(count: int = 10):
         if cand.current_city:
             anchors.append({"q": cand.current_city, "targets": [target], "type": "conditional",
                             "structured": {**base, "city": cand.current_city}})
+    return anchors  # P2-B 复审：F8 提交误删本行导致 --typed 时 ANCHORS + None TypeError
 
 
 def load_anchors():
@@ -115,7 +116,6 @@ def main():
         ("Skill-AND", {"mode": "auto"}),
     ]
     results = {name: [] for name, _ in modes}
-    results = {name: [] for name, _ in modes}
     errors = {name: 0 for name, _ in modes}
     cond_returns = {name: [] for name, _ in modes}  # F8：conditional 锚点返回项（精确率核对用）
     for anchor in anchors:  # F8 修复：--typed 时须遍历扩展后的锚点集（此前主循环用 ANCHORS，typed 汇总段越界崩溃）
@@ -135,7 +135,6 @@ def main():
                 print(f"  {name}: ERROR {str(exc)[:80]}")
                 continue
             items = result["items"]
-            items = result["items"]
             # F8：conditional 锚点记录返回候选人（供条件精确率核对）
             if anchor["type"] == "conditional":
                 cond_returns.setdefault(name, []).append((anchor, items))
@@ -152,12 +151,11 @@ def main():
             results[name].append((bool(hit), rank_of, mrr))
             print(f"  {name}: hits={hit_names[:5]} 命中={hit} MRR={mrr:.3f}")
 
-    # 结构化基线：Candidate.skills 含 skills 任一项
     # 结构化基线：Candidate 字段过滤（skills 任一项 / degree >= 词表层级 / years >= / city 归一）
     # F8：此前只处理 skills，years/degree/city 条件被忽略（typed conditional 锚点基线恒 0 无意义）
     from hr.models import Candidate, ResumeFile
     from django.db.models import QuerySet
-    from hr.services.query_understand import degree_words, norm_city
+    from hr.services.query_understand import _DEGREE_LEVELS, degree_words, norm_city
     struct_results = []
     for anchor in anchors:
         cond = anchor["structured"]
@@ -169,8 +167,8 @@ def main():
                 continue  # 结构化基线：年限未知视为不匹配（与线上「纳入并标记」口径不同，输出注明）
             if cond.get("years") is not None and c.years_experience < cond["years"]:
                 continue
-            if cond.get("degree") is not None:
-                from hr.services.query_understand import _DEGREE_LEVELS
+            # 非词表学历（如 MBA）线上预筛不生效（extract_slots 只认词表），基线同样不筛
+            if cond.get("degree") is not None and cond["degree"] in _DEGREE_LEVELS:
                 if c.highest_degree not in degree_words(_DEGREE_LEVELS[cond["degree"]]):
                     continue
             if cond.get("city") is not None and norm_city(c.current_city or "") != norm_city(cond["city"]):
@@ -181,6 +179,15 @@ def main():
             rf = QuerySet(ResumeFile).filter(candidate_id=c.id).first()
             if rf:
                 hit_names.append(rf.file_name)
+        # P2-B 复审修复：恢复逐锚点 struct_results 记录与打印（此前误删导致汇总段除零）
+        hit = [t for t in anchor["targets"] if t in hit_names]
+        rank = 0
+        for idx, fn in enumerate(hit_names[:5], 1):
+            if fn in anchor["targets"]:
+                rank = idx
+                break
+        struct_results.append((bool(hit), rank))
+        print(f"  结构化基线: {hit_names[:5]} 命中={hit} Top-1={1 if rank == 1 else 0}")
     # 汇总
     print("\n" + "=" * 70)
     print(f"汇总（{len(anchors)} 锚点查询）")
@@ -196,11 +203,14 @@ def main():
         if errors[name]:
             print(f"           ⚠ {errors[name]} 个锚点异常被剔除（不计入分母）")
     ok = [r for r in struct_results if isinstance(r, tuple)]
-    recall5 = sum(1 for r in ok if r[0]) / len(ok)
-    recall3 = sum(1 for r in ok if r[1] and r[1] <= 3) / len(ok)
-    top1 = sum(1 for r in ok if r[1] == 1) / len(ok)
-    mrr = sum(1.0 / r[1] for r in ok if r[1]) / len(ok)
-    print(f"{'结构化基线':>12}: recall@5={recall5:.2f} recall@3={recall3:.2f} Top-1={top1:.2f} MRR={mrr:.3f}")
+    if not ok:
+        print(f"{'结构化基线':>12}: 无可用锚点（跳过）")
+    else:
+        recall5 = sum(1 for r in ok if r[0]) / len(ok)
+        recall3 = sum(1 for r in ok if r[1] and r[1] <= 3) / len(ok)
+        top1 = sum(1 for r in ok if r[1] == 1) / len(ok)
+        mrr = sum(1.0 / r[1] for r in ok if r[1]) / len(ok)
+        print(f"{'结构化基线':>12}: recall@5={recall5:.2f} recall@3={recall3:.2f} Top-1={top1:.2f} MRR={mrr:.3f}")
 
     # 分类型指标（v2 评测 §6）：每种锚点类型 × 每种模式的 recall@5/MRR
     print("\n分类型指标（recall@5 / MRR）")
@@ -223,7 +233,7 @@ def main():
     # conditional 条件精确率（F8，规模验证 G3 的验收产出）：
     # 对每个 conditional 锚点返回的 items，核对候选人结构化字段是否满足锚点条件；
     # 精确率 = 满足条件的返回项 / 返回项总数（仅统计有返回的锚点）
-    from hr.services.query_understand import degree_words, norm_city
+    from hr.services.query_understand import _DEGREE_LEVELS, degree_words, norm_city
     print("\nconditional 条件精确率（返回项满足锚点条件的比例；满足条件且被返回 / 返回项数）")
     for name, _ in modes:
         rows = cond_returns[name]
@@ -239,10 +249,12 @@ def main():
                 if not c:
                     continue
                 ok = True
-                if cond.get("years") is not None and (c.get("years_experience") or 0) < cond["years"]:
+                # NULL 年限按满足计（线上 R2 语义：纳入并标记 years_unknown，非违约）
+                if cond.get("years") is not None and c.get("years_experience") is not None and c.get("years_experience") < cond["years"]:
                     ok = False
-                if cond.get("degree") is not None:
-                    if c.get("highest_degree") not in degree_words(_DEGREE_LEVELS.get(cond["degree"], 0)):
+                # 非词表学历线上预筛不生效，不计违约
+                if cond.get("degree") is not None and cond["degree"] in _DEGREE_LEVELS:
+                    if c.get("highest_degree") not in degree_words(_DEGREE_LEVELS[cond["degree"]]):
                         ok = False
                 if cond.get("city") is not None and norm_city(c.get("current_city") or "") != norm_city(cond["city"]):
                     ok = False
