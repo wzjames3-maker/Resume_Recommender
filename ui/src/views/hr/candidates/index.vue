@@ -63,7 +63,7 @@
         </el-table-column>
         <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
-            <el-button link type="primary" @click="openCandidateDetail(row)">详情</el-button>
+            <el-button link type="primary" @click="router.push(`/hr/candidates/${row.id}`)">详情</el-button>
             <el-dropdown trigger="click" @command="(cmd: string) => handleRowCommand(cmd, row)">
               <el-button link type="primary">更多<el-icon class="el-icon--right"><arrow-down /></el-icon></el-button>
               <template #dropdown>
@@ -817,6 +817,12 @@ function openCandidateFromQuery() {
   if (typeof candidateId === 'string' && candidateId) {
     openCandidateDetail({ id: candidateId } as Candidate)
   }
+  const editCandidateId = route.query.edit_candidate
+  if (typeof editCandidateId === 'string' && editCandidateId) {
+    HrApi.getCandidate(editCandidateId).then((response) => {
+      openCandidateDialog(response.data)
+    }).catch(() => {})
+  }
 }
 
 onMounted(() => {
@@ -827,6 +833,13 @@ onMounted(() => {
 watch(() => route.query.candidate_id, (candidateId) => {
   if (typeof candidateId === 'string' && candidateId) {
     openCandidateDetail({ id: candidateId } as Candidate)
+  }
+})
+watch(() => route.query.edit_candidate, (editCandidateId) => {
+  if (typeof editCandidateId === 'string' && editCandidateId) {
+    HrApi.getCandidate(editCandidateId).then((response) => {
+      openCandidateDialog(response.data)
+    }).catch(() => {})
   }
 })
 watch(uploadDialogVisible, (visible) => {

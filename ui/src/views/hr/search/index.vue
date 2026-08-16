@@ -164,7 +164,7 @@ function search() {
 
 function goCandidate(candidate: ResumeSearchCandidate | null) {
   if (!candidate) return
-  router.push({ path: '/hr/candidates', query: { candidate_id: candidate.id } })
+  router.push(`/hr/candidates/${candidate.id}`)
 }
 
 function modeLabel(mode: ResumeSearchMode | undefined) {

@@ -21,6 +21,12 @@ const hrRouter = {
       component: () => import('@/views/hr/candidates/index.vue'),
     },
     {
+      path: '/hr/candidates/:id',
+      name: 'hr-candidate-detail',
+      meta: { title: '候选人详情', activeMenu: '/hr', sameRoute: 'hr' },
+      component: () => import('@/views/hr/candidates/detail.vue'),
+    },
+    {
       path: '/hr/jobs',
       name: 'hr-jobs',
       meta: { title: '职位', activeMenu: '/hr', sameRoute: 'hr' },
