@@ -89,6 +89,36 @@ export function assignmentTagType(status: string) {
   return 'primary'
 }
 
+// ---------- Application（ATS v2） ----------
+export const applicationStatusLabels: Record<string, string> = {
+  ACTIVE: '在途',
+  HIRED: '已入职',
+  REJECTED: '已淘汰',
+  WITHDRAWN: '已退出',
+  CLOSED: '已关闭',
+}
+
+export const TERMINAL_APPLICATION_STATUSES = ['REJECTED', 'WITHDRAWN', 'CLOSED'] as const
+
+export function applicationStatusTagType(status: string) {
+  if (status === 'ACTIVE') return 'primary'
+  if (status === 'HIRED') return 'success'
+  return 'info'
+}
+
+export const applicationTerminalReasonOptions: Record<string, string[]> = {
+  reject: ['NOT_FIT', 'SALARY', 'OTHER'],
+  withdraw: ['CANDIDATE_WITHDRAW', 'UNREACHABLE', 'OTHER'],
+  close: ['MERGED', 'OTHER'],
+}
+
+export const applicationActionLabels: Record<string, string> = {
+  reject: '淘汰',
+  withdraw: '候选人退出',
+  close: '关闭申请',
+  restore: '恢复申请',
+}
+
 export const relationTypeLabels: Record<string, string> = {
   APPLY: '投递',
   SEEK: '主动寻访',

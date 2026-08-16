@@ -27,71 +27,67 @@
                   <el-empty v-if="jobDetails[row.id]?.assignments?.length === 0" description="暂无候选人" />
                   <div v-else-if="boardState[row.id]" class="kanban-board">
                     <div
-                      v-for="col in pipelineColumns"
-                      :key="col.key"
+                      v-for="col in pipelineColumnsFor(row.id)"
+                      :key="col.id"
                       class="kanban-col"
-                      :class="['kanban-col--' + col.key, { 'kanban-col--readonly': col.readonly }]"
+                      :class="['kanban-col--' + col.type, { 'kanban-col--readonly': col.readonly }]"
                     >
                       <div class="kanban-col__header">
                         <span class="kanban-col__title">{{ col.label }}</span>
                         <el-tag size="small" round :type="col.readonly ? 'info' : 'primary'" effect="plain">
-                          {{ boardState[row.id][col.key].length }}
+                          {{ (boardState[row.id][col.id] || []).length }}
                         </el-tag>
                       </div>
                       <VueDraggable
-                        v-model="boardState[row.id][col.key]"
-                        :group="{ name: 'assignment-board', pull: !col.readonly, put: !col.readonly }"
+                        v-model="boardState[row.id][col.id]"
+                        :group="{ name: 'application-board', pull: !col.readonly, put: !col.readonly }"
                         :sort="false"
                         :animation="150"
                         handle=".kanban-card__drag"
                         ghost-class="kanban-card--ghost"
                         class="kanban-col__body"
-                        :data-status="col.key"
+                        :data-col-id="col.id"
+                        :data-stage-id="col.stageId || ''"
+                        :data-order="col.order"
                         @add="onBoardDrop(row, $event)"
                       >
-                        <template v-for="assignment in boardState[row.id][col.key]" :key="assignment.id">
-                          <div class="kanban-card" :data-id="assignment.id">
+                        <template v-for="application in boardState[row.id][col.id] || []" :key="application.application_id">
+                          <div class="kanban-card" :data-id="application.application_id">
                             <div class="kanban-card__header">
                               <div class="flex align-center">
                                 <el-icon v-if="!col.readonly" class="kanban-card__drag"><rank /></el-icon>
-                                <span class="kanban-card__name">{{ assignment.candidate_name || '-' }}</span>
+                                <span class="kanban-card__name">{{ application.candidate_name || '-' }}</span>
                               </div>
-                              <el-tag v-if="assignment.is_reapply" size="small" type="warning" effect="plain">重投</el-tag>
+                              <div class="flex align-center gap-6">
+                                <el-tag v-if="application.reapply_no > 0" size="small" type="warning" effect="plain">重投</el-tag>
+                                <el-tag v-if="applicationStatusLabels[application.status] && application.status !== 'ACTIVE'" size="small" :type="applicationStatusTagType(application.status)" effect="plain">
+                                  {{ applicationStatusLabels[application.status] }}
+                                </el-tag>
+                              </div>
                             </div>
                             <div class="kanban-card__meta">
-                              <el-tag v-if="assignment.channel" size="small" effect="plain">{{ channelLabels[assignment.channel] || assignment.channel }}</el-tag>
-                              <el-tag v-if="assignment.relation_type" size="small" type="info" effect="plain">{{ relationTypeLabels[assignment.relation_type] || assignment.relation_type }}</el-tag>
+                              <el-tag v-if="application.channel" size="small" effect="plain">{{ channelLabels[application.channel] || application.channel }}</el-tag>
+                              <el-tag v-if="application.relation_type" size="small" type="info" effect="plain">{{ relationTypeLabels[application.relation_type] || application.relation_type }}</el-tag>
                             </div>
                             <div class="kanban-card__footer">
-                              <span class="color-secondary ellipsis">{{ assignment.owner_id ? memberName(assignment.owner_id) : '未分配' }}</span>
+                              <span class="color-secondary ellipsis">{{ application.owner_id ? memberName(application.owner_id) : '未分配' }}</span>
                               <div class="flex align-center">
-                                <el-button v-if="isHrOperator" link type="primary" size="small" @click="openInterviewDrawer(row, assignment)">面试</el-button>
-                                <el-button v-if="isHrAdmin && assignment.status === 'OFFER'" link type="primary" size="small" @click="openOfferDrawer(row, assignment)">Offer</el-button>
+                                <el-button v-if="isHrOperator" link type="primary" size="small" @click="openInterviewDrawer(row, application)">面试</el-button>
+                                <el-button v-if="isHrAdmin && isOfferStage(application)" link type="primary" size="small" @click="openOfferDrawer(row, application)">Offer</el-button>
                                 <el-dropdown
                                   v-if="isHrOperator"
                                   trigger="click"
                                   size="small"
                                   @click.stop
-                                  @command="(cmd: string) => onCardCommand(cmd, row, assignment)"
+                                  @command="(cmd: string) => onCardCommand(cmd, row, application)"
                                 >
                                   <el-button link size="small" @click.stop>更多</el-button>
                                   <template #dropdown>
                                     <el-dropdown-menu>
-                                      <el-dropdown-item v-if="isHrAdmin" command="edit">编辑指派</el-dropdown-item>
-                                      <el-dropdown-item
-                                        v-if="PIPELINE_ORDER.includes(assignment.status as any) && assignment.status !== 'HIRED'"
-                                        command="reject"
-                                        divided
-                                      >淘汰</el-dropdown-item>
-                                      <el-dropdown-item
-                                        v-if="PIPELINE_ORDER.includes(assignment.status as any) && assignment.status !== 'HIRED'"
-                                        command="withdraw"
-                                      >候选人退出</el-dropdown-item>
-                                      <el-dropdown-item
-                                        v-if="PIPELINE_ORDER.includes(assignment.status as any) && assignment.status !== 'HIRED'"
-                                        command="close"
-                                      >关闭指派</el-dropdown-item>
-                                      <el-dropdown-item v-if="isHrAdmin && assignment.status === 'REJECTED'" command="restore" divided>恢复待筛选</el-dropdown-item>
+                                      <el-dropdown-item v-if="isActiveApplication(application)" command="reject">淘汰</el-dropdown-item>
+                                      <el-dropdown-item v-if="isActiveApplication(application)" command="withdraw">候选人退出</el-dropdown-item>
+                                      <el-dropdown-item v-if="isActiveApplication(application)" command="close">关闭申请</el-dropdown-item>
+                                      <el-dropdown-item v-if="isHrAdmin && application.status === 'REJECTED'" command="restore" divided>恢复申请</el-dropdown-item>
                                     </el-dropdown-menu>
                                   </template>
                                 </el-dropdown>
@@ -190,7 +186,7 @@
 
     <el-dialog v-model="interviewDrawerVisible" title="面试记录" width="640px">
       <div class="flex-between mb-16">
-        <span>{{ interviewCandidateName }} · 第 {{ interviewAssignment?.id?.slice(0, 8) }} 指派</span>
+        <span>{{ interviewCandidateName }} · 申请 {{ interviewAssignment?.application_id?.slice(0, 8) }}</span>
         <el-button v-if="isHrOperator" type="primary" size="small" @click="addInterviewFormVisible = true">安排面试</el-button>
       </div>
       <el-form v-if="addInterviewFormVisible" label-width="88px" class="mb-16 p-16 border rounded">
@@ -255,7 +251,7 @@
 
     <el-dialog v-model="offerDrawerVisible" title="Offer 管理" width="860px">
       <div class="flex-between mb-16">
-        <span>{{ offerCandidateName }} · {{ offerAssignment?.job_name || '' }}</span>
+        <span>{{ offerCandidateName }} · {{ offerJobName }}</span>
         <el-button v-if="isHrAdmin" type="primary" size="small" @click="addOfferFormVisible = true">新建版本</el-button>
       </div>
       <el-form v-if="addOfferFormVisible" label-width="88px" class="mb-16 p-16 border rounded">
@@ -330,12 +326,15 @@
       </template>
     </el-dialog>
 
-    <el-dialog v-model="closeDialogVisible" title="关闭职位" width="440px">
+    <el-dialog v-model="closeDialogVisible" title="关闭职位" width="460px">
       <el-form label-width="96px">
         <el-form-item label="职位"><span>{{ closingJob?.name }}</span></el-form-item>
-        <el-form-item label="在途关联">
-          <el-tag type="warning">{{ closingJob?.active_assignment_count || 0 }}</el-tag>
-          <span class="ml-8 color-secondary">将被批量收尾并标记为「职位关闭」</span>
+        <el-form-item label="在途申请">
+          <el-tag :type="(closePreview?.active_application_count || 0) > 0 ? 'warning' : 'success'">{{ closePreview?.active_application_count || 0 }}</el-tag>
+          <span class="ml-8 color-secondary">关闭后逐条写 CLOSED 事件，并自动撤回该申请下 DRAFT/SENT Offer</span>
+        </el-form-item>
+        <el-form-item v-if="closeMode === 'BULK'" label="批量确认">
+          <el-checkbox v-model="bulkConfirmed">确认批量关闭 {{ closePreview?.active_application_count || 0 }} 条在途申请</el-checkbox>
         </el-form-item>
         <el-form-item label="关闭原因" required>
           <el-select v-model="closeReason" placeholder="选择关闭原因" style="width: 100%">
@@ -345,52 +344,40 @@
       </el-form>
       <template #footer>
         <el-button @click="closeDialogVisible = false">取消</el-button>
-        <el-button type="primary" :disabled="!closeReason" :loading="saving" @click="confirmCloseJob">确认关闭</el-button>
+        <el-button type="primary" :disabled="!closeReason || hasActiveApplications && !bulkConfirmed" :loading="saving" @click="confirmCloseJob">确认关闭</el-button>
       </template>
     </el-dialog>
 
-    <el-dialog v-model="statusDialogVisible" title="状态变更" width="440px">
+    <el-dialog v-model="backwardDialogVisible" title="阶段回退 / 同阶段移动" width="440px">
+      <el-form label-width="96px">
+        <el-form-item label="候选人"><span>{{ backwardTarget?.candidate_name }}</span></el-form-item>
+        <el-form-item label="目标阶段"><span>{{ backwardTarget?.target_stage_name }}</span></el-form-item>
+        <el-form-item label="原因" required>
+          <el-input v-model="backwardReason" placeholder="回退/同阶段移动必须填写原因（仅负责人或管理员可操作）" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="backwardDialogVisible = false">取消</el-button>
+        <el-button type="primary" :disabled="!backwardReason.trim()" :loading="saving" @click="confirmBackwardMove">确认</el-button>
+      </template>
+    </el-dialog>
+
+    <el-dialog v-model="statusDialogVisible" :title="isRestoreTransition ? '恢复申请' : '终止申请'" width="440px">
       <el-form label-width="96px">
         <el-form-item label="候选人"><span>{{ statusDialogAssignment?.candidate_name }}</span></el-form-item>
-        <el-form-item label="目标状态"><span>{{ assignmentStatusLabels[statusDialogTarget] || statusDialogTarget }}</span></el-form-item>
+        <el-form-item v-if="!isRestoreTransition" label="操作"><span>{{ applicationActionLabels[statusDialogAction] || statusDialogAction }}</span></el-form-item>
         <el-form-item v-if="isRestoreTransition" label="恢复原因" required>
-          <el-input v-model="statusDialogNote" placeholder="填写误拒绝恢复原因" />
+          <el-input v-model="statusDialogNote" placeholder="填写误淘汰恢复原因" />
         </el-form-item>
         <el-form-item v-else label="终止原因" required>
           <el-select v-model="statusDialogReason" placeholder="选择终止原因" style="width: 100%">
-            <el-option v-for="(label, value) in terminationReasonLabels" :key="value" :label="label" :value="value" />
+            <el-option v-for="reason in terminalReasonOptionsFor(statusDialogAction)" :key="reason" :label="terminationReasonLabels[reason]" :value="reason" />
           </el-select>
         </el-form-item>
       </el-form>
       <template #footer>
         <el-button @click="statusDialogVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="confirmStatusChange">确认</el-button>
-      </template>
-    </el-dialog>
-
-    <el-dialog v-model="assignmentEditVisible" title="编辑指派" width="480px">
-      <el-form label-width="88px">
-        <el-form-item label="候选人"><span>{{ assignmentEditForm.candidate_name }}</span></el-form-item>
-        <el-form-item label="关系类型">
-          <el-select v-model="assignmentEditForm.relation_type" style="width: 100%">
-            <el-option v-for="(label, value) in relationTypeLabels" :key="value" :label="label" :value="value" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="渠道">
-          <el-select v-model="assignmentEditForm.channel" style="width: 100%">
-            <el-option v-for="(label, value) in channelLabels" :key="value" :label="label" :value="value" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="负责人">
-          <el-select v-model="assignmentEditForm.owner_id" clearable filterable placeholder="选择负责人" style="width: 100%">
-            <el-option v-for="member in members" :key="member.id" :label="member.nick_name" :value="member.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item label="备注"><el-input v-model="assignmentEditForm.note" type="textarea" :rows="3" /></el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="assignmentEditVisible = false">取消</el-button>
-        <el-button type="primary" :loading="saving" @click="saveAssignmentEdit">保存</el-button>
+        <el-button type="primary" :disabled="!isRestoreTransition && !statusDialogReason" :loading="saving" @click="confirmStatusChange">确认</el-button>
       </template>
     </el-dialog>
 
@@ -407,9 +394,10 @@ import AiSettingDialog from '@/views/hr/components/AiSettingDialog.vue'
 import HrApi from '@/api/hr/recruitment'
 import AuthorizationApi from '@/api/system/resource-authorization'
 import {
-  PIPELINE_ORDER,
-  TERMINAL_STATUSES,
-  assignmentStatusLabels,
+  applicationActionLabels,
+  applicationStatusLabels,
+  applicationStatusTagType,
+  applicationTerminalReasonOptions,
   channelLabels,
   jobCloseReasonLabels,
   jobStatusLabels,
@@ -420,14 +408,15 @@ import {
   terminationReasonLabels,
 } from '@/views/hr/constants'
 import type {
-  Assignment,
-  AssignmentStatus,
   Interview,
   Job,
+  JobApplication,
+  JobClosePreview,
   JobCloseReason,
   JobDetail,
   JobMatchCandidate,
   JobMatchPage,
+  JobStage,
   JobStatus,
   Offer,
   RelationType,
@@ -442,6 +431,17 @@ interface WorkspaceMember {
   nick_name: string
   roles: string[]
 }
+
+interface BoardColumn {
+  id: string
+  label: string
+  readonly: boolean
+  stageId: string | null
+  order: number
+  type: string
+}
+
+type ApplicationAction = 'reject' | 'withdraw' | 'close' | 'restore'
 
 const statusOptions = computed(() => {
   if (!editingJob.value) {
@@ -459,46 +459,71 @@ const filters = reactive({ name: '', status: '', owner_id: '' })
 const pagination = reactive({ current_page: 1, page_size: 20, total: 0 })
 const jobDetails = reactive<Record<string, JobDetail>>({})
 const matches = reactive<Record<string, JobMatchPage>>({})
-/** 看板列:key 对应后端状态,TERMINAL 收纳全部终态 */
-const pipelineColumns = [
-  { key: 'PENDING_SCREEN', label: '待筛选', readonly: false },
-  { key: 'SCREEN_PASSED', label: '筛选通过', readonly: false },
-  { key: 'INTERVIEWING', label: '面试中', readonly: false },
-  { key: 'OFFER', label: 'Offer 中', readonly: false },
-  { key: 'HIRED', label: '已入职', readonly: true },
-  { key: 'TERMINAL', label: '已结束', readonly: true },
-] as const
+const detailLoading = ref('')
+const expandTab = reactive<Record<string, string>>({})
 
-type BoardColumnKey = (typeof pipelineColumns)[number]['key']
+// ---------- 动态 Pipeline 看板（R4：读取 JobStage，Application 卡片按 current_stage 分列） ----------
+const stages = reactive<Record<string, JobStage[]>>({})
+const boardColumns = reactive<Record<string, BoardColumn[]>>({})
+const boardState = reactive<Record<string, Record<string, JobApplication[]>>>({})
 
-const boardState = reactive<Record<string, Record<BoardColumnKey, Assignment[]>>>({})
+const HIRED_COL = '__hired__'
+const TERMINAL_COL = '__terminal__'
+
+function buildColumns(jobId: string) {
+  const cols: BoardColumn[] = (stages[jobId] || []).map((stage) => ({
+    id: stage.id,
+    label: stage.name,
+    readonly: false,
+    stageId: stage.id,
+    order: stage.order,
+    type: 'stage',
+  }))
+  cols.push({ id: HIRED_COL, label: '已入职', readonly: true, stageId: null, order: 999, type: 'terminal' })
+  cols.push({ id: TERMINAL_COL, label: '已结束', readonly: true, stageId: null, order: 1000, type: 'terminal' })
+  boardColumns[jobId] = cols
+}
+
+function pipelineColumnsFor(jobId: string): BoardColumn[] {
+  if (!boardColumns[jobId] && stages[jobId]) buildColumns(jobId)
+  return boardColumns[jobId] || []
+}
+
+function resetBoard(jobId: string) {
+  const next: Record<string, JobApplication[]> = {}
+  pipelineColumnsFor(jobId).forEach((col) => { next[col.id] = [] })
+  boardState[jobId] = next
+}
 
 function syncBoard(jobId: string) {
-  const assignments = jobDetails[jobId]?.assignments || []
-  const columns: Record<BoardColumnKey, Assignment[]> = {
-    PENDING_SCREEN: [], SCREEN_PASSED: [], INTERVIEWING: [], OFFER: [], HIRED: [], TERMINAL: [],
+  if (!stages[jobId] || stages[jobId].length === 0 || !boardColumns[jobId]) return
+  resetBoard(jobId)
+  const applications = jobDetails[jobId]?.applications || []
+  const firstStageId = stages[jobId][0].id
+  for (const application of applications) {
+    if (application.status === 'HIRED') {
+      boardState[jobId][HIRED_COL].push(application)
+    } else if (application.status !== 'ACTIVE') {
+      boardState[jobId][TERMINAL_COL].push(application)
+    } else {
+      const sid = application.current_stage?.id
+      if (sid && boardState[jobId][sid]) boardState[jobId][sid].push(application)
+      else boardState[jobId][firstStageId]?.push(application)
+    }
   }
-  for (const assignment of assignments) {
-    const key = (TERMINAL_STATUSES as readonly string[]).includes(assignment.status) ? 'TERMINAL' : assignment.status
-    columns[key as BoardColumnKey].push(assignment)
-  }
-  boardState[jobId] = columns
 }
 
 watch(
   jobDetails,
-  () => {
-    Object.keys(jobDetails).forEach((jobId) => syncBoard(jobId))
-  },
+  () => { Object.keys(jobDetails).forEach((jobId) => syncBoard(jobId)) },
   { deep: true },
 )
-const detailLoading = ref('')
+
 const jobDialogVisible = ref(false)
 const aiSettingVisible = ref(false)
 const editingJob = ref<Job | null>(null)
 const jobSkillsText = ref('')
 const extractingSkills = ref(false)
-const expandTab = reactive<Record<string, string>>({})
 const jobForm = reactive({
   name: '', department: '', city: '', level: '', headcount: 1, description: '',
   status: 'OPEN' as JobStatus, close_reason: null as JobCloseReason | null, owner_id: null as string | null,
@@ -507,7 +532,7 @@ const isHrAdmin = computed(() => user.getHrRole() === 'ADMIN')
 const isHrOperator = computed(() => user.getHrRole() === 'OPERATOR' || user.getHrRole() === 'ADMIN')
 const interviewDrawerVisible = ref(false)
 const interviewList = ref<Interview[]>([])
-const interviewAssignment = ref<Assignment | null>(null)
+const interviewAssignment = ref<JobApplication | null>(null)
 const interviewCandidateName = ref('')
 const addInterviewFormVisible = ref(false)
 const interviewForm = reactive({
@@ -518,28 +543,31 @@ const interviewForm = reactive({
 })
 const closeDialogVisible = ref(false)
 const closingJob = ref<Job | null>(null)
+const closePreview = ref<JobClosePreview | null>(null)
+const closeMode = ref<'STRICT' | 'BULK'>('STRICT')
+const bulkConfirmed = ref(false)
 const closeReason = ref('')
+
+const hasActiveApplications = computed(() => (closePreview.value?.active_application_count || 0) > 0)
+
 const statusDialogVisible = ref(false)
-const statusDialogAssignment = ref<Assignment | null>(null)
-const statusDialogTarget = ref<AssignmentStatus | ''>('')
+const statusDialogAssignment = ref<JobApplication | null>(null)
+const statusDialogJob = ref<Job | null>(null)
+const statusDialogAction = ref<ApplicationAction>('reject')
 const statusDialogReason = ref<TerminationReason | ''>('')
 const statusDialogNote = ref('')
-const assignmentEditVisible = ref(false)
-const assignmentEditJob = ref<Job | null>(null)
-const boardAssignmentId = ref('')
-const assignmentEditForm = reactive({
-  candidate_name: '',
-  relation_type: 'APPLY' as RelationType,
-  channel: 'OTHER' as ResumeChannel,
-  owner_id: null as string | null,
-  note: '',
-})
+const backwardDialogVisible = ref(false)
+const backwardReason = ref('')
+const backwardTarget = ref<{ application_id: string; candidate_name: string; target_stage_id: string; target_stage_name: string } | null>(null)
+const backwardJob = ref<Job | null>(null)
 const { user } = useStore()
 const route = useRoute()
 
-const isRestoreTransition = computed(
-  () => statusDialogAssignment.value?.status === 'REJECTED' && statusDialogTarget.value === 'PENDING_SCREEN',
-)
+const isRestoreTransition = computed(() => statusDialogAction.value === 'restore')
+
+function terminalReasonOptionsFor(action: ApplicationAction): string[] {
+  return applicationTerminalReasonOptions[action] || []
+}
 
 function memberName(memberId: string | null) {
   if (!memberId) return ''
@@ -601,6 +629,15 @@ function loadJobDetail(job: Job) {
   detailLoading.value = job.id
   return HrApi.getJob(job.id).then((response) => {
     jobDetails[job.id] = response.data
+    if (!stages[job.id]) {
+      return HrApi.getJobStages(job.id).then((stageResponse) => {
+        stages[job.id] = stageResponse.data
+        buildColumns(job.id)
+        syncBoard(job.id)
+        return response.data
+      })
+    }
+    syncBoard(job.id)
     return response.data
   }).finally(() => {
     if (detailLoading.value === job.id) detailLoading.value = ''
@@ -634,22 +671,15 @@ function saveJob() {
     MsgError('关闭职位需要选择关闭原因')
     return
   }
+  if (editingJob.value && jobForm.status === 'CLOSED' && editingJob.value.status !== 'CLOSED') {
+    // R2 两阶段关闭：先预览 STRICT/BULK，由确认窗决定关闭方式
+    openCloseDialog(editingJob.value)
+    return
+  }
   saving.value = true
   const data = {
     ...jobForm,
     skill_requirements: jobSkillsText.value.split(',').map((skill) => skill.trim()).filter(Boolean),
-  }
-  if (editingJob.value && jobForm.status === 'CLOSED' && editingJob.value.status !== 'CLOSED') {
-    HrApi.closeJob(editingJob.value.id, jobForm.close_reason as JobCloseReason)
-      .then((response) => {
-        jobDialogVisible.value = false
-        const count = response.data.closed_count
-        MsgSuccess(count > 0 ? `职位已关闭，收尾 ${count} 个在途关联` : '职位已关闭')
-        refresh()
-      })
-      .catch(() => {})
-      .finally(() => { saving.value = false })
-    return
   }
   const request = editingJob.value ? HrApi.updateJob(editingJob.value.id, data) : HrApi.createJob(data)
   request.then(() => {
@@ -667,17 +697,30 @@ function toggleMyJobs() {
 function openCloseDialog(job: Job) {
   closingJob.value = job
   closeReason.value = ''
+  bulkConfirmed.value = false
+  closePreview.value = null
   closeDialogVisible.value = true
+  HrApi.getJobClosePreview(job.id).then((response) => {
+    closePreview.value = response.data
+    closeMode.value = response.data.active_application_count > 0 ? 'BULK' : 'STRICT'
+  }).catch(() => { closeDialogVisible.value = false })
 }
 
 function confirmCloseJob() {
   if (!closingJob.value || !closeReason.value) return
+  if (hasActiveApplications.value && !bulkConfirmed.value) {
+    MsgError('存在在途申请，请先勾选批量确认')
+    return
+  }
   saving.value = true
-  HrApi.closeJob(closingJob.value.id, closeReason.value as JobCloseReason)
+  HrApi.closeJobV2(closingJob.value.id, {
+    close_reason: closeReason.value as JobCloseReason,
+    mode: closeMode.value,
+    bulk_confirmed: bulkConfirmed.value || !hasActiveApplications.value,
+  })
     .then((response) => {
       closeDialogVisible.value = false
-      const count = response.data.closed_count
-      MsgSuccess(count > 0 ? `职位已关闭，收尾 ${count} 个在途关联` : '职位已关闭')
+      MsgSuccess(`职位已关闭，收尾 ${response.data.closed_count} 条在途申请`)
       refresh()
     })
     .catch(() => {})
@@ -694,63 +737,98 @@ function reopenJob(job: Job) {
     .catch(() => {})
 }
 
-/** 看板拖拽落点:仅允许沿管道链向前推进,终态/回退由卡片菜单走状态对话框 */
+/** 看板拖拽落点：调 move-stage 命令；回退/同阶段需 owner/admin + 原因（由弹窗收集） */
 function onBoardDrop(job: Job, evt: any) {
-  const fromStatus: string = evt.from?.dataset?.status || ''
-  const toStatus: string = evt.to?.dataset?.status || ''
-  const assignmentId: string = evt.item?.dataset?.id || ''
-  if (!assignmentId || fromStatus === toStatus || toStatus === 'TERMINAL' || toStatus === 'HIRED') {
+  const fromColId: string = evt.from?.dataset?.colId || ''
+  const toColId: string = evt.to?.dataset?.colId || ''
+  const toStageId: string = evt.to?.dataset?.stageId || ''
+  const toOrder = Number(evt.to?.dataset?.order || 0)
+  const applicationId: string = evt.item?.dataset?.id || ''
+  const application = jobDetails[job.id]?.applications?.find((a) => a.application_id === applicationId)
+  if (!applicationId || fromColId === toColId || !toStageId || !application) {
     loadJobDetail(job)
     return
   }
-  const fromIdx = PIPELINE_ORDER.indexOf(fromStatus as any)
-  const toIdx = PIPELINE_ORDER.indexOf(toStatus as any)
-  if (fromIdx === -1 || toIdx === -1 || toIdx <= fromIdx) {
-    MsgError('只能按 待筛选 → 筛选通过 → 面试中 → Offer 顺序推进')
-    loadJobDetail(job)
+  const fromOrder = application.current_stage?.order ?? 0
+  if (fromOrder >= toOrder) {
+    const target = (boardColumns[job.id] || []).find((col) => col.id === toColId)
+    backwardTarget.value = {
+      application_id: applicationId,
+      candidate_name: application.candidate_name,
+      target_stage_id: toStageId,
+      target_stage_name: target?.label || ''
+    }
+    backwardJob.value = job
+    backwardReason.value = ''
+    backwardDialogVisible.value = true
     return
   }
-  HrApi.updateAssignment(assignmentId, { status: toStatus as AssignmentStatus })
-    .then(() => {
-      MsgSuccess('状态已更新')
-      // 仅刷新看板数据,不整体刷新表格,避免展开面板收起
-      loadJobDetail(job)
-    })
+  HrApi.moveApplicationStage(applicationId, { to_stage_id: toStageId, reason_text: 'drag' })
+    .then(() => { MsgSuccess('阶段已更新'); loadJobDetail(job) })
     .catch(() => loadJobDetail(job))
 }
 
-/** 卡片菜单命令 */
-function onCardCommand(cmd: string, job: Job, assignment: Assignment) {
-  if (cmd === 'edit') openAssignmentEditDialog(job, assignment)
-  else if (cmd === 'reject') openStatusChangeDialog(assignment, 'REJECTED')
-  else if (cmd === 'withdraw') openStatusChangeDialog(assignment, 'WITHDRAWN')
-  else if (cmd === 'close') openStatusChangeDialog(assignment, 'CLOSED')
-  else if (cmd === 'restore') openStatusChangeDialog(assignment, 'PENDING_SCREEN')
+function confirmBackwardMove() {
+  const target = backwardTarget.value
+  const job = backwardJob.value
+  if (!target || !job || !backwardReason.value.trim()) return
+  saving.value = true
+  HrApi.moveApplicationStage(target.application_id, {
+    to_stage_id: target.target_stage_id,
+    reason_text: backwardReason.value.trim(),
+    idempotency_key: `back-${Date.now()}`
+  })
+    .then(() => {
+      backwardDialogVisible.value = false
+      MsgSuccess('阶段已更新')
+      loadJobDetail(job)
+    })
+    .catch(() => {})
+    .finally(() => { saving.value = false })
 }
 
-function openStatusChangeDialog(assignment: Assignment, target: AssignmentStatus) {
-  statusDialogAssignment.value = assignment
-  statusDialogTarget.value = target
+function isActiveApplication(application: JobApplication): boolean {
+  return application.status === 'ACTIVE'
+}
+
+function isOfferStage(application: JobApplication): boolean {
+  return application.status === 'ACTIVE' && application.current_stage?.key === 'OFFER'
+}
+
+/** 卡片菜单命令：终态走 terminal 命令 API，恢复走 restore 命令 API（不再直接改 status） */
+function onCardCommand(cmd: string, job: Job, application: JobApplication) {
+  if (cmd === 'reject') openStatusChangeDialog(application, 'reject', job)
+  else if (cmd === 'withdraw') openStatusChangeDialog(application, 'withdraw', job)
+  else if (cmd === 'close') openStatusChangeDialog(application, 'close', job)
+  else if (cmd === 'restore') openStatusChangeDialog(application, 'restore', job)
+}
+
+function openStatusChangeDialog(application: JobApplication, action: ApplicationAction, job: Job) {
+  statusDialogAssignment.value = application
+  statusDialogJob.value = job
+  statusDialogAction.value = action
   statusDialogReason.value = ''
   statusDialogNote.value = ''
   statusDialogVisible.value = true
 }
 
 function confirmStatusChange() {
-  const assignment = statusDialogAssignment.value
-  const target = statusDialogTarget.value
-  if (!assignment || !target) return
-  if (isRestoreTransition.value) {
+  const application = statusDialogAssignment.value
+  const job = statusDialogJob.value
+  const action = statusDialogAction.value
+  if (!application || !job || !action) return
+  const applicationId = application.application_id
+  if (action === 'restore') {
     if (!statusDialogNote.value.trim()) {
       MsgError('请填写恢复原因')
       return
     }
     saving.value = true
-    HrApi.updateAssignment(assignment.id, { status: target, note: statusDialogNote.value.trim() })
+    HrApi.restoreApplication(applicationId, { reason_text: statusDialogNote.value.trim() })
       .then(() => {
         statusDialogVisible.value = false
-        MsgSuccess('候选人已恢复待筛选')
-        reloadAssignment(assignment)
+        MsgSuccess('申请已恢复')
+        loadJobDetail(job)
       })
       .catch(() => {})
       .finally(() => { saving.value = false })
@@ -761,59 +839,18 @@ function confirmStatusChange() {
     return
   }
   saving.value = true
-  HrApi.updateAssignment(assignment.id, { status: target, termination_reason: statusDialogReason.value })
+  HrApi.terminalApplication(applicationId, { action, termination_reason: statusDialogReason.value })
     .then(() => {
       statusDialogVisible.value = false
-      MsgSuccess('状态已更新')
-      reloadAssignment(assignment)
-    })
-    .catch(() => {})
-    .finally(() => { saving.value = false })
-}
-
-function reloadAssignment(assignment: Assignment) {
-  const job = jobs.value.find((item) => item.id === assignment.job_id)
-  if (job) {
-    loadJobDetail(job).then((detail) => {
-      // 同步表格行的在途数量,避免整体刷新收起展开面板
-      if (detail) job.active_assignment_count = detail.active_assignment_count
-    })
-  }
-}
-
-function openAssignmentEditDialog(job: Job, assignment: Assignment) {
-  assignmentEditJob.value = job
-  boardAssignmentId.value = assignment.id
-  assignmentEditForm.candidate_name = assignment.candidate_name || ''
-  assignmentEditForm.relation_type = assignment.relation_type || 'APPLY'
-  assignmentEditForm.channel = assignment.channel || 'OTHER'
-  assignmentEditForm.owner_id = assignment.owner_id || null
-  assignmentEditForm.note = assignment.note || ''
-  assignmentEditVisible.value = true
-}
-
-function saveAssignmentEdit() {
-  const assignmentId = boardAssignmentId.value
-  if (!assignmentId) return
-  saving.value = true
-  HrApi.updateAssignment(assignmentId, {
-    relation_type: assignmentEditForm.relation_type,
-    channel: assignmentEditForm.channel,
-    owner_id: assignmentEditForm.owner_id || null,
-    note: assignmentEditForm.note,
-  })
-    .then(() => {
-      assignmentEditVisible.value = false
-      MsgSuccess('指派已更新')
-      if (assignmentEditJob.value) loadJobDetail(assignmentEditJob.value)
-      refresh()
+      MsgSuccess('操作成功')
+      loadJobDetail(job)
     })
     .catch(() => {})
     .finally(() => { saving.value = false })
 }
 
 function addMatchToJob(job: Job, match: JobMatchCandidate) {
-  HrApi.createAssignment(job.id, match.candidate_id)
+  HrApi.createApplication(job.id, match.candidate_id)
     .then(() => {
       MsgSuccess(`已将 ${match.name} 加入职位`)
       loadMatches(job)
@@ -830,30 +867,36 @@ function resetInterviewForm() {
   interviewForm.scheduled_at = null
 }
 
-function openInterviewDrawer(job: Job, assignment: Assignment) {
-  interviewAssignment.value = assignment
-  interviewCandidateName.value = assignment.candidate_name || ''
+function openInterviewDrawer(job: Job, application: JobApplication) {
+  interviewAssignment.value = application
+  interviewCandidateName.value = application.candidate_name || ''
   interviewList.value = []
   addInterviewFormVisible.value = false
   resetInterviewForm()
   interviewDrawerVisible.value = true
-  HrApi.getInterviews(assignment.id).then((response) => {
+  HrApi.getInterviewsByApplication(application.application_id).then((response) => {
     interviewList.value = response.data
   })
 }
 
+function reloadInterviewsByApplication() {
+  const application = interviewAssignment.value
+  if (application) {
+    HrApi.getInterviewsByApplication(application.application_id).then((response) => {
+      interviewList.value = response.data
+    })
+  }
+}
+
 function createInterviewRecord() {
-  if (!interviewAssignment.value) return
-  HrApi.createInterview(interviewAssignment.value.id, { ...interviewForm })
+  const application = interviewAssignment.value
+  if (!application) return
+  HrApi.createInterviewByApplication(application.application_id, { ...interviewForm })
     .then(() => {
       MsgSuccess('面试已安排')
       addInterviewFormVisible.value = false
       resetInterviewForm()
-      if (interviewAssignment.value) {
-        HrApi.getInterviews(interviewAssignment.value.id).then((response) => {
-          interviewList.value = response.data
-        })
-      }
+      reloadInterviewsByApplication()
     })
     .catch(() => {})
 }
@@ -867,8 +910,9 @@ function updateInterviewRecord(interview: Interview) {
 const offerDrawerVisible = ref(false)
 const addOfferFormVisible = ref(false)
 const approveOfferDialogVisible = ref(false)
-const offerAssignment = ref<Assignment | null>(null)
+const offerAssignment = ref<JobApplication | null>(null)
 const offerCandidateName = ref('')
+const offerJobName = ref('')
 const offerList = ref<Offer[]>([])
 const offerForm = reactive({ salary_amount: null as number | null, currency: 'CNY', note: '' })
 const approveForm = reactive({ approval_status: '' as string })
@@ -885,21 +929,23 @@ function resetOfferForm() {
   offerForm.note = ''
 }
 
-function openOfferDrawer(job: Job, assignment: Assignment) {
-  offerAssignment.value = assignment
-  offerCandidateName.value = assignment.candidate_name || ''
+function openOfferDrawer(job: Job, application: JobApplication) {
+  offerAssignment.value = application
+  offerCandidateName.value = application.candidate_name || ''
+  offerJobName.value = job.name
   offerList.value = []
   addOfferFormVisible.value = false
   resetOfferForm()
   offerDrawerVisible.value = true
-  HrApi.getOffers(assignment.id).then((response) => {
+  HrApi.getOffersByApplication(application.application_id).then((response) => {
     offerList.value = response.data
   })
 }
 
 function createOfferRecord() {
-  if (!offerAssignment.value) return
-  HrApi.createOffer(offerAssignment.value.id, {
+  const application = offerAssignment.value
+  if (!application) return
+  HrApi.createOfferByApplication(application.application_id, {
     salary_amount: offerForm.salary_amount == null ? null : String(offerForm.salary_amount),
     currency: offerForm.currency || 'CNY',
     note: offerForm.note,
@@ -914,8 +960,9 @@ function createOfferRecord() {
 }
 
 function reloadOffers() {
-  if (offerAssignment.value) {
-    HrApi.getOffers(offerAssignment.value.id).then((response) => {
+  const application = offerAssignment.value
+  if (application) {
+    HrApi.getOffersByApplication(application.application_id).then((response) => {
       offerList.value = response.data
     })
   }
@@ -948,7 +995,7 @@ function sendOfferRecord(offer: Offer) {
 }
 
 function acceptOfferRecord(offer: Offer) {
-  MsgConfirm('接受 Offer', '确认接受第 ' + offer.version + ' 版 Offer？指派将自动进入「已入职」，并触发入职交接。', { confirmButtonClass: 'danger' })
+  MsgConfirm('接受 Offer', '确认接受第 ' + offer.version + ' 版 Offer？申请将自动进入「已入职」，并触发入职交接。', { confirmButtonClass: 'danger' })
     .then(() => HrApi.acceptOffer(offer.id))
     .then(() => {
       MsgSuccess('Offer 已接受，已触发入职交接')
@@ -1016,6 +1063,7 @@ watch(() => route.query.new, (isNew) => {
   if (isNew === '1') openJobDialog()
 })
 </script>
+
 
 <style scoped>
 .hr-page { min-width: 0; }

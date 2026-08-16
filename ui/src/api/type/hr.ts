@@ -22,10 +22,12 @@ export type TerminationReason =
   | 'MERGED'
   | 'OTHER'
 export type InterviewStatus = 'PENDING' | 'PASSED' | 'FAILED' | 'NO_SHOW' | 'CANCELLED'
+export type ApplicationStatus = 'ACTIVE' | 'HIRED' | 'REJECTED' | 'WITHDRAWN' | 'CLOSED'
 
 export interface Interview {
   id: string
-  assignment_id: string
+  assignment_id: string | null
+  application_id: string | null
   round_no: number
   interviewer: string
   interviewer_user_id: string | null
@@ -103,7 +105,8 @@ export type OfferApprovalStatus = 'PENDING' | 'APPROVED' | 'REJECTED'
 
 export interface Offer {
   id: string
-  assignment_id: string
+  assignment_id: string | null
+  application_id: string | null
   candidate_id: string
   job_id: string
   version: number
@@ -144,7 +147,8 @@ export interface ImportReport {
 
 export interface HandoffRecord {
   id: string
-  assignment_id: string
+  assignment_id: string | null
+  application_id: string | null
   candidate_id: string
   job_id: string
   offer_id: string
@@ -194,8 +198,97 @@ export interface JobMatchPage {
   records: JobMatchCandidate[]
 }
 
+export interface JobStage {
+  id: string
+  key: string
+  name: string
+  color: string
+  order: number
+  is_system: boolean
+}
+
+export interface ApplicationStageRef {
+  id: string
+  key: string
+  name: string
+  order: number
+}
+
+export interface JobApplication {
+  application_id: string
+  candidate_id: string
+  candidate_name: string
+  current_stage: ApplicationStageRef | null
+  status: ApplicationStatus
+  relation_type: RelationType
+  channel: ResumeChannel
+  owner_id: string | null
+  reapply_no: number
+  note: string
+  applied_at: string
+  update_time: string
+}
+
+export interface Application {
+  id: string
+  candidate_id: string
+  job_id: string
+  candidate_name: string
+  job_name: string
+  current_stage: ApplicationStageRef | null
+  status: ApplicationStatus
+  relation_type: RelationType
+  channel: ResumeChannel
+  channel_detail: string
+  applied_at: string
+  owner_id: string | null
+  recruiter_id: string | null
+  termination_reason: TerminationReason | null
+  terminated_at: string | null
+  reapply_no: number
+  note: string
+  create_time: string
+  update_time: string
+}
+
+export interface JobCloseApplication {
+  application_id: string
+  candidate_name: string
+  current_stage: string
+  owner_id: string | null
+}
+
+export interface JobClosePreview {
+  job_id: string
+  job_status: JobStatus
+  active_application_count: number
+  applications: JobCloseApplication[]
+}
+
+export interface JobCloseResult {
+  job_id: string
+  closed_count: number
+  withdrawn_offer_count: number
+  closed_assignment_count: number
+}
+
+export interface ApplicationEvent {
+  id: string
+  application_id: string
+  event_type: 'CREATED' | 'IMPORTED' | 'STAGE_MOVED' | 'HIRED' | 'REJECTED' | 'WITHDRAWN' | 'CLOSED' | 'RESTORED'
+  from_stage_id: string | null
+  to_stage_id: string | null
+  from_status: string
+  to_status: string
+  actor_id: string | null
+  reason_code: string
+  reason_text: string
+  create_time: string
+}
+
 export interface JobDetail extends Job {
   assignments: Assignment[]
+  applications: JobApplication[]
 }
 
 export interface PageResult<T> {

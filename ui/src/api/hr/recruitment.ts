@@ -2,6 +2,8 @@ import type { Result } from '@/request/Result'
 import { exportFile, exportFilePost, del, get, post, put } from '@/request'
 import type {
   AiConditions,
+  Application,
+  ApplicationEvent,
   Assignment,
   Candidate,
   CandidateDetail,
@@ -17,9 +19,12 @@ import type {
   ImportReport,
   Interview,
   Job,
+  JobClosePreview,
   JobCloseReason,
+  JobCloseResult,
   JobDetail,
   JobMatchPage,
+  JobStage,
   MyInterview,
   Offer,
   PageResult,
@@ -88,6 +93,51 @@ const closeJob = (jobId: string, closeReason: JobCloseReason) =>
   put(`${prefix.value}/jobs/${jobId}/close`, { close_reason: closeReason }) as Promise<Result<{ closed_count: number }>>
 
 const reopenJob = (jobId: string) => put(`${prefix.value}/jobs/${jobId}/reopen`) as Promise<Result<Job>>
+
+const getJobStages = (jobId: string) =>
+  get(`${prefix.value}/jobs/${jobId}/stages`) as Promise<Result<JobStage[]>>
+
+const getJobClosePreview = (jobId: string) =>
+  get(`${prefix.value}/jobs/${jobId}/close-preview`) as Promise<Result<JobClosePreview>>
+
+const closeJobV2 = (
+  jobId: string,
+  data: { close_reason: JobCloseReason; mode: 'STRICT' | 'BULK'; bulk_confirmed?: boolean },
+) => post(`${prefix.value}/jobs/${jobId}/close`, data) as Promise<Result<JobCloseResult>>
+
+const createApplication = (jobId: string, candidateId: string, extra: Record<string, unknown> = {}) =>
+  post(`${prefix.value}/applications`, {
+    job_id: jobId,
+    candidate_id: candidateId,
+    ...extra,
+  }) as Promise<Result<Application>>
+
+const getApplications = (page: pageRequest, params?: Record<string, unknown>) =>
+  get(`${prefix.value}/applications/page/${page.current_page}/${page.page_size}`, params) as Promise<Result<PageResult<Application>>>
+
+const moveApplicationStage = (applicationId: string, data: Record<string, unknown>) =>
+  post(`${prefix.value}/applications/${applicationId}/move-stage`, data) as Promise<Result<Application>>
+
+const terminalApplication = (applicationId: string, data: Record<string, unknown>) =>
+  post(`${prefix.value}/applications/${applicationId}/terminal`, data) as Promise<Result<Application>>
+
+const restoreApplication = (applicationId: string, data: Record<string, unknown>) =>
+  post(`${prefix.value}/applications/${applicationId}/restore`, data) as Promise<Result<Application>>
+
+const getApplicationEvents = (applicationId: string) =>
+  get(`${prefix.value}/applications/${applicationId}/events`) as Promise<Result<ApplicationEvent[]>>
+
+const createInterviewByApplication = (applicationId: string, data: Record<string, unknown>) =>
+  post(`${prefix.value}/applications/${applicationId}/interviews`, data) as Promise<Result<Interview>>
+
+const getInterviewsByApplication = (applicationId: string) =>
+  get(`${prefix.value}/applications/${applicationId}/interviews`) as Promise<Result<Interview[]>>
+
+const createOfferByApplication = (applicationId: string, data: Partial<Offer>) =>
+  post(`${prefix.value}/applications/${applicationId}/offers`, data) as Promise<Result<Offer>>
+
+const getOffersByApplication = (applicationId: string) =>
+  get(`${prefix.value}/applications/${applicationId}/offers`) as Promise<Result<Offer[]>>
 
 const createAssignment = (jobId: string, candidateId: string, note = '', extra: Partial<Assignment> = {}) =>
   post(`${prefix.value}/jobs/${jobId}/assignments`, {
@@ -241,6 +291,19 @@ export default {
   archiveCandidate,
   checkDuplicate,
   closeJob,
+  closeJobV2,
+  createApplication,
+  createInterviewByApplication,
+  createOfferByApplication,
+  getApplicationEvents,
+  getApplications,
+  getInterviewsByApplication,
+  getJobClosePreview,
+  getJobStages,
+  getOffersByApplication,
+  moveApplicationStage,
+  restoreApplication,
+  terminalApplication,
   createAssignment,
   createCandidate,
   createInterview,
