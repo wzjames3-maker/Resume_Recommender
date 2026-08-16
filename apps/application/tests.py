@@ -113,6 +113,8 @@ class SearchDatasetStepNormalizeTests(TestCase):
             return [0.1] * 8
 
         fake_model = Mock()
+        fake_model.model_type = "EMBEDDING"
+        fake_model.name = "bge-test"
         fake_model.embed_query.side_effect = fake_embed
         step = BaseSearchDatasetStep()
         with patch("application.chat_pipeline.step.search_dataset_step.impl.base_search_dataset_step.get_embedding_id",
