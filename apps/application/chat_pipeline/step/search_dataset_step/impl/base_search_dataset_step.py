@@ -22,6 +22,7 @@ from common.db.search import native_search
 from common.utils.common import get_file_content
 from knowledge.models import Paragraph, Knowledge
 from knowledge.models import SearchMode
+from knowledge.vector.base_vector import normalize_for_embedding
 from maxkb.conf import PROJECT_DIR
 from models_provider.models import Model
 from models_provider.tools import get_model, get_model_by_id, get_model_default_params
@@ -59,6 +60,9 @@ class BaseSearchDatasetStep(ISearchDatasetStep):
         if len(knowledge_id_list) == 0:
             return []
         exec_problem_text = padding_problem_text if padding_problem_text is not None else problem_text
+        # P3-10：与 hit_test 双轨一致——查询文本先 normalize（emoji 剥离/空白压缩），
+        # 避免两轨在含 emoji/多空白 query 上召回不一致（入库侧文本均已 normalize）
+        exec_problem_text = normalize_for_embedding(exec_problem_text)
         model_id = get_embedding_id(knowledge_id_list)
         model = get_model_by_id(model_id, workspace_id)
         if model.model_type != "EMBEDDING":

@@ -79,6 +79,11 @@ class PGVector(BaseVectorStore):
     def _batch_save(self, text_list: List[Dict], embedding: Embeddings, is_the_task_interrupted):
         texts = [normalize_for_embedding(row.get("text")) for row in text_list]
         embeddings = embedding.embed_documents(texts)
+        # P3-12：Termbase 按知识库预取一次（此前每条 embedding 行单独查询，批量场景 N+1）
+        terms_by_knowledge = {
+            kid: list(QuerySet(Termbase).filter(knowledge_id=kid).values_list("content", flat=True))
+            for kid in {row["knowledge_id"] for row in text_list}
+        }
         embedding_list = [
             Embedding(
                 id=uuid.uuid7(),
@@ -93,11 +98,7 @@ class PGVector(BaseVectorStore):
                     Value(
                         to_ts_vector(
                             texts[index],
-                            user_words=list(
-                                QuerySet(Termbase)
-                                .filter(knowledge_id=text_list[index]["knowledge_id"])
-                                .values_list("content", flat=True)
-                            ),
+                            user_words=terms_by_knowledge.get(text_list[index]["knowledge_id"], []),
                         )
                     ),
                     config='simple',

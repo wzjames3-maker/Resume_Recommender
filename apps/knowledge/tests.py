@@ -66,6 +66,59 @@ class CreateKnowledgeIndexTests(TestCase):
             drop_knowledge_index(knowledge_id=uuid.uuid7())
         self.assertIn("DROP INDEX IF EXISTS", m_upd.call_args[0][0])
 
+
+class BatchSaveTermbaseQueryTests(TestCase):
+    """P3-12：_batch_save 的 Termbase 按知识库预取一次（此前每条 embedding 行单独查询 = N+1）。"""
+
+    def setUp(self):
+        KnowledgeFolder.objects.get_or_create(id="default", defaults={"name": "default", "workspace_id": "default"})
+        self.model = Model.objects.create(
+            id=uuid.uuid7(), name="bge-test", status="SUCCESS", model_type="EMBEDDING",
+            model_name="BAAI/bge-large-zh-v1.5", provider="model_openai_provider",
+            credential="{}", meta={}, workspace_id="default",
+        )
+        self.knowledge = Knowledge.objects.create(
+            id=uuid.uuid7(), name="k-batch", workspace_id="default", embedding_model_id=self.model.id,
+            user_id=None, type=KnowledgeType.BASE.value, scope=KnowledgeScope.WORKSPACE.value,
+            folder_id="default",
+        )
+        from knowledge.models import Termbase
+
+        Termbase.objects.create(knowledge_id=self.knowledge.id, content="java")
+
+    def test_termbase_queried_once_per_knowledge(self):
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+        from unittest.mock import Mock
+
+        from knowledge.models import Document
+        from knowledge.vector.pg_vector import PGVector
+
+        document = Document.objects.create(
+            id=uuid.uuid7(), knowledge_id=self.knowledge.id, name="d.txt",
+            char_length=1, user_id=None,
+        )
+        text_list = [
+            {
+                "document_id": str(document.id),
+                "paragraph_id": str(uuid.uuid7()),
+                "knowledge_id": str(self.knowledge.id),
+                "is_active": True,
+                "source_id": str(uuid.uuid7()),
+                "source_type": 1,
+                "text": f"段落 {i} 内容",
+            }
+            for i in range(5)
+        ]
+        fake_embedding = Mock()
+        fake_embedding.embed_documents.return_value = [[0.1] * 8] * 5
+        vector = PGVector()
+        with CaptureQueriesContext(connection) as ctx:
+            vector._batch_save(text_list, fake_embedding, lambda: False)
+        termbase_queries = [q for q in ctx.captured_queries if "termbase" in q["sql"]]
+        self.assertEqual(len(termbase_queries), 1)  # 预取一次，而非 5 次
+
+
 class DocumentSyncTransactionTests(TestCase):
     """K2：Sync.sync 网络抓取移出事务——成功/失败路径行为保持（结构重排回归）。"""
 

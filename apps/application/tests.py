@@ -11,6 +11,7 @@ from application.serializers.application import ApplicationCreateSerializer
 from application.serializers.common import ChatInfo
 from common.exception.app_exception import ChatException
 from common.job.scheduler import clean_removed_trigger_jobs
+from models_provider.models import Model
 
 
 class FakeChatModel:
@@ -77,6 +78,61 @@ class ChatStepExceptionTextTests(SimpleTestCase):
         self.assertNotIn("Exception:", captured["text"])
         self.assertNotIn("secret internal detail", captured["text"])
         self.assertIn("Sorry", captured["text"])
+
+
+class SearchDatasetStepNormalizeTests(TestCase):
+    """P3-10：chat 检索路径查询文本先 normalize（与 hit_test 双轨一致）。"""
+
+    def setUp(self):
+        from knowledge.models import Knowledge, KnowledgeFolder, KnowledgeScope, KnowledgeType
+
+        KnowledgeFolder.objects.get_or_create(id="default", defaults={"name": "default", "workspace_id": "default"})
+        self.model = Model.objects.create(
+            id=uuid.uuid7(), name="bge-test", status="SUCCESS", model_type="EMBEDDING",
+            model_name="BAAI/bge-large-zh-v1.5", provider="model_openai_provider",
+            credential="{}", meta={}, workspace_id="default",
+        )
+        self.knowledge = Knowledge.objects.create(
+            id=uuid.uuid7(), name="k-norm", workspace_id="default", embedding_model_id=self.model.id,
+            user_id=None, type=KnowledgeType.BASE.value, scope=KnowledgeScope.WORKSPACE.value,
+            folder_id="default",
+        )
+
+    def test_query_normalized_before_embed(self):
+        from types import SimpleNamespace
+        from unittest.mock import Mock
+
+        from application.chat_pipeline.step.search_dataset_step.impl.base_search_dataset_step import (
+            BaseSearchDatasetStep,
+        )
+
+        captured = []
+
+        def fake_embed(text):
+            captured.append(text)
+            return [0.1] * 8
+
+        fake_model = Mock()
+        fake_model.embed_query.side_effect = fake_embed
+        step = BaseSearchDatasetStep()
+        with patch("application.chat_pipeline.step.search_dataset_step.impl.base_search_dataset_step.get_embedding_id",
+                   return_value=str(self.model.id)), \
+                patch("application.chat_pipeline.step.search_dataset_step.impl.base_search_dataset_step.get_model_by_id",
+                      return_value=fake_model), \
+                patch("application.chat_pipeline.step.search_dataset_step.impl.base_search_dataset_step.ModelManage.get_model",
+                      return_value=fake_model):
+            step.execute(
+                "java",
+                [str(self.knowledge.id)],
+                None,
+                None,
+                3,
+                0.6,
+                padding_problem_text="  Java😊  开发 ",
+                search_mode="embedding",
+                manage=SimpleNamespace(context={}),
+            )
+        self.assertEqual(captured, ["Java开发"])  # emoji 剥离 + 空白压缩
 
 
 class WorkflowApplicationRejectionTests(TestCase):
