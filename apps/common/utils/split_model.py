@@ -278,15 +278,11 @@ def post_handler_paragraph(content: str, limit: int):
     while (pos := content.find("\n", start)) != -1:
         split, start = content[start:pos + 1], pos + 1
         if len(temp_char + split) > limit:
-            if len(temp_char) > 4096:
-                pass
             result.append(temp_char)
             temp_char = ''
         temp_char = temp_char + split
     temp_char = temp_char + content[start:]
     if len(temp_char) > 0:
-        if len(temp_char) > 4096:
-            pass
         result.append(temp_char)
 
     pattern = "[\\S\\s]{1," + str(limit) + '}'
@@ -319,10 +315,11 @@ def smart_split_paragraph(content: str, limit: int):
         best_split = end
 
         # 优先级:句号 > 感叹号/问号 > 回车
+        # 内核审查 P2-6（设计文档 §6.1 点名）：此前全角写重导致半角 !? 缺失——修正为中英文各一
         split_chars = [
             ('。', 0), ('.', 0),  # 中英文句号
-            ('!', 0), ('!', 0),  # 中英文感叹号
-            ('?', 0), ('?', 0),  # 中英文问号
+            ('！', 0), ('!', 0),  # 中英文感叹号
+            ('？', 0), ('?', 0),  # 中英文问号
         ]
 
         # 从后往前找分割点
@@ -420,9 +417,6 @@ class SplitModel:
         text = text.replace("\0", '')
         result_tree = self.parse_to_tree(text, 0)
         result = result_tree_to_paragraph(result_tree, [], [], self.with_filter)
-        for e in result:
-            if len(e['content']) > 4096:
-                pass
         title_list = list(set([row.get('title') for row in result]))
         return [item for item in [self.post_reset_paragraph(row, title_list) for row in result] if
                 'content' in item and len(item.get('content').strip()) > 0]

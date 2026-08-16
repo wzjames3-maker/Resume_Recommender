@@ -28,6 +28,25 @@ from common.handle.impl.text.text_split_handle import TextSplitHandle
 from common.handle.impl.text.xls_split_handle import XlsSplitHandle
 from common.handle.impl.text.xlsx_split_handle import XlsxSplitHandle
 from common.utils.common import parse_md_file_link, parse_md_image
+from common.utils.logger import maxkb_logger
+
+
+# 解压炸弹防护（内核审查 P2-5）：zip 解压总量与单文件上限，超限拒绝而非 OOM
+_MAX_ZIP_TOTAL_UNCOMPRESSED = 200 * 1024 * 1024  # 200MB
+_MAX_ZIP_FILE_SIZE = 50 * 1024 * 1024  # 单文件 50MB
+
+
+def validate_zip_sizes(zip_ref: zipfile.ZipFile):
+    """校验解压总量与单文件大小（在读取任何内容前调用）。超限抛 ValueError。"""
+    total = 0
+    for info in zip_ref.infolist():
+        if info.is_dir():
+            continue
+        total += info.file_size
+        if info.file_size > _MAX_ZIP_FILE_SIZE:
+            raise ValueError(_("zip 内单文件超过 {limit}MB，拒绝解压").format(limit=_MAX_ZIP_FILE_SIZE // (1024 * 1024)))
+    if total > _MAX_ZIP_TOTAL_UNCOMPRESSED:
+        raise ValueError(_("zip 解压总量超过 {limit}MB，拒绝解压").format(limit=_MAX_ZIP_TOTAL_UNCOMPRESSED // (1024 * 1024)))
 
 
 class FileBufferHandle:
@@ -154,6 +173,8 @@ class ZipSplitHandle(BaseSplitHandle):
         result = []
         # 打开zip文件
         with zipfile.ZipFile(bytes_io, "r") as zip_ref:
+            # 解压炸弹防护（P2-5）：读取任何内容前校验总量/单文件上限
+            validate_zip_sizes(zip_ref)
             # 获取压缩包中的文件名列表
             files = zip_ref.namelist()
             # 读取压缩包中的文件内容
@@ -170,8 +191,9 @@ class ZipSplitHandle(BaseSplitHandle):
                             result = [*result, *value]
                         else:
                             result.append(value)
-                    except Exception:
-                        pass
+                    except Exception as exc:
+                        # P2-5：不再静默吞掉——记录失败文件与原因（跳过行为保留，用户可查日志）
+                        maxkb_logger.error(f"zip 内文件处理失败 {file}: {exc}")
             image_list = get_image_list(result, files)
             result = filter_image_file(result, image_list)
             image_mode_list = []
@@ -203,6 +225,7 @@ class ZipSplitHandle(BaseSplitHandle):
         content_parts = []
 
         with zipfile.ZipFile(bytes_io, "r") as zip_ref:
+            validate_zip_sizes(zip_ref)
             files = zip_ref.namelist()
             file_content_list = []
             for inner_name in files:

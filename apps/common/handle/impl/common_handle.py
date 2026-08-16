@@ -24,7 +24,9 @@ from knowledge.models import File
 
 from PIL import ImageFile
 ImageFile.LOAD_TRUNCATED_IMAGES = True
-PILImage.MAX_IMAGE_PIXELS = None
+# 内核审查 P2-4：解压炸弹防护——限制单图像素上限（原 None 无上限，恶意 xlsx 内嵌超大图可致 OOM；
+# 超限时 PIL 抛 DecompressionBombError，handle_images 已捕获并跳过该图）
+PILImage.MAX_IMAGE_PIXELS = 50_000_000
 
 def parse_element(element) -> {}:
     data = {}
