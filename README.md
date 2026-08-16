@@ -1,64 +1,34 @@
-<p align="center"><img src= "https://github.com/1Panel-dev/maxkb/assets/52996290/c0694996-0eed-40d8-b369-322bf2a380bf" alt="MaxKB" width="300" /></p>
-<h3 align="center">Open-source platform for building enterprise-grade agents</h3>
-<h3 align="center">强大易用的企业级智能体平台</h3>
-<p align="center"><a href="https://trendshift.io/repositories/9113" target="_blank"><img src="https://trendshift.io/api/badge/repositories/9113" alt="1Panel-dev%2FMaxKB | Trendshift" style="width: 250px; height: 55px;" width="250" height="55"/></a></p>
-<p align="center">
-  <a href="https://www.gnu.org/licenses/gpl-3.0.html#license-text"><img src="https://img.shields.io/github/license/1Panel-dev/maxkb?color=%231890FF" alt="License: GPL v3"></a>
-  <a href="https://github.com/1Panel-dev/maxkb/releases/latest"><img src="https://img.shields.io/github/v/release/1Panel-dev/maxkb" alt="Latest release"></a>
-  <a href="https://github.com/1Panel-dev/maxkb"><img src="https://img.shields.io/github/stars/1Panel-dev/maxkb?color=%231890FF&style=flat-square" alt="Stars"></a>    
-  <a href="https://hub.docker.com/r/1panel/maxkb"><img src="https://img.shields.io/docker/pulls/1panel/maxkb?label=downloads" alt="Download"></a><br/>
- [<a href="/README_CN.md">中文(简体)</a>] | [<a href="/README.md">English</a>] 
-</p>
-<hr/>
+# MaxKB HR ATS
 
-> **Fork status**: This repository is a **slimmed MaxKB v2 core** embedded with a multi-tenant HR recruitment workspace (ATS) in `apps/hr`. The upstream workflow engine, MCP tool-use, function library, multi-modal and local-model features have been **removed**; the working product is described by `README-hr.md` and `docs/PRD.md`, not by the upstream marketing copy below.
+This repository is a **slimmed MaxKB v2 fork**: the upstream enterprise RAG knowledge-base core is kept, and a multi-tenant HR recruitment workspace (ATS) is embedded in `apps/hr`.
 
-MaxKB = Max Knowledge Brain, an open-source platform for building enterprise-grade agents. This fork keeps the core knowledge-base Q&A (RAG) foundation and adds a recruitment workspace with resume parsing/search, interview collaboration, offer artifacts and onboarding handoff.
+The product direction is:
 
-- **RAG Pipeline**: Supports direct uploading of documents / automatic crawling of online documents, with features for automatic text splitting and vectorization.
-- **HR Workspace (ATS)**: Multi-tenant recruitment — candidates, jobs, assignments, resume parsing (async), AI search, interviews, offers and onboarding handoff.
-- **Seamless Integration**: Facilitates zero-coding rapid integration into third-party business systems.
-- **Model-Agnostic**: Supports various large models, including private models (such as DeepSeek, Llama, Qwen, etc.) and public models (like OpenAI, Claude, Gemini, MiniMax, etc.).
+```text
+MaxKB RAG core + traditional ATS workflow + propose-confirm-execute Agent
+```
+
+## Repository status
+
+- RAG pipeline: **delivered** (pgvector + tsvector, RRF, rerank, Small-to-Big).
+- ATS: current code is a legacy fixed state machine; the target model is an `Application + JobStage + StageHistory` design.
+- Agent: designed, not implemented yet.
+
+## Authoritative documents
+
+| Document | Purpose |
+|---|---|
+| `docs/PRD.md` | Product baseline |
+| `docs/ATS-STATE-MACHINE-V2.md` | Target ATS design |
+| `docs/ATS-OPENSOURCE-REFERENCE.md` | Traditional open-source ATS research |
+| `docs/ATS-DESIGN-SPEC.md` | Current code facts, migration reference only |
+| `docs/PRD-AGENT-RAG.md` | Agent + RAG design |
+| `docs/RAG-V2-DESIGN.md` | Delivered resume RAG design |
 
 ## Quick start
 
-Execute the script below to start a MaxKB container using Docker:
-
-```bash
-docker run -d --name=maxkb --restart=always -p 8080:8080 -v ~/.maxkb:/opt/maxkb 1panel/maxkb
-```
-
-Access MaxKB web interface at `http://your_server_ip:8080` with default admin credentials:
-
-- username: admin
-- password: MaxKB@123..
-
-中国用户如遇到 Docker 镜像 Pull 失败问题，请参照该 [离线安装文档](https://maxkb.cn/docs/v2/installation/offline_installtion/) 进行安装。
-
-## Screenshots
-
-<table style="border-collapse: collapse; border: 1px solid black;">
-  <tr>
-    <td style="padding: 5px;background-color:#fff;"><img src= "https://github.com/user-attachments/assets/eb285512-a66a-4752-8941-c65ed1592238" alt="MaxKB Demo1"   /></td>
-    <td style="padding: 5px;background-color:#fff;"><img src= "https://github.com/user-attachments/assets/f732f1f5-472c-4fd2-93c1-a277eda83d04" alt="MaxKB Demo2"   /></td>
-  </tr>
-  <tr>
-    <td style="padding: 5px;background-color:#fff;"><img src= "https://github.com/user-attachments/assets/c927474a-9a23-4830-822f-5db26025c9b2" alt="MaxKB Demo3"   /></td>
-    <td style="padding: 5px;background-color:#fff;"><img src= "https://github.com/user-attachments/assets/e6268996-a46d-4e58-9f30-31139df78ad2" alt="MaxKB Demo4"   /></td>
-  </tr>
-</table>
-
-## Technical stack
-
-- Frontend：[Vue.js](https://vuejs.org/)
-- Backend：[Python / Django](https://www.djangoproject.com/)
-- LLM Framework：[LangChain](https://www.langchain.com/)
-- Database：[PostgreSQL + pgvector](https://www.postgresql.org/)
+See `README-hr.md` and `CLAUDE.md`.
 
 ## License
 
-Licensed under The GNU General Public License version 3 (GPLv3)  (the "License"); you may not use this file except in compliance with the License. You may obtain a copy of the License at
-
-<https://www.gnu.org/licenses/gpl-3.0.html>
-
-Unless required by applicable law or agreed to in writing, software distributed under the License is distributed on an "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the License for the specific language governing permissions and limitations under the License.
+GPL-3.0, inherited from MaxKB. This fork must remain GPL-3.0.

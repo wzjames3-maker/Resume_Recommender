@@ -4,7 +4,7 @@
     @file： resume_splitter.py
     @date：2026/8/15
     @desc：简历结构感知切片：LLM 行号边界标注（主干）+ L2 校验层 + L3 规则降级 + PII 过滤。
-          协议见 docs/superpowers/specs/2026-08-15-end-to-end-pipeline-combined-design.md §6.8。
+          协议见 docs/RAG-V2-DESIGN.md。
           不依赖具体 LLM：chat_fn(prompt) -> str 由调用方注入（测试注入 stub，生产注入模型适配器）。
 """
 import json

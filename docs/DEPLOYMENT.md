@@ -1,6 +1,6 @@
 # 生产部署清单（上线前必读）
 
-> 依据：HANDOFF.md §5.1 部署环境验证项（均已在本机模拟验证，见下）；PRD §7 上线门槛。
+> 依据：PRD §7 上线门槛；部署项已在本地环境验证（见下）。
 > 本文件把验证过的配置固化为上线步骤。
 
 ## 1. 前置服务
@@ -40,7 +40,7 @@ openssl enc -d -aes-256-cbc -pbkdf2 -pass env:BACKUP_PASSPHRASE -in <备份>.enc
 - 轮转：默认保留 7 份自然过期；注销租户的数据随轮转清除（见租户注销设计）。
 - 建议：备份任务进 crontab，每月做一次恢复演练。
 
-## 5. 上线前检查表（对照 HANDOFF §5.1）
+## 5. 上线前检查表
 
 - [ ] Celery worker + beat 真实调度（启动后检查 worker_ready 探针与 django_celery_beat 的 hr-cleanup-orphan-resumes）
 - [ ] 对象存储私有读（无凭据访问对象返回 403；附件/简历经应用代理下载）

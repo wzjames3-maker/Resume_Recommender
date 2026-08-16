@@ -4,8 +4,8 @@
     @file： query_understand.py
     @date：2026/8/16
     @desc：查询理解 v1（T4）：规则槽位抽取——年限/学历/城市/语义词。
-          设计见 docs/superpowers/specs/2026-08-16-resume-rag-v2-design.md §3.4；
-          计划见 docs/superpowers/plans/2026-08-16-resume-rag-v2-implementation.md T4。
+          设计见 docs/RAG-V2-DESIGN.md §3.4；
+
           已知限制：城市槽为子串匹配（"北京"可误中"北京师范大学"），v1 接受、评测暴露后收紧。
 """
 import re

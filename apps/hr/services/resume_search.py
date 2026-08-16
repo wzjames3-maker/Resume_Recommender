@@ -7,7 +7,7 @@
           模式 A（整句）：一次 embed → 双路独立召回(dense+sparse) → Python RRF 融合 → rerank 精排 → 简历聚合。
           模式 B（Skill-AND）：LLM 查询分解为有序技能列表 → 按序逐技能双路召回 → 命中向量字典序 → 顺位放宽 → rerank。
           降级链：rerank → RRF → dense 单路 → 空结果+meta。
-          设计见 docs/superpowers/specs/2026-08-15-hr-resume-search-design.md。
+          设计见 docs/RAG-V2-DESIGN.md。
 """
 import math
 import os
@@ -58,7 +58,7 @@ _DEFAULT_SIMILARITY = 0.2
 _MAX_QUERY_LENGTH = 2000
 # 证据合成（T3，仅模式 A）：score = 聚合基准 + λ·log2(1 + 命中段数)。
 # 聚合基准 = 0.7*max(段分) + 0.3*avg(段分)（v2 修复 F2 恢复：λ=0 严格回退旧行为，兑现「置 0 回退」承诺）。
-# λ 默认 0（关闭）：真实模型消融（2026-08-16，12 锚点 × 31 语料，installer/eval_v2_report.txt）显示
+# λ 默认 0（关闭）：真实模型消融显示
 # λ=0.15 综合劣于 λ=0：recall@5 主指标全面下降（dense 0.75→0.67；RRF+rerank 0.92→0.83），
 # 但 RRF 无 rerank 的 recall@5（0.67→0.75）与 RRF+rerank 的 Top-1/MRR（0.58→0.67 / 0.680→0.705）三格回升；
 _EVIDENCE_LAMBDA = _env_float("MAXKB_HR_EVIDENCE_LAMBDA", 0.0)

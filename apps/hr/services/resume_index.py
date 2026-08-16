@@ -4,8 +4,8 @@
     @file： resume_index.py
     @date：2026/8/15
     @desc：简历语义索引服务：简历知识库管理 + 简历入库（清洗→切片→文档→向量化）+ 生命周期同步。
-          设计见 docs/superpowers/specs/2026-08-15-end-to-end-pipeline-combined-design.md；
-          链路见 docs/superpowers/specs/2026-08-15-resume-upload-split-embed-flow.md §8。
+          设计见 docs/RAG-V2-DESIGN.md；
+
 """
 import uuid_utils.compat as uuid
 from celery_once import AlreadyQueued

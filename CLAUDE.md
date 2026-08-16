@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-MaxKB (Max Knowledge Brain) fork: a slimmed MaxKB v2 core (RAG knowledge base) with an embedded multi-tenant HR recruitment workspace (ATS) in `apps/hr`. Backend is Python 3.11 / Django 5.2 / DRF; frontend is Vue 3 / Vite / Element Plus. Data layer is PostgreSQL + pgvector and Redis; Celery for async work. GPL-3.0. Upstream workflow engine / MCP / function library / multi-modal / local-model features were removed; see `README-hr.md` and `docs/PRD.md` for the actual product.
+MaxKB (Max Knowledge Brain) fork: a slimmed MaxKB v2 core (RAG knowledge base) with an embedded multi-tenant HR recruitment workspace (ATS) in `apps/hr`. Backend is Python 3.11 / Django 5.2 / DRF; frontend is Vue 3 / Vite / Element Plus. Data layer is PostgreSQL + pgvector and Redis; Celery for async work. GPL-3.0. Upstream workflow engine / MCP / function library / multi-modal / local-model features were removed; see `README-hr.md`, `docs/PRD.md`, and `docs/ATS-STATE-MACHINE-V2.md` for the actual product and target design.
 
 ## Development Commands
 
@@ -45,7 +45,7 @@ npm run lint         # eslint --fix
 npm run type-check   # vue-tsc
 ```
 
-Python linting: `ruff` (line-length 120, config in `pyproject.toml`). Tests: `uv run python apps/manage.py test hr.tests application.tests knowledge.tests models_provider.tests ops.tests --keepdb` (current baseline 301 tests; env vars in `HANDOFF.md` §1.1).
+Python linting: `ruff` (line-length 120, config in `pyproject.toml`). Tests: `uv run python apps/manage.py test hr.tests application.tests knowledge.tests models_provider.tests ops.tests --keepdb` (env vars and current baseline are documented in `HANDOFF.md` §2).
 
 Dependencies are managed with `uv` (`uv.lock`, `pyproject.toml`). Python is pinned to `~=3.11.0`.
 
