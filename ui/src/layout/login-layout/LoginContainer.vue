@@ -3,7 +3,7 @@
     <div class="login-title">
       <div class="logo text-center">
         <slot name="logo">
-          <HrBrand size="login" />
+          <LogoFull height="45px" />
         </slot>
       </div>
       <div class="sub-title text-center" v-if="subTitle">
@@ -20,8 +20,6 @@ defineProps({
   title: String,
   subTitle: String,
 })
-
-import HrBrand from '@/components/logo/HrBrand.vue'
 </script>
 <style lang="scss" scoped>
 .login-form-container {

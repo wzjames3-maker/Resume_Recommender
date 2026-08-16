@@ -347,7 +347,7 @@ function uuidv4() {
 const newDefaultSlogan = computed(() => {
   const default_login = '强大易用的企业级智能体平台'
   if (!theme.themeInfo?.slogan || default_login == theme.themeInfo?.slogan) {
-    return '轻量易用的多租户招聘工作台'
+    return t('theme.defaultSlogan')
   } else {
     return theme.themeInfo?.slogan
   }

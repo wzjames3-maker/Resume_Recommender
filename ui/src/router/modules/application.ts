@@ -4,7 +4,7 @@ const applicationRouter = {
   name: 'application',
   meta: {
     title: 'views.application.title',
-    menu: false,
+    menu: true,
     permission: [
       RoleConst.USER.getWorkspaceRole,
       RoleConst.WORKSPACE_MANAGE.getWorkspaceRole,
