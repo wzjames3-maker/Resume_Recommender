@@ -376,8 +376,15 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
         mode = "phrase"
         meta["mode"] = "phrase"
 
-    # ---------- 结构化预筛（T4，仅整句/混合模式；G1：精确条件由 SQL 保证） ----------
-    hard = slots["years_min"] is not None or slots["degree_level"] is not None or bool(slots["cities"])
+    # ---------- 结构化预筛（T4/T7，仅整句/混合模式；G1：精确条件由 SQL 保证） ----------
+    # T7：技能维度——LLM 已解析出技能（模式 auto→phrase 且技能 <2 时）则 AND 上 candidate_skill EXISTS
+    skill_norms = [normalize_skill(s) for s in skills]
+    hard = (
+        slots["years_min"] is not None
+        or slots["degree_level"] is not None
+        or bool(slots["cities"])
+        or bool(skill_norms)
+    )
     if mode in ("phrase", "hybrid") and hard:
         q = Q()
         if slots["years_min"] is not None:
@@ -387,6 +394,8 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
             q &= Q(highest_degree__in=degree_words(slots["degree_level"]))
         for city in slots["cities"]:
             q &= Q(current_city=city) | Q(current_city=norm_city(city)) | Q(current_city=norm_city(city) + "市")
+        if skill_norms:
+            q &= Q(skill_rows__skill_norm__in=skill_norms)
         candidate_ids = list(
             QuerySet(Candidate)
             .filter(workspace_id=workspace_id, status=CandidateStatus.ACTIVE)

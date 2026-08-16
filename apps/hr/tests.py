@@ -4032,6 +4032,30 @@ class ResumeSearchTests(TestCase):
         self.assertIn("李冠光", names)  # NULL 年限未被排除
         self.assertTrue(any(i["candidate"]["years_unknown"] for i in items))
 
+    def test_prefilter_skills_exists(self):
+        """T7：技能维度接入预筛——LLM 解析 1 个技能 → phrase 模式 → candidate_skill EXISTS 限定候选集。"""
+        from hr.models import CandidateSkill
+        from hr.services.resume_search import search_resumes
+
+        CandidateSkill.objects.create(candidate=self.candidate, skill_norm="java", skill_raw="Java")
+        cand2, _, _ = self._extra_candidate("乙", 3, skills=["python"])
+        CandidateSkill.objects.create(candidate=cand2, skill_norm="python", skill_raw="Python")
+        para = Paragraph.objects.create(
+            id=uuid.uuid7(), document_id=self.document.id, knowledge_id=self.knowledge.id,
+            content="熟悉 Java 开发", title="工作经历", status="SUCCESS",
+        )
+        with patch("hr.services.resume_search._parse_skills", return_value=["java"]), \
+                patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()), \
+                patch("hr.services.resume_search.EmbeddingSearch") as m_emb, \
+                patch("hr.services.resume_search.KeywordsSearch") as _m_key:
+            m_emb.return_value.handle.return_value = [{"paragraph_id": str(para.id), "similarity": 0.9}]
+            result = search_resumes(self.workspace_id, "会 java 的人", mode="auto",
+                                    llm_model=Mock(), hr_role="ADMIN", user_id=self.user.id)
+        self.assertEqual(result["meta"]["mode"], "phrase")  # 单技能 → 不升级 skills 模式
+        self.assertTrue(result["meta"]["prefilter"]["applied"])
+        self.assertEqual(result["meta"]["prefilter"]["candidate_count"], 1)  # 仅 java 候选人
+        self.assertIn("李冠光", [i["candidate"]["name"] for i in result["items"]])
+
     def test_name_fast_path(self):
         """T4：纯中文姓名查询 → name__icontains 命中置顶（无语义命中时也可返回）。"""
         from hr.services.resume_search import search_resumes
