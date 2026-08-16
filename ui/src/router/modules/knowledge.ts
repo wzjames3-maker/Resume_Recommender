@@ -4,7 +4,7 @@ const ModelRouter = {
   name: 'knowledge',
   meta: {
     title: 'views.knowledge.title',
-    menu: true,
+    menu: false,
     permission: [
       RoleConst.ADMIN,
       RoleConst.EXTENDS_ADMIN,

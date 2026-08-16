@@ -1,14 +1,6 @@
 <template>
   <div class="flex align-center top-about">
-    <el-button
-      round
-      @click="toUrl('https://maxkb.cn/pricing.html')"
-      class="pricing-button mr-8"
-      v-hasPermission="EditionConst.IS_CE"
-    >
-      <AppIcon iconName="app-pricing" class="mr-8"></AppIcon>
-      {{ $t('common.upgrade') }}
-    </el-button>
+
     <el-tooltip
       effect="dark"
       :content="$t('layout.github')"
@@ -55,7 +47,6 @@
 </template>
 <script setup lang="ts">
 import useStore from '@/stores'
-import { EditionConst } from '@/utils/permission/data'
 const { theme } = useStore()
 function toUrl(url: string) {
   window.open(url, '_blank')
@@ -77,9 +68,5 @@ function toUrl(url: string) {
       background: #ffffff;
     }
   }
-}
-.pricing-button {
-  background: linear-gradient(90deg, #3370ff 0%, #7f3bf5 100%);
-  color: #ffffff;
 }
 </style>

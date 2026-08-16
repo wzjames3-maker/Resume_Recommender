@@ -4,7 +4,7 @@ const ModelRouter = {
   name: 'model',
   meta: {
     title: 'views.model.title',
-    menu: true,
+    menu: false,
     permission: [
       RoleConst.USER.getWorkspaceRole,
       RoleConst.WORKSPACE_MANAGE.getWorkspaceRole,

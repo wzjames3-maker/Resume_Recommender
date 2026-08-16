@@ -9,7 +9,7 @@ const hrRouter = {
     permission: [RoleConst.USER.getWorkspaceRole, RoleConst.WORKSPACE_MANAGE.getWorkspaceRole],
     icon: 'app-user',
     group: 'workspace',
-    order: 5,
+    order: 1,
   },
   redirect: '/hr/candidates',
   component: () => import('@/layout/layout-template/SimpleLayout.vue'),

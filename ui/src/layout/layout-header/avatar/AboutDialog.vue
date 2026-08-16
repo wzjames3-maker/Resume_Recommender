@@ -6,7 +6,7 @@
   >
     <template #header="{ titleId, titleClass }">
       <div class="logo flex-center" :id="titleId" :class="titleClass">
-        <LogoFull height="59px"/>
+        <HrBrand />
       </div>
     </template>
     <div class="about-ui" v-loading="loading">
@@ -67,6 +67,7 @@
   </el-dialog>
 </template>
 <script setup lang="ts">
+import HrBrand from '@/components/logo/HrBrand.vue'
 import {ref, computed, watch} from 'vue'
 import licenseApi from '@/api/system/license'
 import {fromNowDate} from '@/utils/time'

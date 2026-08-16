@@ -2,7 +2,7 @@
 <template>
   <div class="app-top-bar-container border-b flex-center">
     <div class="logo mt-4">
-      <LogoFull />
+      <HrBrand />
     </div>
 
     <div class="flex-between w-full">
@@ -31,6 +31,7 @@ import { computed, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import TopMenu from './top-menu/index.vue'
 import Avatar from './avatar/index.vue'
+import HrBrand from '@/components/logo/HrBrand.vue'
 import TopAbout from './top-about/index.vue'
 import { EditionConst } from '@/utils/permission/data'
 import { hasPermission } from '@/utils/permission/index'

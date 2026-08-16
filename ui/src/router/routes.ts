@@ -9,16 +9,16 @@ export const routes: Array<RouteRecordRaw> = [
   {
     path: '/',
     name: 'root',
-    redirect: '/home',
+    redirect: '/hr/candidates',
     children: [
       ...rolesRoutes,
       {
         path: '/home',
         name: 'home',
-        redirect: '/home',
+        redirect: '/hr/candidates',
         meta: {
           title: 'home.title',
-          menu: true,
+          menu: false,
           order: 1,
           icon: 'app-home',
           iconActive: 'app-home-active',
