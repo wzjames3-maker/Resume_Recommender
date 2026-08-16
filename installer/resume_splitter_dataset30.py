@@ -83,8 +83,9 @@ def main():
             joined = "".join(c["content"] for c in chunks)
             original_masked = mask_pii(cleaned)
             fidelity = strip_ws(joined) == strip_ws(original_masked)
-            # 非空行覆盖：每条原非空行内容都出现在某个 chunk 中
-            lines = cleaned.split("\n")
+            # 非空行覆盖：每条掩码后非空行内容都出现在某个 chunk 中
+            # （按未掩码原文行比对会在含 PII 的行上必然失配——掩码替换后原文行不存在于 chunk 内容）
+            lines = original_masked.split("\n")
             all_content = "\n".join(c["content"] for c in chunks)
             coverage = all(any(line.strip() and line.strip() in cc for cc in all_content.split("\n")) for line in lines if line.strip())
             pii_hit = any("[已脱敏]" in c["content"] for c in chunks)

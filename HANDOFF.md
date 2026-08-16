@@ -151,6 +151,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
   - **T6 Termbase 词条 + 重嵌命令**：seed_resume_termbase（108 词条，幂等，KeywordsSearch 内部已自动生效）+ reindex_resume_knowledge（dry-run 支持；一次重嵌覆盖 T2 存量 + T6 词条；重嵌窗口检索降级 seq scan，低峰执行；真实执行由项目方操作）；
   - **T7 技能预筛**：LLM 解析技能（auto→phrase）AND candidate_skill EXISTS，与向量 Skill-AND 并存。
   - 已知限制同步：phone/email 语义查找因掩码设计性不可行（v1 不做，产品确认点）；查询理解为规则版（LLM 版并入 P3 合并调用）；城市槽子串匹配可能误中（评测暴露后收紧）。
+  - **真实模型评测（2026-08-16，项目方授权）：T1 切片复测 30/30 保真无回归（覆盖指标修复后 29/30）；T2 重建 30/30（title-chunks 全生效）；检索 λ 消融：λ=0.15 全面劣于 λ=0（dense 0.75→0.67）→ λ 默认置 0；λ=0 下 RRF+rerank recall@5=0.92/recall@3=0.83 持平审计基线；T7 表空误杀缺陷被评测暴露并修复（Skill-AND 0.25→0.75）。完整输出 installer/eval_v2_report.txt**
 
 另：人工反馈、更大标注集量化对比、档位 3（200 份）仍后置。docx 格式变体评测集（plans 1.3）并入阶段 3 检索评测。**注意**：冒烟中修复了应用创建/发布链路的 3 个裁剪期 bug（96afbd0），application.tests 现有 10 用例。
 

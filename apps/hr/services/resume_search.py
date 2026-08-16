@@ -31,8 +31,11 @@ _RRF_K = 60
 _MAX_SKILLS = 10
 _DEFAULT_SIMILARITY = 0.2
 _MAX_QUERY_LENGTH = 2000
-# 证据合成（T3，仅模式 A）：score = max(段分) + λ·log2(1 + 命中段数)。置 0 即回退旧行为（0.7*max+0.3*avg）。
-_EVIDENCE_LAMBDA = 0.15
+# 证据合成（T3，仅模式 A）：score = max(段分) + λ·log2(1 + 命中段数)。
+# 默认 0（关闭）：真实模型消融评测（2026-08-16，12 锚点 × 31 语料）显示 λ=0.15 使 dense/RRF 的
+# recall@5 与 MRR 全面下降（dense 0.75→0.67 / MRR 0.51→0.33；RRF+rerank recall@5 0.92→0.83），
+# 机制保留（多段证据加分），待更大样本评测后再开。
+_EVIDENCE_LAMBDA = 0
 # 结构化预筛上限（T4）：预筛文档集超过该值则放弃预筛转全量语义（避免误伤大库）
 _PREFILTER_MAX = 2000
 # 姓名快速通道（T4）：纯 2-4 字中文查询走 name__icontains 并置顶
@@ -394,7 +397,10 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
             q &= Q(highest_degree__in=degree_words(slots["degree_level"]))
         for city in slots["cities"]:
             q &= Q(current_city=city) | Q(current_city=norm_city(city)) | Q(current_city=norm_city(city) + "市")
-        if skill_norms:
+        if skill_norms and QuerySet(CandidateSkill).filter(
+            candidate__workspace_id=workspace_id, candidate__status=CandidateStatus.ACTIVE
+        ).exists():
+            # 表空（未回填/语料无技能）时跳过技能维度，避免 EXISTS 空表误杀整条查询（迁移期兼容）
             q &= Q(skill_rows__skill_norm__in=skill_norms)
         candidate_ids = list(
             QuerySet(Candidate)

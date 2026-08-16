@@ -1,7 +1,7 @@
 # 简历 RAG 链路重构实施方案（v2 修订版）
 
 > 日期：2026-08-16
-> 状态：方案（已过独立审查，含 6 处修订 R1-R6；未实施）
+> 状态：方案（已过独立审查，含 6 处修订 R1-R6）；**实施完成（T1-T8，提交 538a8a8..a90afc2 + 评测修复 2 提交）；真实模型评测结论：λ 默认置 0（证据合成关闭待更大样本），T7 表空回退修复；详见 README-hr「v2 真实模型评测」**
 > 设计依据：`docs/superpowers/specs/2026-08-16-resume-rag-v2-design.md`
 > 审查输入：`docs/superpowers/audits/2026-08-16-resume-rag-design-fit-assessment.md`
 > 基线：367/367 测试全绿；`ruff check apps/hr/` 干净；`makemigrations --check` 无意外变更

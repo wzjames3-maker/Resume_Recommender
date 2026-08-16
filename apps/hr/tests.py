@@ -3375,6 +3375,11 @@ class ReindexCommandTests(TestCase):
             model_name="BAAI/bge-large-zh-v1.5", provider="model_openai_provider",
             credential="{}", meta={}, workspace_id="default",
         )
+        from knowledge.models import KnowledgeFolder
+
+        KnowledgeFolder.objects.get_or_create(
+            id="default", defaults={"name": "default", "workspace_id": "default"}
+        )
 
     def test_seed_termbase_idempotent(self):
         from django.core.management import call_command
@@ -3941,7 +3946,8 @@ class ResumeSearchTests(TestCase):
             {"document_id": str(doc_b.id), "rerank": 0.89},
             {"document_id": str(doc_b.id), "rerank": 0.88},
         ]
-        results = _aggregate(paras, hr_role="ADMIN")
+        with patch("hr.services.resume_search._EVIDENCE_LAMBDA", 0.15):
+            results = _aggregate(paras, hr_role="ADMIN")
         self.assertEqual([r["document_id"] for r in results], [str(doc_b.id), str(doc_a.id)])
         self.assertGreater(results[0]["score"], results[1]["score"])
         with patch("hr.services.resume_search._EVIDENCE_LAMBDA", 0):
@@ -4055,6 +4061,25 @@ class ResumeSearchTests(TestCase):
         self.assertTrue(result["meta"]["prefilter"]["applied"])
         self.assertEqual(result["meta"]["prefilter"]["candidate_count"], 1)  # 仅 java 候选人
         self.assertIn("李冠光", [i["candidate"]["name"] for i in result["items"]])
+
+    def test_prefilter_skills_empty_table_fallback(self):
+        """T7 回归：candidate_skill 表空（未回填）时技能维度跳过，不得 EXISTS 空表误杀查询。"""
+        from hr.services.resume_search import search_resumes
+
+        para = Paragraph.objects.create(
+            id=uuid.uuid7(), document_id=self.document.id, knowledge_id=self.knowledge.id,
+            content="熟悉 Java 开发", title="工作经历", status="SUCCESS",
+        )
+        with patch("hr.services.resume_search._parse_skills", return_value=["java"]), \
+                patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()), \
+                patch("hr.services.resume_search.EmbeddingSearch") as m_emb, \
+                patch("hr.services.resume_search.KeywordsSearch") as _m_key:
+            m_emb.return_value.handle.return_value = [{"paragraph_id": str(para.id), "similarity": 0.9}]
+            result = search_resumes(self.workspace_id, "会 java 的人", mode="auto",
+                                    llm_model=Mock(), hr_role="ADMIN", user_id=self.user.id)
+        self.assertEqual(result["meta"]["search_type"], "hybrid_rrf")  # 无 rerank 模型时的模式 A 检索
+        self.assertNotEqual(result["meta"]["search_type"], "prefilter_empty")
+        self.assertGreaterEqual(len(result["items"]), 1)
 
     def test_name_fast_path(self):
         """T4：纯中文姓名查询 → name__icontains 命中置顶（无语义命中时也可返回）。"""
