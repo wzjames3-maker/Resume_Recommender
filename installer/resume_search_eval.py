@@ -83,8 +83,7 @@ def build_typed_anchors(count: int = 10):
                             "structured": {**base, "degree": cand.highest_degree}})
         if cand.current_city:
             anchors.append({"q": cand.current_city, "targets": [target], "type": "conditional",
-                            "structured": base})
-    return anchors
+                            "structured": {**base, "city": cand.current_city}})
 
 
 def load_anchors():
@@ -116,8 +115,10 @@ def main():
         ("Skill-AND", {"mode": "auto"}),
     ]
     results = {name: [] for name, _ in modes}
+    results = {name: [] for name, _ in modes}
     errors = {name: 0 for name, _ in modes}
-    for anchor in ANCHORS:
+    cond_returns = {name: [] for name, _ in modes}  # F8：conditional 锚点返回项（精确率核对用）
+    for anchor in anchors:  # F8 修复：--typed 时须遍历扩展后的锚点集（此前主循环用 ANCHORS，typed 汇总段越界崩溃）
         q, targets = anchor["q"], anchor["targets"]
         print(f"\n=== [{anchor['type']}] {q} → {targets}")
         for name, opts in modes:
@@ -134,6 +135,10 @@ def main():
                 print(f"  {name}: ERROR {str(exc)[:80]}")
                 continue
             items = result["items"]
+            items = result["items"]
+            # F8：conditional 锚点记录返回候选人（供条件精确率核对）
+            if anchor["type"] == "conditional":
+                cond_returns.setdefault(name, []).append((anchor, items))
             hit_names = [it["resume"]["file_name"] for it in items if it.get("resume")]
             hit = [t for t in targets if t in hit_names]
             rank_of = {}
@@ -148,8 +153,11 @@ def main():
             print(f"  {name}: hits={hit_names[:5]} 命中={hit} MRR={mrr:.3f}")
 
     # 结构化基线：Candidate.skills 含 skills 任一项
-    from hr.models import Candidate
+    # 结构化基线：Candidate 字段过滤（skills 任一项 / degree >= 词表层级 / years >= / city 归一）
+    # F8：此前只处理 skills，years/degree/city 条件被忽略（typed conditional 锚点基线恒 0 无意义）
+    from hr.models import Candidate, ResumeFile
     from django.db.models import QuerySet
+    from hr.services.query_understand import degree_words, norm_city
     struct_results = []
     for anchor in anchors:
         cond = anchor["structured"]
@@ -157,22 +165,22 @@ def main():
         cands = list(QuerySet(Candidate).filter(workspace_id=WORKSPACE, status="ACTIVE"))
         hit_names = []
         for c in cands:
+            if cond.get("years") is not None and c.years_experience is None:
+                continue  # 结构化基线：年限未知视为不匹配（与线上「纳入并标记」口径不同，输出注明）
+            if cond.get("years") is not None and c.years_experience < cond["years"]:
+                continue
+            if cond.get("degree") is not None:
+                from hr.services.query_understand import _DEGREE_LEVELS
+                if c.highest_degree not in degree_words(_DEGREE_LEVELS[cond["degree"]]):
+                    continue
+            if cond.get("city") is not None and norm_city(c.current_city or "") != norm_city(cond["city"]):
+                continue
             c_skills = [s.lower() for s in (c.skills or [])]
-            if any(s in " ".join(c_skills) for s in skills):
-                from hr.models import ResumeFile
-                rf = QuerySet(ResumeFile).filter(candidate_id=c.id).first()
-                if rf:
-                    hit_names.append(rf.file_name)
-        hit = [t for t in anchor["targets"] if t in hit_names]
-        rank = 0
-        for idx, fn in enumerate(hit_names[:5], 1):
-            if fn in anchor["targets"]:
-                rank = idx
-                break
-        # 与语义模式相同的四指标口径（此前仅 recall@5/MRR，报告表格中的 recall@3/Top-1 无法由脚本复现）
-        struct_results.append((bool(hit), rank))
-        print(f"  结构化基线: {hit_names[:5]} 命中={hit} Top-1={1 if rank == 1 else 0}")
-
+            if skills and not any(s in " ".join(c_skills) for s in skills):
+                continue
+            rf = QuerySet(ResumeFile).filter(candidate_id=c.id).first()
+            if rf:
+                hit_names.append(rf.file_name)
     # 汇总
     print("\n" + "=" * 70)
     print(f"汇总（{len(anchors)} 锚点查询）")
@@ -211,6 +219,36 @@ def main():
             else:
                 row += f" {'-':>16}"
         print(row)
+
+    # conditional 条件精确率（F8，规模验证 G3 的验收产出）：
+    # 对每个 conditional 锚点返回的 items，核对候选人结构化字段是否满足锚点条件；
+    # 精确率 = 满足条件的返回项 / 返回项总数（仅统计有返回的锚点）
+    from hr.services.query_understand import degree_words, norm_city
+    print("\nconditional 条件精确率（返回项满足锚点条件的比例；满足条件且被返回 / 返回项数）")
+    for name, _ in modes:
+        rows = cond_returns[name]
+        checked = [(a, items) for a, items in rows if items]
+        if not checked:
+            continue
+        total = sum(len(items) for _, items in checked)
+        satisfy = 0
+        for a, items in checked:
+            cond = a["structured"]
+            for it in items:
+                c = it.get("candidate")
+                if not c:
+                    continue
+                ok = True
+                if cond.get("years") is not None and (c.get("years_experience") or 0) < cond["years"]:
+                    ok = False
+                if cond.get("degree") is not None:
+                    if c.get("highest_degree") not in degree_words(_DEGREE_LEVELS.get(cond["degree"], 0)):
+                        ok = False
+                if cond.get("city") is not None and norm_city(c.get("current_city") or "") != norm_city(cond["city"]):
+                    ok = False
+                if ok:
+                    satisfy += 1
+        print(f"{name:>12}: {satisfy}/{total} = {satisfy / total:.2f}" if total else f"{name:>12}: 无返回项")
     return 0
 
 
