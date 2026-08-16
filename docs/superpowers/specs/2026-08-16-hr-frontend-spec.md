@@ -33,7 +33,7 @@
 | /hr/candidates | 候选人管理 | VIEWER+ |
 | /hr/jobs | 职位管理与管道看板 | VIEWER+ |
 | /hr/search | 简历语义检索 | VIEWER+ |
-| /hr/my-interviews | 我的面试（仅本人数据） | VIEWER+ |
+| /hr/my-interviews | 我的面试（仅本人数据） | 登录用户（面试官可无 HR 授权，服务端按本人隔离） |
 | /hr/access | 人事成员授权 | ADMIN |
 | /hr/audit-logs | 审计日志 | ADMIN |
 | /hr/handoffs | 入职交接 | ADMIN |
@@ -49,7 +49,8 @@
 |---|---|---|---|
 | 查看候选人/职位列表与详情 | 是（联系方式脱敏） | 是（明文） | 是（明文） |
 | 新建/编辑候选人、上传简历、加入职位 | 否 | 是 | 是 |
-| 面试安排/反馈提交（含「我的面试」） | 否 | 是（本人相关） | 是 |
+| 面试安排/面试记录维护 | 否 | 是 | 是 |
+| 「我的面试」反馈提交（仅本人） | 是（本人） | 是（本人） | 是（本人） |
 | 归档/恢复/删除/合并候选人 | 否 | 否 | 是 |
 | 职位新建/编辑/关闭/恢复、AI 技能抽取 | 否（只读） | 否 | 是 |
 | 指派流转（拖拽/对话框） | 否（只读） | 是（终态需原因） | 是（含误拒恢复） |
@@ -65,6 +66,25 @@
 - 受限操作（归档、删除、合并、导出、导入、授权、关闭职位、Offer 变更、简历删除/下载）执行前后触发服务端审计；前端文案需明确不可逆后果（如删除=匿名化并删除简历）。
 - 脱敏展示：VIEWER 视角手机/邮箱显示后端返回的掩码；前端不得自行从其他字段拼装明文联系方式。
 
+### 3.3 前后端权限一致性（现状与风险）
+
+前端按钮一律按 HR 角色显隐（isHrOperator/isHrAdmin），但**部分后端写接口仅挂 `hr_access_required`**，VIEWER 直调 API 仍可成功，与 PRD §3「VIEWER 不得创建或变更流程」不符：
+
+| 接口 | 后端门槛 | 前端暴露 | 状态 |
+|---|---|---|---|
+| POST /candidates（建档） | hr_access_required | OPERATOR+ | ⚠️ 后端应收紧 |
+| POST /jobs/{id}/assignments（加入职位） | hr_access_required | OPERATOR+ | ⚠️ 后端应收紧 |
+| POST /candidates/resumes（简历上传） | hr_access_required | OPERATOR+ | ⚠️ 后端应收紧 |
+| POST /assignments/{id}/interviews（安排面试） | hr_access_required | OPERATOR+ | ⚠️ 后端应收紧 |
+| PUT /interviews/{id}（面试记录更新） | hr_access_required | OPERATOR+ | ⚠️ 后端应收紧 |
+| PUT /assignments/{id}（指派状态流转） | hr_access_required | OPERATOR+（拖拽/对话框） | ⚠️ 后端应收紧 |
+| GET /offers/{id}/attachment/download（Offer 附件） | hr_access_required | 仅 ADMIN 可见入口 | ⚠️ 与 README「VIEWER 不可下载」不符，后端应收紧 |
+| POST /ai/search-parse（AI 搜索） | hr_access_required | OPERATOR+ | 前端严于后端（VIEWER 直调可用，需确认产品口径） |
+| GET /handoffs（交接列表） | hr_access_required | 页面 ADMIN-only | 前端严于后端 |
+| GET /import/candidates/template | hr_access_required | ADMIN-only | 前端严于后端 |
+
+统一口径：**前端显隐按 §3.1 矩阵；后端写操作应至少 `hr_operator_required`，Offer 附件下载按产品口径收紧**（待办，见 §10）。
+
 ## 4. 页面规格
 
 ### 4.1 候选人管理 /hr/candidates
@@ -72,6 +92,7 @@
 **筛选区**（组合检索，条件变更即刷新）：
 - 姓名、城市、技能（多技能 AND 由后端支持，前端逗号分隔输入）、工作年限区间（min/max）、最高学历（博士/硕士/本科/大专/中专/高中）、来源渠道（内推/招聘网站/猎头/校园/其他）、档案状态（在库/已归档）、「待我处理」（owner_id=当前用户，可切换）。
 - AI 搜索（OPERATOR+）：自然语言 → POST /ai/search-parse → 回填筛选条件 → 提示「已按 AI 解析条件搜索，可继续修改」（人工决策优先）。
+- AI 设置对话框（ADMIN）：工作区级 LLM/Rerank 模型选择（GET/PUT /ai/config，后端 ADMIN-only）；候选人/职位两页均有入口。
 
 **列表**：姓名（加粗）、城市（现居→目标）、经验、技能、疑似重复标记（duplicate_ids 非空）、状态、操作。
 - 操作列：主操作「详情」+「更多」下拉（按角色显隐）：编辑(ADMIN)、加入职位(OPERATOR+)、归档(ADMIN)、恢复(ADMIN)、简历、合并(ADMIN，需重复标记)、删除(ADMIN，分隔线置底)。
@@ -109,14 +130,14 @@
 
 **安排/记录对话框**（OPERATOR+）：轮次、面试官（工作区成员，可留空填临时面试官）、面试时间、反馈截止（可选）；列表列：轮次/面试官/时间/反馈截止（逾期红色、已提交标记）/结果（待面试/通过/未通过/未到场/取消）/反馈文本（变更即保存）。
 
-**我的面试页**（VIEWER+，仅本人）：候选人/职位/轮次/时间/状态/反馈截止（逾期标记）/我的反馈；提交反馈 PUT /interviews/{id}/feedback；空态「暂无被安排的面试」。
+**我的面试页**（登录用户即可，**不要求 HR 授权**——面试官可无 HR 角色，服务端按本人隔离，非本人 404）：候选人/职位/轮次/时间/状态/反馈截止（逾期标记）/我的反馈；提交反馈 PUT /interviews/{id}/feedback；空态「暂无被安排的面试」。
 
 ### 4.4 Offer 与入职交接（抽屉 + /hr/handoffs）
 
 **Offer 对话框**（ADMIN）：
 - 版本列表：版本/金额+币种/审批状态（待审批/已通过/已驳回）/状态（草稿/已发送/已接受/已拒绝/已撤回）/时间线/附件（上传/下载/删除）。
 - 操作：新建版本（金额/币种/备注）、审批（通过/驳回）、发送、接受（确认文案：指派自动进入已入职并触发交接）、拒绝（备注即原因）、撤回。
-- 附件权限：VIEWER 不渲染下载按钮。
+- 附件权限：前端仅 ADMIN 可见上传/下载/删除入口；后端下载接口当前为 hr_access_required（与 README「VIEWER 不可下载」不符，待收紧，见 §3.3）。附件大小上限 20MB。
 
 **入职交接页**（ADMIN）：交接配置（CHECKLIST 人工清单 / WEBHOOK 投递 + URL）、记录列表（候选人/职位/部门/手机号/邮箱/状态/尝试/最近投递/失败原因）、失败重试；手机/邮箱列脱敏。
 
@@ -134,7 +155,8 @@
 
 - 筛选：操作者（工作区成员）、动作、对象类型、时间范围（datetimerange）。
 - 表格：时间/操作者/动作/对象类型/对象 ID/结果（成功/失败/拒绝）/补充详情；分页；**只读**。
-- 动作枚举（与后端 HrAuditAction 一致）：VIEW_DETAIL/CREATE/UPDATE/ARCHIVE/RESTORE/DELETE/JOB_CLOSE/JOB_REOPEN/ASSIGNMENT_TRANSITION/RESUME_UPLOAD/RESUME_DOWNLOAD/RESUME_DELETE/MERGE/EXPORT/IMPORT/ACCESS_GRANT/SEARCH/OFFER_*/HANDOFF_*/PERMISSION_DENIED 等；对象类型：CANDIDATE/JOB/ASSIGNMENT/RESUME 等。
+- 动作枚举（与后端 HrAuditAction 一致）：VIEW_DETAIL / CREATE / UPDATE / ARCHIVE / RESTORE / DELETE / JOB_CLOSE / JOB_REOPEN / ASSIGNMENT_TRANSITION / RESUME_UPLOAD / RESUME_DOWNLOAD / RESUME_DELETE / INTERVIEW_FEEDBACK / OFFER_SEND / OFFER_ACCEPT / OFFER_REJECT / OFFER_WITHDRAW / OFFER_APPROVE / HANDOFF / IMPORT / MERGE / GRANT_ACCESS / REVOKE_ACCESS / EXPORT / SEARCH / ACCESS_DENIED。
+- 对象类型（HrAuditObjectType）：CANDIDATE / JOB / ASSIGNMENT / RESUME / HR_ACCESS / OTHER；结果（HrAuditResult）：SUCCESS / FAILED / DENIED。
 
 
 ## 5. 状态机前端约束（PRD §4.3 状态迁移表）
@@ -150,6 +172,7 @@
 
 - 终态必填受控原因；不得用同一自由文本混用 REJECTED/WITHDRAWN/CLOSED。
 - 服务端仍强制状态机，前端规则仅为体验层约束；服务端拒绝时前端必须回滚并展示服务端错误。
+- 唯一性约束：同一候选人与同一职位最多一条进行中（PENDING_SCREEN/SCREEN_PASSED/INTERVIEWING/OFFER）关联；「加入职位」/重新指派被服务端拒绝（An active assignment already exists）时，前端原样展示服务端错误，不静默吞掉。
 
 ## 6. 接口契约
 
@@ -209,6 +232,7 @@
 | 简历语义检索页 | 已交付 |
 | 人事成员授权、审计日志 | 已交付 |
 | **表单校验「姓名+至少一种联系方式」（PRD §8）** | 待补（当前仅姓名必填；后端同步门槛未实现） |
+| **后端写接口权限收紧**（§3.3：建档/加入职位/传简历/安排面试/面试更新/指派流转 → hr_operator_required；Offer 附件下载按产品口径收紧） | ⚠️ 待办（前端按钮已按角色隐藏，但 API 层 VIEWER 可直调，与 PRD §3 冲突） |
 | 巨石页面拆分组件（§7） | 待办 |
 | HR 文案 i18n 抽取 | 待办（当前硬编码中文） |
 | 候选人列表移动端适配 | 待议 |
@@ -222,5 +246,7 @@
 - [ ] 简历上传轮询收敛、失败可重传；流转日志六节点完整
 - [ ] Offer 接受 → HIRED → 交接记录出现；附件 VIEWER 不可下载
 - [ ] 审计日志只读、筛选齐全；越权操作被记录
+- [ ] 「我的面试」无需 HR 授权即可访问且仅见本人数据；非本人访问返回 404/无数据
+- [ ] VIEWER 直调写接口（POST /candidates、PUT /assignments/{id}、Offer 附件下载等）被服务端拒绝（§3.3 收紧后）
 - [ ] vue-tsc / eslint / vite build 通过；无头浏览器冒烟通过
 
