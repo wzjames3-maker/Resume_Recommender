@@ -180,6 +180,7 @@
         <el-button link type="primary" @click="downloadImportTemplate">下载 CSV 模板</el-button>
         <span class="ml-8 color-secondary">UTF-8 编码，最多 200 行，必填列：name</span>
       </div>
+      <el-alert type="info" :closable="false" class="mb-16" title="导入操作将写入审计日志，请确认数据来源与合规信息。" />
       <el-upload
         drag
         accept=".csv"
@@ -348,7 +349,7 @@
             <el-option v-for="c in mergeCandidatesList" :key="c.id" :label="`${c.name}${c.phone ? ` · ${c.phone}` : ''}`" :value="c.id" />
           </el-select>
         </el-form-item>
-        <div class="color-secondary">合并后目标候选人的简历与指派将迁移至主候选人，目标候选人被删除；存在冲突有效指派时将被拒绝。</div>
+        <div class="color-secondary">合并后目标候选人的简历与指派将迁移至主候选人，目标候选人被删除；存在冲突有效指派时将被拒绝。该操作将写入审计日志。</div>
       </el-form>
       <template #footer><el-button @click="mergeDialogVisible = false">取消</el-button><el-button type="primary" :disabled="!mergeTargetId" :loading="saving" @click="confirmMerge">确认合并</el-button></template>
     </el-dialog>
@@ -561,7 +562,7 @@ function doSaveCandidate(data: Record<string, unknown>) {
 }
 
 function archive(candidate: Candidate) {
-  MsgConfirm('归档候选人', `归档后将保留 ${candidate.name} 的历史指派记录。`, { confirmButtonClass: 'danger' })
+  MsgConfirm('归档候选人', `归档后将保留 ${candidate.name} 的历史指派记录。该操作将写入审计日志。`, { confirmButtonClass: 'danger' })
     .then(() => HrApi.archiveCandidate(candidate.id))
     .then(() => {
       MsgSuccess('候选人已归档')
@@ -571,7 +572,7 @@ function archive(candidate: Candidate) {
 }
 
 function restore(candidate: Candidate) {
-  MsgConfirm('恢复候选人', `将 ${candidate.name} 恢复为在库状态，可继续加入职位。`)
+  MsgConfirm('恢复候选人', `将 ${candidate.name} 恢复为在库状态，可继续加入职位。该操作将写入审计日志。`)
     .then(() => HrApi.restoreCandidate(candidate.id))
     .then(() => {
       MsgSuccess('候选人已恢复')
@@ -586,7 +587,7 @@ function restore(candidate: Candidate) {
 function removeCandidate(candidate: Candidate) {
   MsgConfirm(
     '删除候选人',
-    `删除即匿名化处理：姓名被替换、联系方式等个人信息将被清空，且该候选人的简历文件会被删除。确认删除 ${candidate.name}？`,
+    `删除即匿名化处理：姓名被替换、联系方式等个人信息将被清空，且该候选人的简历文件会被删除。确认删除 ${candidate.name}？该操作将写入审计日志。`,
     { confirmButtonClass: 'danger' },
   )
     .then(() => HrApi.deleteCandidate(candidate.id))
@@ -598,8 +599,11 @@ function removeCandidate(candidate: Candidate) {
 }
 
 function exportCandidates() {
-  exporting.value = true
-  HrApi.exportCandidates({ ...filters })
+  MsgConfirm('导出候选人', '确认导出当前筛选结果？该操作将写入审计日志。')
+    .then(() => {
+      exporting.value = true
+      return HrApi.exportCandidates({ ...filters })
+    })
     .then(() => MsgSuccess('候选人已导出'))
     .catch(() => {})
     .finally(() => {
@@ -759,7 +763,7 @@ function downloadResumeFile(resume: ResumeFile) {
 function removeResume(resume: ResumeFile) {
   MsgConfirm(
     '删除简历',
-    `确认删除简历「${resume.file_name}」？该操作会同时删除语义索引与流转日志，不可恢复。`,
+    `确认删除简历「${resume.file_name}」？该操作会同时删除语义索引与流转日志，不可恢复。该操作将写入审计日志。`,
     { confirmButtonClass: 'danger' },
   )
     .then(() => HrApi.deleteResume(resume.id))
