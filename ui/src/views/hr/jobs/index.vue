@@ -25,45 +25,83 @@
               <el-tabs v-model="expandTab[row.id]" @tab-change="(name: string) => handleExpandTab(row, name)">
                 <el-tab-pane label="候选人" name="assignments">
                   <el-empty v-if="jobDetails[row.id]?.assignments?.length === 0" description="暂无候选人" />
-                  <el-table v-else :data="jobDetails[row.id]?.assignments" size="small">
-                    <el-table-column prop="candidate_name" label="候选人" />
-                    <el-table-column label="筛选状态" width="190">
-                      <template #default="{ row: assignment }">
-                        <el-select :model-value="assignment.status" size="small" :disabled="!isHrOperator" @change="(value: AssignmentStatus) => onAssignmentStatusChange(assignment, value)">
-                          <el-option v-for="(label, value) in assignmentStatusOptions" :key="value" :label="label" :value="value" />
-                        </el-select>
-                      </template>
-                    </el-table-column>
-                    <el-table-column label="关系类型" width="120">
-                      <template #default="{ row: assignment }">
-                        <el-select :model-value="assignment.relation_type" size="small" :disabled="!isHrOperator" @change="(value: RelationType) => updateAssignmentFields(assignment, { relation_type: value })">
-                          <el-option v-for="(label, value) in relationTypeLabels" :key="value" :label="label" :value="value" />
-                        </el-select>
-                      </template>
-                    </el-table-column>
-                    <el-table-column label="渠道" width="120">
-                      <template #default="{ row: assignment }">
-                        <el-select :model-value="assignment.channel" size="small" :disabled="!isHrOperator" @change="(value: ResumeChannel) => updateAssignmentFields(assignment, { channel: value })">
-                          <el-option v-for="(label, value) in channelLabels" :key="value" :label="label" :value="value" />
-                        </el-select>
-                      </template>
-                    </el-table-column>
-                    <el-table-column label="负责人" width="130">
-                      <template #default="{ row: assignment }">
-                        <el-select :model-value="assignment.owner_id" size="small" placeholder="负责人" clearable :disabled="!isHrOperator"
-                                   @change="(value: string | null) => updateAssignmentFields(assignment, { owner_id: value })">
-                          <el-option v-for="member in members" :key="member.id" :label="member.nick_name" :value="member.id" />
-                        </el-select>
-                      </template>
-                    </el-table-column>
-                    <el-table-column prop="note" label="备注" show-overflow-tooltip />
-                    <el-table-column label="操作" width="150">
-                      <template #default="{ row: assignment }">
-                        <el-button v-if="isHrOperator" link type="primary" size="small" @click="openInterviewDrawer(row, assignment)">面试</el-button>
-                        <el-button v-if="isHrAdmin && assignment.status === 'OFFER'" link type="primary" size="small" @click="openOfferDrawer(row, assignment)">Offer</el-button>
-                      </template>
-                    </el-table-column>
-                  </el-table>
+                  <div v-else-if="boardState[row.id]" class="kanban-board">
+                    <div
+                      v-for="col in pipelineColumns"
+                      :key="col.key"
+                      class="kanban-col"
+                      :class="['kanban-col--' + col.key, { 'kanban-col--readonly': col.readonly }]"
+                    >
+                      <div class="kanban-col__header">
+                        <span class="kanban-col__title">{{ col.label }}</span>
+                        <el-tag size="small" round :type="col.readonly ? 'info' : 'primary'" effect="plain">
+                          {{ boardState[row.id][col.key].length }}
+                        </el-tag>
+                      </div>
+                      <VueDraggable
+                        v-model="boardState[row.id][col.key]"
+                        :group="{ name: 'assignment-board', pull: !col.readonly, put: !col.readonly }"
+                        :sort="false"
+                        :animation="150"
+                        handle=".kanban-card__drag"
+                        ghost-class="kanban-card--ghost"
+                        class="kanban-col__body"
+                        :data-status="col.key"
+                        @add="onBoardDrop(row, $event)"
+                      >
+                        <template v-for="assignment in boardState[row.id][col.key]" :key="assignment.id">
+                          <div class="kanban-card" :data-id="assignment.id">
+                            <div class="kanban-card__header">
+                              <div class="flex align-center">
+                                <el-icon v-if="!col.readonly" class="kanban-card__drag"><rank /></el-icon>
+                                <span class="kanban-card__name">{{ assignment.candidate_name || '-' }}</span>
+                              </div>
+                              <el-tag v-if="assignment.is_reapply" size="small" type="warning" effect="plain">重投</el-tag>
+                            </div>
+                            <div class="kanban-card__meta">
+                              <el-tag v-if="assignment.channel" size="small" effect="plain">{{ channelLabels[assignment.channel] || assignment.channel }}</el-tag>
+                              <el-tag v-if="assignment.relation_type" size="small" type="info" effect="plain">{{ relationTypeLabels[assignment.relation_type] || assignment.relation_type }}</el-tag>
+                            </div>
+                            <div class="kanban-card__footer">
+                              <span class="color-secondary ellipsis">{{ assignment.owner_id ? memberName(assignment.owner_id) : '未分配' }}</span>
+                              <div class="flex align-center">
+                                <el-button v-if="isHrOperator" link type="primary" size="small" @click="openInterviewDrawer(row, assignment)">面试</el-button>
+                                <el-button v-if="isHrAdmin && assignment.status === 'OFFER'" link type="primary" size="small" @click="openOfferDrawer(row, assignment)">Offer</el-button>
+                                <el-dropdown
+                                  v-if="isHrOperator"
+                                  trigger="click"
+                                  size="small"
+                                  @click.stop
+                                  @command="(cmd: string) => onCardCommand(cmd, row, assignment)"
+                                >
+                                  <el-button link size="small" @click.stop>更多</el-button>
+                                  <template #dropdown>
+                                    <el-dropdown-menu>
+                                      <el-dropdown-item v-if="isHrAdmin" command="edit">编辑指派</el-dropdown-item>
+                                      <el-dropdown-item
+                                        v-if="PIPELINE_ORDER.includes(assignment.status as any) && assignment.status !== 'HIRED'"
+                                        command="reject"
+                                        divided
+                                      >淘汰</el-dropdown-item>
+                                      <el-dropdown-item
+                                        v-if="PIPELINE_ORDER.includes(assignment.status as any) && assignment.status !== 'HIRED'"
+                                        command="withdraw"
+                                      >候选人退出</el-dropdown-item>
+                                      <el-dropdown-item
+                                        v-if="PIPELINE_ORDER.includes(assignment.status as any) && assignment.status !== 'HIRED'"
+                                        command="close"
+                                      >关闭指派</el-dropdown-item>
+                                      <el-dropdown-item v-if="isHrAdmin && assignment.status === 'REJECTED'" command="restore" divided>恢复待筛选</el-dropdown-item>
+                                    </el-dropdown-menu>
+                                  </template>
+                                </el-dropdown>
+                              </div>
+                            </div>
+                          </div>
+                        </template>
+                      </VueDraggable>
+                    </div>
+                  </div>
                 </el-tab-pane>
                 <el-tab-pane label="匹配候选人" name="matches">
                   <el-empty v-if="matches[row.id]?.records?.length === 0" description="暂无匹配候选人" />
@@ -314,7 +352,7 @@
     <el-dialog v-model="statusDialogVisible" title="状态变更" width="440px">
       <el-form label-width="96px">
         <el-form-item label="候选人"><span>{{ statusDialogAssignment?.candidate_name }}</span></el-form-item>
-        <el-form-item label="目标状态"><span>{{ assignmentStatusOptions[statusDialogTarget] || statusDialogTarget }}</span></el-form-item>
+        <el-form-item label="目标状态"><span>{{ assignmentStatusLabels[statusDialogTarget] || statusDialogTarget }}</span></el-form-item>
         <el-form-item v-if="isRestoreTransition" label="恢复原因" required>
           <el-input v-model="statusDialogNote" placeholder="填写误拒绝恢复原因" />
         </el-form-item>
@@ -330,16 +368,56 @@
       </template>
     </el-dialog>
 
+    <el-dialog v-model="assignmentEditVisible" title="编辑指派" width="480px">
+      <el-form label-width="88px">
+        <el-form-item label="候选人"><span>{{ assignmentEditForm.candidate_name }}</span></el-form-item>
+        <el-form-item label="关系类型">
+          <el-select v-model="assignmentEditForm.relation_type" style="width: 100%">
+            <el-option v-for="(label, value) in relationTypeLabels" :key="value" :label="label" :value="value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="渠道">
+          <el-select v-model="assignmentEditForm.channel" style="width: 100%">
+            <el-option v-for="(label, value) in channelLabels" :key="value" :label="label" :value="value" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="负责人">
+          <el-select v-model="assignmentEditForm.owner_id" clearable filterable placeholder="选择负责人" style="width: 100%">
+            <el-option v-for="member in members" :key="member.id" :label="member.nick_name" :value="member.id" />
+          </el-select>
+        </el-form-item>
+        <el-form-item label="备注"><el-input v-model="assignmentEditForm.note" type="textarea" :rows="3" /></el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="assignmentEditVisible = false">取消</el-button>
+        <el-button type="primary" :loading="saving" @click="saveAssignmentEdit">保存</el-button>
+      </template>
+    </el-dialog>
+
     <AiSettingDialog v-model="aiSettingVisible" />
   </div>
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { VueDraggable } from 'vue-draggable-plus'
 import AppTable from '@/components/app-table/index.vue'
 import AiSettingDialog from '@/views/hr/components/AiSettingDialog.vue'
 import HrApi from '@/api/hr/recruitment'
 import AuthorizationApi from '@/api/system/resource-authorization'
+import {
+  PIPELINE_ORDER,
+  TERMINAL_STATUSES,
+  assignmentStatusLabels,
+  channelLabels,
+  jobCloseReasonLabels,
+  jobStatusLabels,
+  jobStatusTagType,
+  offerStatusLabels,
+  offerStatusTag,
+  relationTypeLabels,
+  terminationReasonLabels,
+} from '@/views/hr/constants'
 import type {
   Assignment,
   AssignmentStatus,
@@ -364,13 +442,6 @@ interface WorkspaceMember {
   roles: string[]
 }
 
-const jobStatusLabels: Record<string, string> = {
-  DRAFT: '草稿',
-  OPEN: '开放',
-  ON_HOLD: '暂停',
-  CLOSED: '已关闭',
-}
-
 const statusOptions = computed(() => {
   if (!editingJob.value) {
     return Object.fromEntries(Object.entries(jobStatusLabels).filter(([value]) => value !== 'CLOSED'))
@@ -378,51 +449,6 @@ const statusOptions = computed(() => {
   if (editingJob.value.status === 'CLOSED') return { CLOSED: jobStatusLabels.CLOSED }
   return jobStatusLabels
 })
-
-const jobCloseReasonLabels: Record<string, string> = {
-  FILLED: '招满',
-  CANCELLED: '取消',
-  DUPLICATE: '重复需求',
-  OTHER: '其他',
-}
-
-const assignmentStatusOptions: Record<string, string> = {
-  PENDING_SCREEN: '待筛选',
-  SCREEN_PASSED: '筛选通过',
-  INTERVIEWING: '面试中',
-  OFFER: 'Offer 中',
-  HIRED: '已入职',
-  REJECTED: '已淘汰',
-  WITHDRAWN: '已退出',
-  CLOSED: '已关闭',
-}
-
-const relationTypeLabels: Record<string, string> = {
-  APPLY: '投递',
-  SEEK: '主动寻访',
-  REFERRAL: '内推',
-  HEADHUNTER: '猎头推荐',
-}
-
-const channelLabels: Record<string, string> = {
-  REFERRAL: '内推',
-  JOB_SITE: '招聘网站',
-  HEADHUNTER: '猎头',
-  CAMPUS: '校园',
-  OTHER: '其他',
-}
-
-const terminationReasonLabels: Record<string, string> = {
-  NOT_FIT: '不合适',
-  SALARY: '薪资不符',
-  UNREACHABLE: '无法联系',
-  CANDIDATE_WITHDRAW: '候选人退出',
-  JOB_CLOSED: '职位关闭',
-  MERGED: '合并',
-  OTHER: '其他',
-}
-
-const TERMINAL_STATUSES = ['REJECTED', 'WITHDRAWN', 'CLOSED']
 
 const loading = ref(false)
 const saving = ref(false)
@@ -432,6 +458,39 @@ const filters = reactive({ name: '', status: '', owner_id: '' })
 const pagination = reactive({ current_page: 1, page_size: 20, total: 0 })
 const jobDetails = reactive<Record<string, JobDetail>>({})
 const matches = reactive<Record<string, JobMatchPage>>({})
+/** 看板列:key 对应后端状态,TERMINAL 收纳全部终态 */
+const pipelineColumns = [
+  { key: 'PENDING_SCREEN', label: '待筛选', readonly: false },
+  { key: 'SCREEN_PASSED', label: '筛选通过', readonly: false },
+  { key: 'INTERVIEWING', label: '面试中', readonly: false },
+  { key: 'OFFER', label: 'Offer 中', readonly: false },
+  { key: 'HIRED', label: '已入职', readonly: true },
+  { key: 'TERMINAL', label: '已结束', readonly: true },
+] as const
+
+type BoardColumnKey = (typeof pipelineColumns)[number]['key']
+
+const boardState = reactive<Record<string, Record<BoardColumnKey, Assignment[]>>>({})
+
+function syncBoard(jobId: string) {
+  const assignments = jobDetails[jobId]?.assignments || []
+  const columns: Record<BoardColumnKey, Assignment[]> = {
+    PENDING_SCREEN: [], SCREEN_PASSED: [], INTERVIEWING: [], OFFER: [], HIRED: [], TERMINAL: [],
+  }
+  for (const assignment of assignments) {
+    const key = (TERMINAL_STATUSES as readonly string[]).includes(assignment.status) ? 'TERMINAL' : assignment.status
+    columns[key as BoardColumnKey].push(assignment)
+  }
+  boardState[jobId] = columns
+}
+
+watch(
+  jobDetails,
+  () => {
+    Object.keys(jobDetails).forEach((jobId) => syncBoard(jobId))
+  },
+  { deep: true },
+)
 const detailLoading = ref('')
 const jobDialogVisible = ref(false)
 const aiSettingVisible = ref(false)
@@ -464,6 +523,16 @@ const statusDialogAssignment = ref<Assignment | null>(null)
 const statusDialogTarget = ref<AssignmentStatus | ''>('')
 const statusDialogReason = ref<TerminationReason | ''>('')
 const statusDialogNote = ref('')
+const assignmentEditVisible = ref(false)
+const assignmentEditJob = ref<Job | null>(null)
+const boardAssignmentId = ref('')
+const assignmentEditForm = reactive({
+  candidate_name: '',
+  relation_type: 'APPLY' as RelationType,
+  channel: 'OTHER' as ResumeChannel,
+  owner_id: null as string | null,
+  note: '',
+})
 const { user } = useStore()
 
 const isRestoreTransition = computed(
@@ -502,9 +571,12 @@ function loadJobs() {
 }
 
 function handleExpand(job: Job, expandedRows: Job[]) {
-  if (expandedRows.some((row) => row.id === job.id) && !jobDetails[job.id]) {
-    loadJobDetail(job)
-    loadMatches(job)
+  if (expandedRows.some((row) => row.id === job.id)) {
+    if (!expandTab[job.id]) expandTab[job.id] = 'assignments'
+    if (!jobDetails[job.id]) {
+      loadJobDetail(job)
+      loadMatches(job)
+    }
   }
 }
 
@@ -525,8 +597,9 @@ function refresh() {
 
 function loadJobDetail(job: Job) {
   detailLoading.value = job.id
-  HrApi.getJob(job.id).then((response) => {
+  return HrApi.getJob(job.id).then((response) => {
     jobDetails[job.id] = response.data
+    return response.data
   }).finally(() => {
     if (detailLoading.value === job.id) detailLoading.value = ''
   })
@@ -619,26 +692,46 @@ function reopenJob(job: Job) {
     .catch(() => {})
 }
 
-function jobStatusTagType(status: string) {
-  if (status === 'OPEN') return 'success'
-  if (status === 'ON_HOLD') return 'warning'
-  if (status === 'CLOSED') return 'info'
-  return 'info'
-}
-
-function onAssignmentStatusChange(assignment: Assignment, target: AssignmentStatus) {
-  if (assignment.status === target) return
-  const terminal = TERMINAL_STATUSES.includes(target)
-  const restore = assignment.status === 'REJECTED' && target === 'PENDING_SCREEN'
-  if (terminal || restore) {
-    statusDialogAssignment.value = assignment
-    statusDialogTarget.value = target
-    statusDialogReason.value = ''
-    statusDialogNote.value = ''
-    statusDialogVisible.value = true
+/** 看板拖拽落点:仅允许沿管道链向前推进,终态/回退由卡片菜单走状态对话框 */
+function onBoardDrop(job: Job, evt: any) {
+  const fromStatus: string = evt.from?.dataset?.status || ''
+  const toStatus: string = evt.to?.dataset?.status || ''
+  const assignmentId: string = evt.item?.dataset?.id || ''
+  if (!assignmentId || fromStatus === toStatus || toStatus === 'TERMINAL' || toStatus === 'HIRED') {
+    loadJobDetail(job)
     return
   }
-  updateAssignmentFields(assignment, { status: target })
+  const fromIdx = PIPELINE_ORDER.indexOf(fromStatus as any)
+  const toIdx = PIPELINE_ORDER.indexOf(toStatus as any)
+  if (fromIdx === -1 || toIdx === -1 || toIdx <= fromIdx) {
+    MsgError('只能按 待筛选 → 筛选通过 → 面试中 → Offer 顺序推进')
+    loadJobDetail(job)
+    return
+  }
+  HrApi.updateAssignment(assignmentId, { status: toStatus as AssignmentStatus })
+    .then(() => {
+      MsgSuccess('状态已更新')
+      // 仅刷新看板数据,不整体刷新表格,避免展开面板收起
+      loadJobDetail(job)
+    })
+    .catch(() => loadJobDetail(job))
+}
+
+/** 卡片菜单命令 */
+function onCardCommand(cmd: string, job: Job, assignment: Assignment) {
+  if (cmd === 'edit') openAssignmentEditDialog(job, assignment)
+  else if (cmd === 'reject') openStatusChangeDialog(assignment, 'REJECTED')
+  else if (cmd === 'withdraw') openStatusChangeDialog(assignment, 'WITHDRAWN')
+  else if (cmd === 'close') openStatusChangeDialog(assignment, 'CLOSED')
+  else if (cmd === 'restore') openStatusChangeDialog(assignment, 'PENDING_SCREEN')
+}
+
+function openStatusChangeDialog(assignment: Assignment, target: AssignmentStatus) {
+  statusDialogAssignment.value = assignment
+  statusDialogTarget.value = target
+  statusDialogReason.value = ''
+  statusDialogNote.value = ''
+  statusDialogVisible.value = true
 }
 
 function confirmStatusChange() {
@@ -676,19 +769,45 @@ function confirmStatusChange() {
     .finally(() => { saving.value = false })
 }
 
-function updateAssignmentFields(assignment: Assignment, data: Partial<Assignment>) {
-  HrApi.updateAssignment(assignment.id, data)
-    .then(() => {
-      MsgSuccess('指派已更新')
-      reloadAssignment(assignment)
-    })
-    .catch(() => {})
-}
-
 function reloadAssignment(assignment: Assignment) {
   const job = jobs.value.find((item) => item.id === assignment.job_id)
-  if (job) loadJobDetail(job)
-  refresh()
+  if (job) {
+    loadJobDetail(job).then((detail) => {
+      // 同步表格行的在途数量,避免整体刷新收起展开面板
+      if (detail) job.active_assignment_count = detail.active_assignment_count
+    })
+  }
+}
+
+function openAssignmentEditDialog(job: Job, assignment: Assignment) {
+  assignmentEditJob.value = job
+  boardAssignmentId.value = assignment.id
+  assignmentEditForm.candidate_name = assignment.candidate_name || ''
+  assignmentEditForm.relation_type = assignment.relation_type || 'APPLY'
+  assignmentEditForm.channel = assignment.channel || 'OTHER'
+  assignmentEditForm.owner_id = assignment.owner_id || null
+  assignmentEditForm.note = assignment.note || ''
+  assignmentEditVisible.value = true
+}
+
+function saveAssignmentEdit() {
+  const assignmentId = boardAssignmentId.value
+  if (!assignmentId) return
+  saving.value = true
+  HrApi.updateAssignment(assignmentId, {
+    relation_type: assignmentEditForm.relation_type,
+    channel: assignmentEditForm.channel,
+    owner_id: assignmentEditForm.owner_id || null,
+    note: assignmentEditForm.note,
+  })
+    .then(() => {
+      assignmentEditVisible.value = false
+      MsgSuccess('指派已更新')
+      if (assignmentEditJob.value) loadJobDetail(assignmentEditJob.value)
+      refresh()
+    })
+    .catch(() => {})
+    .finally(() => { saving.value = false })
 }
 
 function addMatchToJob(job: Job, match: JobMatchCandidate) {
@@ -752,17 +871,6 @@ const offerList = ref<Offer[]>([])
 const offerForm = reactive({ salary_amount: null as number | null, currency: 'CNY', note: '' })
 const approveForm = reactive({ approval_status: '' as string })
 const approveTarget = ref<Offer | null>(null)
-
-const offerStatusLabels: Record<string, string> = {
-  DRAFT: '草稿', SENT: '已发送', ACCEPTED: '已接受', REJECTED: '已拒绝', WITHDRAWN: '已撤回',
-}
-
-function offerStatusTag(status: string) {
-  if (status === 'ACCEPTED') return 'success'
-  if (status === 'REJECTED' || status === 'WITHDRAWN') return 'danger'
-  if (status === 'SENT') return 'warning'
-  return 'info'
-}
 
 function offerTimeText(offer: Offer) {
   const time = offer.accepted_at || offer.rejected_at || offer.withdrawn_at || offer.sent_at || offer.approved_at
@@ -901,4 +1009,105 @@ onMounted(() => {
 .hr-page { min-width: 0; }
 .gap-12 { gap: 12px; }
 .assignment-panel { padding: 12px 32px; }
+
+.kanban-board {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.kanban-col {
+  flex: 1 1 0;
+  min-width: 190px;
+  max-width: 250px;
+  background: var(--el-fill-color-light);
+  border-radius: 8px;
+  padding: 8px;
+  display: flex;
+  flex-direction: column;
+  max-height: 520px;
+
+  &--readonly {
+    background: var(--el-fill-color-lighter);
+  }
+}
+
+.kanban-col__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 6px 10px;
+  font-size: 13px;
+}
+
+.kanban-col__title {
+  font-weight: 600;
+}
+
+.kanban-col__body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  overflow-y: auto;
+  min-height: 48px;
+  flex: 1;
+  padding-bottom: 4px;
+}
+
+.kanban-card {
+  background: var(--el-bg-color);
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 6px;
+  padding: 8px 10px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  transition: border-color 0.15s;
+
+  &:hover {
+    border-color: var(--el-color-primary-light-5);
+  }
+
+  &--ghost {
+    opacity: 0.4;
+  }
+}
+
+.kanban-card__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 6px;
+  gap: 6px;
+}
+
+.kanban-card__name {
+  font-weight: 600;
+  font-size: 13px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kanban-card__drag {
+  cursor: grab;
+  color: var(--el-text-color-placeholder);
+  margin-right: 6px;
+  flex-shrink: 0;
+}
+
+.kanban-card__meta {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.kanban-card__footer {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+}
 </style>

@@ -5,12 +5,14 @@
         <h2>候选人</h2>
         <span class="color-secondary">维护招聘候选人与职位指派</span>
       </div>
-      <el-button v-if="isHrOperator" type="primary" @click="openCandidateDialog()">新建候选人</el-button>
-      <el-button v-if="isHrOperator" type="primary" plain @click="openResumeUpload()">上传简历</el-button>
-      <el-button v-if="isHrAdmin" plain @click="aiSettingVisible = true">AI 设置</el-button>
-      <el-button plain @click="router.push('/hr/search')">语义检索</el-button>
-      <el-button v-if="isHrAdmin" plain :loading="exporting" @click="exportCandidates">导出</el-button>
-      <el-button v-if="isHrAdmin" plain @click="importDialogVisible = true">批量导入</el-button>
+      <div class="flex gap-12">
+        <el-button v-if="isHrOperator" plain @click="openResumeUpload()">上传简历</el-button>
+        <el-button v-if="isHrAdmin" plain @click="aiSettingVisible = true">AI 设置</el-button>
+        <el-button plain @click="router.push('/hr/search')">语义检索</el-button>
+        <el-button v-if="isHrAdmin" plain :loading="exporting" @click="exportCandidates">导出</el-button>
+        <el-button v-if="isHrAdmin" plain @click="importDialogVisible = true">批量导入</el-button>
+        <el-button v-if="isHrOperator" type="primary" @click="openCandidateDialog()">新建候选人</el-button>
+      </div>
       <input ref="resumeInputRef" type="file" multiple accept=".docx,.txt" class="hidden-input" @change="handleResumeFiles" />
     </div>
 
@@ -22,12 +24,7 @@
         <el-input-number v-model="filters.years_min" :min="0" :max="99" placeholder="最低年限" @change="refresh" style="width: 140px" />
         <el-input-number v-model="filters.years_max" :min="0" :max="99" placeholder="最高年限" @change="refresh" style="width: 140px" />
         <el-select v-model="filters.highest_degree" placeholder="学历" clearable @change="refresh" style="width: 120px">
-          <el-option label="博士" value="博士" />
-          <el-option label="硕士" value="硕士" />
-          <el-option label="本科" value="本科" />
-          <el-option label="大专" value="大专" />
-          <el-option label="中专" value="中专" />
-          <el-option label="高中" value="高中" />
+          <el-option v-for="degree in highestDegreeOptions" :key="degree" :label="degree" :value="degree" />
         </el-select>
         <el-select v-model="filters.source" placeholder="来源" clearable @change="refresh" style="width: 140px">
           <el-option v-for="(label, value) in channelLabels" :key="value" :label="label" :value="value" />
@@ -42,7 +39,9 @@
       </div>
 
       <AppTable :data="candidates" :pagination-config="pagination" @change-page="loadCandidates" @size-change="refresh">
-        <el-table-column prop="name" label="姓名" min-width="130" />
+        <el-table-column label="姓名" min-width="130">
+          <template #default="{ row }"><span class="candidate-name">{{ row.name }}</span></template>
+        </el-table-column>
         <el-table-column label="城市" min-width="150">
           <template #default="{ row }">{{ row.current_city || '-' }} <span v-if="row.target_city">→ {{ row.target_city }}</span></template>
         </el-table-column>
@@ -62,16 +61,23 @@
         <el-table-column label="状态" width="100">
           <template #default="{ row }"><el-tag :type="row.status === 'ACTIVE' ? 'success' : 'info'">{{ row.status === 'ACTIVE' ? '在库' : '已归档' }}</el-tag></template>
         </el-table-column>
-        <el-table-column label="操作" width="380" fixed="right">
+        <el-table-column label="操作" width="160" fixed="right">
           <template #default="{ row }">
             <el-button link type="primary" @click="openCandidateDetail(row)">详情</el-button>
-            <el-button v-if="isHrAdmin" link type="primary" @click="openCandidateDialog(row)">编辑</el-button>
-            <el-button v-if="isHrOperator" link type="primary" :disabled="row.status !== 'ACTIVE'" @click="openAssignmentDialog(row)">加入职位</el-button>
-            <el-button v-if="isHrAdmin" link type="danger" :disabled="row.status !== 'ACTIVE'" @click="archive(row)">归档</el-button>
-            <el-button v-if="isHrAdmin && row.status === 'ARCHIVED'" link type="success" @click="restore(row)">恢复</el-button>
-            <el-button v-if="isHrAdmin" link type="danger" @click="removeCandidate(row)">删除</el-button>
-            <el-button link type="primary" @click="openResumeListDialog(row)">简历</el-button>
-            <el-button v-if="isHrAdmin" link type="danger" :disabled="!row.duplicate_ids?.length" @click="openMergeDialog(row)">合并</el-button>
+            <el-dropdown trigger="click" @command="(cmd: string) => handleRowCommand(cmd, row)">
+              <el-button link type="primary">更多<el-icon class="el-icon--right"><arrow-down /></el-icon></el-button>
+              <template #dropdown>
+                <el-dropdown-menu>
+                  <el-dropdown-item v-if="isHrAdmin" command="edit">编辑</el-dropdown-item>
+                  <el-dropdown-item v-if="isHrOperator" command="assign" :disabled="row.status !== 'ACTIVE'">加入职位</el-dropdown-item>
+                  <el-dropdown-item v-if="isHrAdmin" command="archive" :disabled="row.status !== 'ACTIVE'">归档</el-dropdown-item>
+                  <el-dropdown-item v-if="isHrAdmin && row.status === 'ARCHIVED'" command="restore">恢复</el-dropdown-item>
+                  <el-dropdown-item command="resumes">简历</el-dropdown-item>
+                  <el-dropdown-item v-if="isHrAdmin" command="merge" :disabled="!row.duplicate_ids?.length">合并</el-dropdown-item>
+                  <el-dropdown-item v-if="isHrAdmin" command="remove" divided>删除</el-dropdown-item>
+                </el-dropdown-menu>
+              </template>
+            </el-dropdown>
           </template>
         </el-table-column>
       </AppTable>
@@ -355,51 +361,21 @@ import type { UploadFile } from 'element-plus'
 import type { Candidate, CandidateDetail, ConsentStatus, ContactPreference, ImportReport, Job, RelationType, ResumeChannel, ResumeFile, ResumeFlowLog, ResumeUploadResult } from '@/api/type/hr'
 import useStore from '@/stores'
 import { MsgConfirm, MsgError, MsgSuccess } from '@/utils/message'
+import {
+  assignmentStatusLabels,
+  assignmentTagType,
+  channelLabels,
+  consentStatusLabels,
+  contactPreferenceLabels,
+  flowLogNodeLabels,
+  highestDegreeOptions,
+  relationTypeLabels,
+} from '@/views/hr/constants'
 
 interface WorkspaceMember {
   id: string
   nick_name: string
   roles: string[]
-}
-
-const channelLabels: Record<string, string> = {
-  REFERRAL: '内推',
-  JOB_SITE: '招聘网站',
-  HEADHUNTER: '猎头',
-  CAMPUS: '校园',
-  OTHER: '其他',
-}
-
-const consentStatusLabels: Record<string, string> = {
-  UNKNOWN: '未知',
-  NOTIFIED: '已告知',
-  CONSENTED: '已同意',
-  NOT_REQUIRED: '无需同意',
-}
-
-const contactPreferenceLabels: Record<string, string> = {
-  EMAIL: '邮箱',
-  PHONE: '电话',
-  NO_CONTACT: '不联系',
-  UNSPECIFIED: '未指定',
-}
-
-const relationTypeLabels: Record<string, string> = {
-  APPLY: '投递',
-  SEEK: '主动寻访',
-  REFERRAL: '内推',
-  HEADHUNTER: '猎头推荐',
-}
-
-const assignmentStatusLabels: Record<string, string> = {
-  PENDING_SCREEN: '待筛选',
-  SCREEN_PASSED: '筛选通过',
-  INTERVIEWING: '面试中',
-  OFFER: 'Offer 中',
-  HIRED: '已入职',
-  REJECTED: '已淘汰',
-  WITHDRAWN: '已退出',
-  CLOSED: '已关闭',
 }
 
 const loading = ref(false)
@@ -496,10 +472,14 @@ function openCandidateDetail(candidate: Candidate) {
   })
 }
 
-function assignmentTagType(status: string) {
-  if (status === 'HIRED') return 'success'
-  if (status === 'REJECTED' || status === 'WITHDRAWN' || status === 'CLOSED') return 'info'
-  return 'primary'
+function handleRowCommand(command: string, row: Candidate) {
+  if (command === 'edit') openCandidateDialog(row)
+  else if (command === 'assign') openAssignmentDialog(row)
+  else if (command === 'archive') archive(row)
+  else if (command === 'restore') restore(row)
+  else if (command === 'remove') removeCandidate(row)
+  else if (command === 'resumes') openResumeListDialog(row)
+  else if (command === 'merge') openMergeDialog(row)
 }
 
 function loadCandidates() {
@@ -739,14 +719,6 @@ const resumeContent = ref('')
 const flowLogVisible = ref(false)
 const flowLogLoading = ref(false)
 const flowLogs = ref<ResumeFlowLog[]>([])
-const flowLogNodeLabels: Record<string, string> = {
-  UPLOAD: '上传',
-  EXTRACT: '提取',
-  SANITIZE: '清洗',
-  SPLIT: '切片',
-  DOCUMENT: '建索引',
-  LIFECYCLE: '生命周期',
-}
 const mergingCandidate = ref<Candidate | null>(null)
 const mergeDialogVisible = ref(false)
 const mergeTargetId = ref('')
@@ -866,6 +838,7 @@ onUnmounted(stopResumePolling)
 
 <style scoped>
 .hr-page { min-width: 0; }
+.candidate-name { font-weight: 600; }
 .gap-12 { gap: 12px; }
 .hidden-input { display: none; }
 .upload-result { padding: 6px 0; }
