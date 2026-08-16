@@ -153,7 +153,8 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
   - 已知限制同步：phone/email 语义查找因掩码设计性不可行（v1 不做，产品确认点）；查询理解为规则版（LLM 版并入 P3 合并调用）；城市槽子串匹配可能误中（评测暴露后收紧）。
   - **真实模型评测（2026-08-16，项目方授权）：T1 切片复测 30/30 保真无回归（覆盖指标修复后 29/30）；T2 重建 30/30（title-chunks 全生效）；检索 λ 消融：λ=0.15 全面劣于 λ=0（dense 0.75→0.67）→ λ 默认置 0；λ=0 下 RRF+rerank recall@5=0.92/recall@3=0.83 持平审计基线；T7 表空误杀缺陷被评测暴露并修复（Skill-AND 0.25→0.75）。完整输出 installer/eval_v2_report.txt**
 - ✅ **内核 P1 修复（2026-08-16，3 提交，基线 392/392）**：K1 Fork 抓取 SSRF 加固（8638956：超时 5s/20s + 私网/云元数据黑名单含重定向跳转，阻断内网探测；4 新测试）；K2 Web 同步网络抓取移出事务（6fc68c5：慢站点不再长占 DB 连接/锁，成功/失败路径行为保持，3 新测试）；K3 聊天异常文本不回传用户（99292fa：异常细节仅入日志，回答与 chat_record 为通用文案，1 新测试）。
-- ✅ **内核 P2 修复（2026-08-16，2 提交，基线 401/401）**：P2-4/5/6 解析边界加固（29222d2：PIL 像素上限 50MP 防解压炸弹 OOM；zip 总量 200MB/单文件 50MB 上限 + 失败文件记日志不再静默；split_model 切点字符表半角修正与 4096 死代码清理，与设计 §6.1 对齐）；P2-7/8 任务与索引健壮性（bbaa1c6：embedding 派发失败记日志；索引 DDL IF NOT EXISTS/IF EXISTS 防并发竞态）。P2-9（简历库管理员旁路）为产品决策项未动；P3 未立项。
+- ✅ **内核 P2 修复（2026-08-16，2 提交，基线 401/401）**：P2-4/5/6 解析边界加固（29222d2：PIL 像素上限 50MP 防解压炸弹 OOM；zip 总量 200MB/单文件 50MB 上限 + 失败文件记日志不再静默；split_model 切点字符表半角修正与 4096 死代码清理，与设计 §6.1 对齐）；P2-7/8 任务与索引健壮性（bbaa1c6：embedding 派发失败记日志；索引 DDL IF NOT EXISTS/IF EXISTS 防并发竞态）。P2-9（简历库管理员旁路）为产品决策项未动。
+- ✅ **内核 P3 低风险项（2026-08-16，基线 403/403）**：P3-10 双轨 normalize 一致（chat 查询先 normalize，与 hit_test 对齐）+ P3-12 _batch_save Termbase 预取一次消除 N+1（822330b）。评测脚本升级：typed 锚点程序化生成（lookup/conditional，--typed N）+ 分类型 recall@5/MRR（0963d04）；生产落地脚本 installer/production_landing.sh（迁移/回填/词条/重嵌一键，0963d04）。P3-11 blend 尺度、P3-13 截断语义、P3-15 ruff chore 未立项。
 
 另：人工反馈、更大标注集量化对比、档位 3（200 份）仍后置。docx 格式变体评测集（plans 1.3）并入阶段 3 检索评测。**注意**：冒烟中修复了应用创建/发布链路的 3 个裁剪期 bug（96afbd0），application.tests 现有 10 用例。
 
