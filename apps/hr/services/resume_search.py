@@ -10,9 +10,10 @@
           设计见 docs/superpowers/specs/2026-08-15-hr-resume-search-design.md。
 """
 import math
+import re
 import time
 
-from django.db.models import QuerySet
+from django.db.models import F, Q, QuerySet
 from knowledge.models import Document, Embedding, SearchMode
 from knowledge.serializers.common import get_embedding_model_by_knowledge_id, list_paragraph
 from knowledge.vector.pg_vector import EmbeddingSearch, KeywordsSearch
@@ -22,6 +23,7 @@ from common.exception.app_exception import AppApiException
 from hr.models import Candidate, CandidateStatus, ResumeFile
 from hr.services.ai_parser import parse_search_skills
 from hr.services.audit import write_audit_log
+from hr.services.query_understand import degree_words, extract_slots, norm_city
 from hr.services.resume_index import get_resume_knowledge
 
 _RRF_K = 60
@@ -30,6 +32,10 @@ _DEFAULT_SIMILARITY = 0.2
 _MAX_QUERY_LENGTH = 2000
 # 证据合成（T3，仅模式 A）：score = max(段分) + λ·log2(1 + 命中段数)。置 0 即回退旧行为（0.7*max+0.3*avg）。
 _EVIDENCE_LAMBDA = 0.15
+# 结构化预筛上限（T4）：预筛文档集超过该值则放弃预筛转全量语义（避免误伤大库）
+_PREFILTER_MAX = 2000
+# 姓名快速通道（T4）：纯 2-4 字中文查询走 name__icontains 并置顶
+_NAME_RE = re.compile(r"^[\u4e00-\u9fa5]{2,4}$")
 
 _MODE_CHOICES = {"auto", "hybrid", "dense", "phrase", "skills"}
 
@@ -57,6 +63,7 @@ def _mask_for_role(candidate, hr_role):
         "name": candidate.name,
         "highest_degree": candidate.highest_degree,
         "years_experience": candidate.years_experience,
+        "years_unknown": candidate.years_experience is None,
         "skills": candidate.skills,
         "status": candidate.status,
         "phone": candidate.phone,
@@ -91,9 +98,9 @@ def _sparse_query(query, max_terms=4):
     return " ".join(terms[:max_terms])
 
 
-def _recall_dual(query, knowledge, embedding_model, candidate_k, similarity, use_sparse=True):
+def _recall_dual(query, knowledge, embedding_model, candidate_k, similarity, use_sparse=True, document_ids=None):
     """一次 embed，双路独立召回。返回 {dense: [...], sparse: [...], query_embedding, sparse_failed}。
-    结果项: {paragraph_id, similarity}"""
+    结果项: {paragraph_id, similarity}。document_ids（T4）：结构化预筛后的文档集，限定召回范围。"""
     try:
         embedding_query = embedding_model.embed_query(query)
     except Exception:
@@ -102,6 +109,8 @@ def _recall_dual(query, knowledge, embedding_model, candidate_k, similarity, use
     exclude_ids = _exclude_documents(knowledge.id)
     exclude_dict = {"document_id__in": exclude_ids} if exclude_ids else {}
     query_set = QuerySet(Embedding).filter(knowledge_id=knowledge.id, is_active=True).exclude(**exclude_dict)
+    if document_ids:
+        query_set = query_set.filter(document_id__in=document_ids)
 
     dense_results = EmbeddingSearch().handle(
         query_set, query, embedding_query, candidate_k, similarity, SearchMode.embedding, [knowledge.id]
@@ -313,6 +322,21 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
     meta = {"mode": mode, "search_type": "", "skills": [], "recall": {}, "rerank": {},
             "aggregation": {}, "elapsed_ms": {}, "query": {"length": len(query), "truncated": False}}
 
+    # ---------- 查询理解 v1（T4）：规则槽位（年限/学历/城市 + 语义词） ----------
+    city_list = list(
+        QuerySet(Candidate)
+        .filter(workspace_id=workspace_id, status=CandidateStatus.ACTIVE)
+        .exclude(current_city="")
+        .values_list("current_city", flat=True)
+        .distinct()
+    )
+    slots = extract_slots(query, city_list=city_list)
+    meta["slots"] = {"years_min": slots["years_min"], "degree_level": slots["degree_level"],
+                     "cities": slots["cities"]}
+    meta["prefilter"] = {"applied": False, "candidate_count": 0, "resume_count": 0,
+                         "skipped": False, "empty": False}
+    prefilter_ids = None
+
     # ---------- 查询理解：技能分解（模式 B 判定） ----------
     skills = []
     if mode in ("auto", "skills"):
@@ -334,6 +358,45 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
         # 显式 skills 模式但技能解析失败/不足（LLM 未配置/异常）：退化整句检索，meta 如实反映
         mode = "phrase"
         meta["mode"] = "phrase"
+
+    # ---------- 结构化预筛（T4，仅整句/混合模式；G1：精确条件由 SQL 保证） ----------
+    hard = slots["years_min"] is not None or slots["degree_level"] is not None or bool(slots["cities"])
+    if mode in ("phrase", "hybrid") and hard:
+        q = Q()
+        if slots["years_min"] is not None:
+            # 年限未知（NULL）纳入但排序靠后（years_unknown 标记），不静默消失（R2）
+            q &= Q(years_experience__gte=slots["years_min"]) | Q(years_experience__isnull=True)
+        if slots["degree_level"] is not None:
+            q &= Q(highest_degree__in=degree_words(slots["degree_level"]))
+        for city in slots["cities"]:
+            q &= Q(current_city=city) | Q(current_city=norm_city(city)) | Q(current_city=norm_city(city) + "市")
+        candidate_ids = list(
+            QuerySet(Candidate)
+            .filter(workspace_id=workspace_id, status=CandidateStatus.ACTIVE)
+            .filter(q)
+            .values_list("id", flat=True)
+        )
+        meta["prefilter"]["candidate_count"] = len(candidate_ids)
+        doc_ids = []
+        if candidate_ids:
+            doc_ids = list(
+                QuerySet(ResumeFile)
+                .filter(candidate_id__in=candidate_ids, document_id__isnull=False)
+                .values_list("document_id", flat=True)
+            )
+        meta["prefilter"]["resume_count"] = len(doc_ids)
+        if not doc_ids:
+            # 无满足条件的候选人：明确返回空，不做语义兜底误导（设计 §3.5）
+            meta["prefilter"]["empty"] = True
+            meta["search_type"] = "prefilter_empty"
+            meta["elapsed_ms"]["total"] = int((time.time() - t0) * 1000)
+            _write_search_audit(workspace_id, user_id, query, top_k, meta, 0)
+            return {"items": [], "meta": meta}
+        if len(doc_ids) > _PREFILTER_MAX:
+            meta["prefilter"]["skipped"] = True
+        else:
+            meta["prefilter"]["applied"] = True
+            prefilter_ids = doc_ids
 
     # ---------- 模式 B：Skill-AND ----------
     if mode == "skills" and len(skills) >= 2:
@@ -409,13 +472,75 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
         _write_search_audit(workspace_id, user_id, query, top_k, meta, len(items))
         return {"items": items, "meta": meta}
 
-    # ---------- 模式 A：整句 ----------
+    # ---------- 模式 A：整句（T4：结构化预筛限定召回集） ----------
     use_sparse = mode in ("auto", "hybrid", "phrase")
-    recall = _recall_dual(query, knowledge, embedding_model, recall_k, similarity, use_sparse=use_sparse)
+    # 姓名快速通道（T4）：纯 2-4 字中文查询并跑 name__icontains，结果置顶
+    name_hits = []
+    if _NAME_RE.match(query):
+        name_candidates = list(
+            QuerySet(Candidate)
+            .filter(workspace_id=workspace_id, status=CandidateStatus.ACTIVE, name__icontains=query)
+            .select_related()
+        )
+        if name_candidates:
+            name_resumes = list(
+                QuerySet(ResumeFile)
+                .filter(candidate__in=name_candidates, document_id__isnull=False)
+                .select_related("candidate")
+            )
+            for rf in name_resumes:
+                name_hits.append({
+                    "candidate": _mask_for_role(rf.candidate, hr_role),
+                    "resume": {"id": str(rf.id), "file_name": rf.file_name, "extension": rf.extension},
+                    "score": {"name_match": True},
+                    "paragraphs": [],
+                    "document_id": str(rf.document_id),
+                })
+    if prefilter_ids is not None and not slots["semantic_query"]:
+        # 纯条件查询（无语义词）：跳过语义召回，纯结构化检索（R2；杜绝 embed_query("")）
+        structured_resumes = list(
+            QuerySet(ResumeFile)
+            .filter(document_id__in=prefilter_ids)
+            .select_related("candidate")
+            .order_by(F("candidate__years_experience").desc(nulls_last=True), "-update_time")
+        )
+        items = []
+        seen = set()
+        for rf in structured_resumes:
+            if str(rf.document_id) in seen:
+                continue
+            seen.add(str(rf.document_id))
+            items.append({
+                "rank": len(items) + 1,
+                "candidate": _mask_for_role(rf.candidate, hr_role),
+                "resume": {"id": str(rf.id), "file_name": rf.file_name, "extension": rf.extension},
+                "score": {"structured": True},
+                "paragraphs": [],
+                "document_id": str(rf.document_id),
+            })
+            if len(items) >= top_k:
+                break
+        items = name_hits + items[: max(0, top_k - len(name_hits))]
+        meta["search_type"] = "structured_only"
+        meta["name_matched"] = len(name_hits)
+        meta["aggregation"] = {"grouped_resumes": len(items)}
+        meta["elapsed_ms"]["total"] = int((time.time() - t0) * 1000)
+        _write_search_audit(workspace_id, user_id, query, top_k, meta, len(items))
+        return {"items": items, "meta": meta}
+    recall = _recall_dual(slots["semantic_query"] or query, knowledge, embedding_model, recall_k, similarity,
+                          use_sparse=use_sparse, document_ids=prefilter_ids)
     fused = _rrf_fuse(recall["dense"], recall["sparse"])
     meta["recall"] = {"dense": len(recall["dense"]), "sparse": len(recall["sparse"]), "fused": len(fused),
                       "candidate_k": recall_k, "sparse_failed": recall.get("sparse_failed", False)}
     if not fused:
+        if name_hits:
+            # 语义空但姓名命中（T4）：按姓名返回，避免"搜不到人"
+            items = [dict(h, rank=i + 1) for i, h in enumerate(name_hits[:top_k])]
+            meta["search_type"] = "name_match"
+            meta["name_matched"] = len(items)
+            meta["elapsed_ms"]["total"] = int((time.time() - t0) * 1000)
+            _write_search_audit(workspace_id, user_id, query, top_k, meta, len(items))
+            return {"items": items, "meta": meta}
         meta["search_type"] = "empty"
         meta["elapsed_ms"]["total"] = int((time.time() - t0) * 1000)
         _write_search_audit(workspace_id, user_id, query, top_k, meta, 0)
@@ -469,6 +594,12 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
             ],
             "document_id": a["document_id"],
         })
+    if name_hits:
+        # 姓名命中置顶（去重：已出现的候选人不再重复）
+        seen_candidates = {item["candidate"]["id"] for item in items if item["candidate"]}
+        prepend = [h for h in name_hits if h["candidate"] and h["candidate"]["id"] not in seen_candidates]
+        items = prepend + items[: max(0, top_k - len(prepend))]
+        meta["name_matched"] = len(prepend)
     meta["elapsed_ms"]["total"] = int((time.time() - t0) * 1000)
     _write_search_audit(workspace_id, user_id, query, top_k, meta, len(items))
     return {"items": items, "meta": meta}

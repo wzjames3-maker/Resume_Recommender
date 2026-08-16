@@ -3299,6 +3299,37 @@ class ResumeSplitterTests(SimpleTestCase):
 
 
 
+class QueryUnderstandTests(SimpleTestCase):
+    """T4：规则槽位抽取（年限/学历/城市/语义词）。"""
+
+    def test_extract_slots_years(self):
+        from hr.services.query_understand import extract_slots
+
+        slots = extract_slots("5年以上 Java")
+        self.assertEqual(slots["years_min"], 5)
+        self.assertEqual(slots["semantic_query"], "Java")
+        slots = extract_slots("3年Java后端")
+        self.assertEqual(slots["years_min"], 3)
+        self.assertEqual(slots["semantic_query"], "Java后端")
+        # 年份语境不得误抽（2023年）
+        slots = extract_slots("2023年毕业 Java")
+        self.assertIsNone(slots["years_min"])
+        self.assertEqual(slots["semantic_query"], "2023年毕业 Java")
+
+    def test_extract_slots_degree_and_city(self):
+        from hr.services.query_understand import extract_slots
+
+        slots = extract_slots("本科 北京 后端", city_list=["北京市", "上海"])
+        self.assertEqual(slots["degree_level"], 2)
+        self.assertEqual(slots["cities"], ["北京市"])
+        self.assertEqual(slots["semantic_query"], "后端")
+        slots = extract_slots("10年以上 硕士 深圳", city_list=["深圳"])
+        self.assertEqual(slots["years_min"], 10)
+        self.assertEqual(slots["degree_level"], 3)
+        self.assertEqual(slots["cities"], ["深圳"])
+        self.assertEqual(slots["semantic_query"], "")
+
+
 class ResumeIndexTests(TestCase):
     """C 阶段打通：简历知识库 + 入库索引 + 生命周期同步"""
 
@@ -3832,6 +3863,103 @@ class ResumeSearchTests(TestCase):
         with patch("hr.services.resume_search._EVIDENCE_LAMBDA", 0):
             results0 = _aggregate(paras, hr_role="ADMIN")
         self.assertEqual([r["document_id"] for r in results0], [str(doc_a.id), str(doc_b.id)])
+
+    def _extra_candidate(self, name, years, city="", degree="", skills=None):
+        """T4 辅助：额外候选人 + 简历文档（带段落/向量）。"""
+        candidate = Candidate.objects.create(
+            workspace_id=self.workspace_id, user_id=self.user.id, name=name,
+            years_experience=years, current_city=city, highest_degree=degree,
+            skills=skills or [],
+        )
+        document = Document.objects.create(
+            id=uuid.uuid7(), knowledge_id=self.knowledge.id, name=name + ".docx",
+            char_length=10, user_id=self.user.id,
+        )
+        resume = ResumeFile.objects.create(
+            workspace_id=self.workspace_id, file_name=name + ".docx", extension="docx",
+            file_path="/tmp/" + name + ".docx", file_size=1, sha256="sha-" + uuid.uuid7().hex,
+            source_channel="OTHER", status=ResumeStatus.SUCCESS, user_id=self.user.id,
+            candidate=candidate, document_id=document.id,
+        )
+        return candidate, document, resume
+
+    def test_prefilter_years_filters_recall(self):
+        """T4：年限槽预筛——不满足年限的候选人不出现在召回集（SQL 精确保证 G1）。"""
+        from hr.services.resume_search import search_resumes
+
+        self.candidate.years_experience = 2
+        self.candidate.save(update_fields=["years_experience"])
+        _, doc2, _ = self._extra_candidate("乙", 8)
+        para2 = Paragraph.objects.create(
+            id=uuid.uuid7(), document_id=doc2.id, knowledge_id=self.knowledge.id,
+            content="熟悉 Java 微服务", title="工作经历", status="SUCCESS",
+        )
+        with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()),                 patch("hr.services.resume_search.EmbeddingSearch") as m_emb,                 patch("hr.services.resume_search.KeywordsSearch") as m_key:
+            m_emb.return_value.handle.return_value = [{"paragraph_id": str(para2.id), "similarity": 0.9}]
+            m_key.return_value.handle.return_value = []
+            result = search_resumes(self.workspace_id, "6年以上 Java", mode="phrase",
+                                    hr_role="ADMIN", user_id=self.user.id)
+        meta = result["meta"]
+        self.assertTrue(meta["prefilter"]["applied"])
+        self.assertEqual(meta["prefilter"]["candidate_count"], 1)  # 乙（8 年）；甲（2 年）被排除
+        self.assertEqual(len(result["items"]), 1)
+        self.assertEqual(result["items"][0]["candidate"]["name"], "乙")
+
+    def test_prefilter_empty_returns_empty(self):
+        """T4：无满足条件候选人 → prefilter_empty，不做语义兜底误导。"""
+        from hr.services.resume_search import search_resumes
+
+        self.candidate.years_experience = 2
+        self.candidate.save(update_fields=["years_experience"])
+        self._extra_candidate("乙", 8)
+        with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()):
+            result = search_resumes(self.workspace_id, "10年以上 Java", mode="phrase",
+                                    hr_role="ADMIN", user_id=self.user.id)
+        self.assertEqual(result["meta"]["search_type"], "prefilter_empty")
+        self.assertEqual(result["items"], [])
+
+    def test_structured_only_pure_condition(self):
+        """T4：纯条件查询（无语义词）→ 纯结构化检索，不调语义召回。"""
+        from hr.services.resume_search import search_resumes
+
+        self.candidate.years_experience = 2
+        self.candidate.save(update_fields=["years_experience"])
+        _, doc2, _ = self._extra_candidate("乙", 8)
+        with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()),                 patch("hr.services.resume_search.EmbeddingSearch") as m_emb,                 patch("hr.services.resume_search.KeywordsSearch") as m_key:
+            result = search_resumes(self.workspace_id, "5年以上", mode="phrase",
+                                    hr_role="ADMIN", user_id=self.user.id)
+        self.assertEqual(result["meta"]["search_type"], "structured_only")
+        m_emb.return_value.handle.assert_not_called()
+        self.assertEqual(len(result["items"]), 1)
+        self.assertEqual(result["items"][0]["candidate"]["name"], "乙")
+
+    def test_prefilter_null_years_included(self):
+        """T4（R2）：年限未知（NULL）纳入预筛并标记 years_unknown，不静默消失。"""
+        from hr.services.resume_search import search_resumes
+
+        self.candidate.years_experience = None
+        self.candidate.save(update_fields=["years_experience"])
+        self._extra_candidate("乙", 8)
+        with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()):
+            result = search_resumes(self.workspace_id, "5年以上", mode="phrase",
+                                    hr_role="ADMIN", user_id=self.user.id)
+        items = result["items"]
+        names = [i["candidate"]["name"] for i in items]
+        self.assertIn("李冠光", names)  # NULL 年限未被排除
+        self.assertTrue(any(i["candidate"]["years_unknown"] for i in items))
+
+    def test_name_fast_path(self):
+        """T4：纯中文姓名查询 → name__icontains 命中置顶（无语义命中时也可返回）。"""
+        from hr.services.resume_search import search_resumes
+
+        _, doc3, _ = self._extra_candidate("李冠光", 5)  # 同名的另一候选人（无段落 → 无语义命中）
+        with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()),                 patch("hr.services.resume_search.EmbeddingSearch") as m_emb,                 patch("hr.services.resume_search.KeywordsSearch") as m_key:
+            m_emb.return_value.handle.return_value = []
+            m_key.return_value.handle.return_value = []
+            result = search_resumes(self.workspace_id, "李冠光", mode="phrase",
+                                    hr_role="ADMIN", user_id=self.user.id)
+        self.assertGreaterEqual(len(result["items"]), 1)
+        self.assertTrue(result["items"][0]["score"].get("name_match"))
 
     def test_empty_result(self):
         from hr.services.resume_search import search_resumes
