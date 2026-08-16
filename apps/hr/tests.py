@@ -4108,6 +4108,48 @@ class ResumeSearchTests(TestCase):
         self.assertNotEqual(result["meta"]["search_type"], "prefilter_empty")
         self.assertGreaterEqual(len(result["items"]), 1)
 
+    def test_prefilter_skipped_over_threshold(self):
+        """F7：预筛文档集超过 _PREFILTER_MAX → 放弃预筛转全量语义（meta.prefilter_skipped，不误伤大库）。"""
+        from hr.services.resume_search import search_resumes
+        paragraph = self._paragraph("Java 后端")
+        self._embedding(paragraph)
+        self._extra_candidate("年限甲", 6, skills=["java"])
+        self._extra_candidate("年限乙", 7, skills=["java"])
+        with patch("hr.services.resume_search._PREFILTER_MAX", 1), \
+                patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()), \
+                patch("hr.services.resume_search.EmbeddingSearch") as m_emb, \
+                patch("hr.services.resume_search.KeywordsSearch") as m_key:
+            m_emb.return_value.handle.return_value = [{"paragraph_id": str(paragraph.id), "similarity": 0.9}]
+            m_key.return_value.handle.return_value = []
+            result = search_resumes(self.workspace_id, "6年以上 java", mode="auto",
+                                    hr_role="ADMIN", user_id=self.user.id)
+        self.assertTrue(result["meta"]["prefilter"]["skipped"])
+        self.assertFalse(result["meta"]["prefilter"]["applied"])
+        self.assertNotEqual(result["meta"]["search_type"], "prefilter_empty")  # 转全量语义而非空
+
+    def test_prefilter_city_normalization(self):
+        """F7：城市双向归一——存「北京市」查「北京」命中、存「北京」查「北京市」命中。"""
+        from hr.services.resume_search import search_resumes
+        _, doc_beijing, _ = self._extra_candidate("北京人", 6, city="北京市")
+        self._extra_candidate("上海人", 8, city="上海市")
+        with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()), \
+                patch("hr.services.resume_search.EmbeddingSearch") as m_emb, \
+                patch("hr.services.resume_search.KeywordsSearch") as m_key:
+            m_emb.return_value.handle.return_value = []
+            m_key.return_value.handle.return_value = []
+            r1 = search_resumes(self.workspace_id, "北京 6年以上", mode="auto", hr_role="ADMIN", user_id=self.user.id)
+        names1 = [it["candidate"]["name"] for it in r1["items"] if it["candidate"]]
+        self.assertIn("北京人", names1)
+        self.assertNotIn("上海人", names1)
+        with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()), \
+                patch("hr.services.resume_search.EmbeddingSearch") as m_emb, \
+                patch("hr.services.resume_search.KeywordsSearch") as m_key:
+            m_emb.return_value.handle.return_value = []
+            m_key.return_value.handle.return_value = []
+            r2 = search_resumes(self.workspace_id, "北京市 6年以上", mode="auto", hr_role="ADMIN", user_id=self.user.id)
+        names2 = [it["candidate"]["name"] for it in r2["items"] if it["candidate"]]
+        self.assertIn("北京人", names2)
+
     def test_name_fast_path(self):
         """T4：纯中文姓名查询 → name__icontains 命中置顶（无语义命中时也可返回）。"""
         from hr.services.resume_search import search_resumes

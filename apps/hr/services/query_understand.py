@@ -44,13 +44,14 @@ def extract_slots(query, city_list=None):
         if word in semantic:
             degree_level = _DEGREE_LEVELS[word]
             semantic = semantic.replace(word, " ")
-            break
     cities = []
-    for city in city_list or []:
+    for city in sorted(city_list or [], key=len, reverse=True):
         norm = norm_city(city)
         if norm and norm in semantic:
             cities.append(city)
-            semantic = semantic.replace(norm, " ").replace(city, " ")
+            # F7 修复：先替换完整城市串再替换归一形（长度降序处理），
+            # 避免「北京市」先被 norm「北京」替换残留「市」字污染语义词
+            semantic = semantic.replace(city, " ").replace(norm, " ")
     semantic = re.sub(r"\s+", " ", semantic).strip()
     return {
         "years_min": years_min,
