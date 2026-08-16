@@ -594,7 +594,6 @@ class DocumentSerializers(serializers.Serializer):
             if first.type != KnowledgeType.WEB:
                 raise AppApiException(500, _("Synchronization is only supported for web site types"))
 
-        @transaction.atomic
         def sync(self, with_valid=True, with_embedding=True):
             if with_valid:
                 self.is_valid(raise_exception=True)
@@ -614,56 +613,58 @@ class DocumentSerializers(serializers.Serializer):
                     if "selector" in document.meta and document.meta.get("selector") is not None
                     else []
                 )
+                # 网络抓取在事务外执行（内核审查 P1-2）：慢站点不得长占数据库连接/锁
                 result = Fork(source_url, selector_list).fork()
-                if result.status == 200:
-                    # 删除段落
-                    QuerySet(model=Paragraph).filter(document_id=document_id).delete()
-                    # 删除问题
-                    QuerySet(model=ProblemParagraphMapping).filter(document_id=document_id).delete()
-                    delete_problems_and_mappings([document_id])
-                    # 删除向量库
-                    delete_embedding_by_document(document_id)
-                    paragraphs = get_split_model("web.md").parse(result.content)
-                    char_length = reduce(lambda x, y: x + y, [len(p.get("content")) for p in paragraphs], 0)
-                    QuerySet(Document).filter(id=document_id).update(char_length=char_length)
-                    document_paragraph_model = DocumentSerializers.Create.get_paragraph_model(document, paragraphs)
+                with transaction.atomic():
+                    if result.status == 200:
+                        # 删除段落
+                        QuerySet(model=Paragraph).filter(document_id=document_id).delete()
+                        # 删除问题
+                        QuerySet(model=ProblemParagraphMapping).filter(document_id=document_id).delete()
+                        delete_problems_and_mappings([document_id])
+                        # 删除向量库
+                        delete_embedding_by_document(document_id)
+                        paragraphs = get_split_model("web.md").parse(result.content)
+                        char_length = reduce(lambda x, y: x + y, [len(p.get("content")) for p in paragraphs], 0)
+                        QuerySet(Document).filter(id=document_id).update(char_length=char_length)
+                        document_paragraph_model = DocumentSerializers.Create.get_paragraph_model(document, paragraphs)
 
-                    paragraph_model_list = document_paragraph_model.get("paragraph_model_list")
-                    problem_paragraph_object_list = document_paragraph_model.get("problem_paragraph_object_list")
-                    problem_model_list, problem_paragraph_mapping_list = ProblemParagraphManage(
-                        problem_paragraph_object_list, document.knowledge_id
-                    ).to_problem_model_list()
-                    # 批量插入段落
-                    if len(paragraph_model_list) > 0:
-                        max_position = (
-                            Paragraph.objects.filter(document_id=document_id).aggregate(max_position=Max("position"))[
-                                "max_position"
-                            ]
-                            or 0
-                        )
-                        for i, paragraph in enumerate(paragraph_model_list):
-                            paragraph.position = max_position + i + 1
-                        QuerySet(Paragraph).bulk_create(paragraph_model_list)
-                    # 批量插入问题
-                    QuerySet(Problem).bulk_create(problem_model_list) if len(problem_model_list) > 0 else None
-                    # 插入关联问题
-                    QuerySet(ProblemParagraphMapping).bulk_create(problem_paragraph_mapping_list) if len(
-                        problem_paragraph_mapping_list
-                    ) > 0 else None
-                    # 向量化
-                    if with_embedding:
-                        embedding_model_id = get_embedding_model_id_by_knowledge_id(document.knowledge_id)
-                        ListenerManagement.update_status(
-                            QuerySet(Document).filter(id=document_id), TaskType.EMBEDDING, State.PENDING
-                        )
-                        ListenerManagement.update_status(
-                            QuerySet(Paragraph).filter(document_id=document_id), TaskType.EMBEDDING, State.PENDING
-                        )
-                        ListenerManagement.get_aggregation_document_status(document_id)()
-                        embedding_by_document.delay(document_id, embedding_model_id)
+                        paragraph_model_list = document_paragraph_model.get("paragraph_model_list")
+                        problem_paragraph_object_list = document_paragraph_model.get("problem_paragraph_object_list")
+                        problem_model_list, problem_paragraph_mapping_list = ProblemParagraphManage(
+                            problem_paragraph_object_list, document.knowledge_id
+                        ).to_problem_model_list()
+                        # 批量插入段落
+                        if len(paragraph_model_list) > 0:
+                            max_position = (
+                                Paragraph.objects.filter(document_id=document_id).aggregate(max_position=Max("position"))[
+                                    "max_position"
+                                ]
+                                or 0
+                            )
+                            for i, paragraph in enumerate(paragraph_model_list):
+                                paragraph.position = max_position + i + 1
+                            QuerySet(Paragraph).bulk_create(paragraph_model_list)
+                        # 批量插入问题
+                        QuerySet(Problem).bulk_create(problem_model_list) if len(problem_model_list) > 0 else None
+                        # 插入关联问题
+                        QuerySet(ProblemParagraphMapping).bulk_create(problem_paragraph_mapping_list) if len(
+                            problem_paragraph_mapping_list
+                        ) > 0 else None
+                        # 向量化
+                        if with_embedding:
+                            embedding_model_id = get_embedding_model_id_by_knowledge_id(document.knowledge_id)
+                            ListenerManagement.update_status(
+                                QuerySet(Document).filter(id=document_id), TaskType.EMBEDDING, State.PENDING
+                            )
+                            ListenerManagement.update_status(
+                                QuerySet(Paragraph).filter(document_id=document_id), TaskType.EMBEDDING, State.PENDING
+                            )
+                            ListenerManagement.get_aggregation_document_status(document_id)()
+                            embedding_by_document.delay(document_id, embedding_model_id)
 
-                else:
-                    state = State.FAILURE
+                    else:
+                            state = State.FAILURE
             except Exception as e:
                 maxkb_logger.error(f"{str(e)}:{traceback.format_exc()}")
                 state = State.FAILURE
