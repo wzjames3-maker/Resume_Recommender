@@ -1,7 +1,6 @@
 # RAG v2 完成结果审查修复计划
 
-> 状态：**实施完成（F2/F1/F4-F7/F3 已提交 7c11df7..ffcbd75，2026-08-16）；评测脚本 F8 与清理 F9 待项目方确认后执行**；10 项问题已全部代码级确认；待审批后执行
-> 状态：方案（10 项问题已全部代码级确认；待审批后执行）
+> 状态：**实施完成（F2/F1/F4-F7/F3 提交 7c11df7..ffcbd75；F8/F9 提交 3211036/2cee880）；复审修复（P2-A/B/C + P3-1~5）已提交，实测基线 414/414，评测脚本假 key 端到端跑通无崩溃**
 > 依据：v2 完成结果审查（本会话逐项锚点复核）+ `installer/eval_v2_report.txt` 逐格比对 + git 考古（对照 `be6e659` 实施前基线）
 > 基线（本次实测，非采信声明）：HANDOFF §1.1 命令口径 393/393 PASS；`common.tests` 10/10 PASS（合计 403）；`ruff check apps/hr` 干净；`makemigrations --check` 无漂移
 > 纪律：每任务独立提交（中文 Conventional Commits）；不运行真实模型脚本（SENSENOVA/SILICONFLOW key 步骤一律项目方执行）；不 DROP DATABASE test_maxkb；--keepdb
