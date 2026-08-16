@@ -16,6 +16,15 @@
       </div>
     </div>
 
+    <el-alert
+      v-if="candidate && complianceMissing(candidate).length"
+      type="warning"
+      :closable="false"
+      class="mb-16"
+      :title="`合规信息待补：${complianceMissing(candidate).join('、')}`"
+      description="请在编辑候选人时补充完整，处理真实 PII 前应满足 PRD 合规要求。"
+    />
+
     <el-card v-if="candidate" class="mb-16" style="--el-card-padding: 0">
       <template #header><span>基本信息</span></template>
       <el-descriptions :column="2" border class="p-16">
@@ -118,6 +127,7 @@ import {
   contactPreferenceLabels,
   formatDateTime,
   formatFileSize,
+  getComplianceMissing,
   relationTypeLabels,
 } from '@/views/hr/constants'
 import useStore from '@/stores'
@@ -140,6 +150,10 @@ const resumeContent = ref('')
 function ownerName(_ownerId: string | null) {
   // 当前详情页不单独加载成员列表；如需展示负责人可后续接入成员接口
   return _ownerId || '-'
+}
+
+function complianceMissing(candidate: CandidateDetail) {
+  return getComplianceMissing(candidate)
 }
 
 function loadDetail() {

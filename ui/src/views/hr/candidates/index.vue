@@ -39,8 +39,15 @@
       </div>
 
       <AppTable :data="candidates" :pagination-config="pagination" @change-page="loadCandidates" @size-change="refresh">
-        <el-table-column label="姓名" min-width="130">
-          <template #default="{ row }"><span class="candidate-name">{{ row.name }}</span></template>
+        <el-table-column label="姓名" min-width="170">
+          <template #default="{ row }">
+            <div class="flex align-center gap-4">
+              <span class="candidate-name">{{ row.name }}</span>
+              <el-tooltip v-if="complianceMissing(row).length" :content="`合规信息缺失：${complianceMissing(row).join('、')}`" placement="top">
+                <el-tag type="warning" size="small" effect="plain">合规待补</el-tag>
+              </el-tooltip>
+            </div>
+          </template>
         </el-table-column>
         <el-table-column label="城市" min-width="150">
           <template #default="{ row }">{{ row.current_city || '-' }} <span v-if="row.target_city">→ {{ row.target_city }}</span></template>
@@ -368,6 +375,7 @@ import {
   consentStatusLabels,
   contactPreferenceLabels,
   flowLogNodeLabels,
+  getComplianceMissing,
   highestDegreeOptions,
   relationTypeLabels,
 } from '@/views/hr/constants'
@@ -423,6 +431,10 @@ const candidateForm = reactive({
 function memberName(memberId: string | null) {
   if (!memberId) return ''
   return members.value.find((member) => member.id === memberId)?.nick_name || ''
+}
+
+function complianceMissing(candidate: Candidate) {
+  return getComplianceMissing(candidate)
 }
 
 function loadMembers() {
@@ -853,6 +865,9 @@ onUnmounted(stopResumePolling)
 .hr-page { min-width: 0; }
 .candidate-name { font-weight: 600; }
 .gap-12 { gap: 12px; }
+.gap-4 { gap: 4px; }
+.align-center { align-items: center; }
+.flex { display: flex; }
 .hidden-input { display: none; }
 .upload-result { padding: 6px 0; }
 .resume-content {

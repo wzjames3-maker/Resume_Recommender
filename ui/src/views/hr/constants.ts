@@ -26,6 +26,24 @@ export const contactPreferenceLabels: Record<string, string> = {
 
 export const highestDegreeOptions = ['博士', '硕士', '本科', '大专', '中专', '高中']
 
+/** 返回候选人合规信息缺失项；空数组表示已完善 */
+export function getComplianceMissing(candidate: {
+  phone?: string | null
+  email?: string | null
+  collected_at?: string | null
+  consent_status?: string
+  consent_version?: string
+  contact_preference?: string
+}): string[] {
+  const missing: string[] = []
+  if (!candidate.phone && !candidate.email) missing.push('联系方式')
+  if (!candidate.collected_at) missing.push('收集日期')
+  if (!candidate.consent_status || candidate.consent_status === 'UNKNOWN') missing.push('告知状态')
+  if (!candidate.consent_version) missing.push('告知版本')
+  if (!candidate.contact_preference || candidate.contact_preference === 'UNSPECIFIED') missing.push('联系偏好')
+  return missing
+}
+
 // ---------- 职位 ----------
 export const jobStatusLabels: Record<string, string> = {
   DRAFT: '草稿',
