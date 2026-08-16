@@ -17,6 +17,55 @@ from models_provider.models import Model
 from users.models import User
 
 
+class EmbeddingDispatchLogTests(TestCase):
+    """P2-7：embedding_by_knowledge 派发失败不再静默——记录失败文档（此前 except: pass 无迹可查）。"""
+
+    def setUp(self):
+        KnowledgeFolder.objects.get_or_create(id="default", defaults={"name": "default", "workspace_id": "default"})
+        self.model = Model.objects.create(
+            id=uuid.uuid7(), name="bge-test", status="SUCCESS", model_type="EMBEDDING",
+            model_name="BAAI/bge-large-zh-v1.5", provider="model_openai_provider",
+            credential="{}", meta={}, workspace_id="default",
+        )
+        self.knowledge = Knowledge.objects.create(
+            id=uuid.uuid7(), name="k-emb", workspace_id="default", embedding_model_id=self.model.id,
+            user_id=self.user.id if hasattr(self, "user") else None, type=KnowledgeType.BASE.value,
+            scope=KnowledgeScope.WORKSPACE.value, folder_id="default",
+        )
+        self.document = Document.objects.create(
+            id=uuid.uuid7(), knowledge_id=self.knowledge.id, name="d.txt",
+            char_length=1, user_id=None,
+        )
+
+    def test_dispatch_failure_logged(self):
+        from knowledge.task import embedding as emb_task
+
+        with patch("knowledge.task.embedding.embedding_by_document.delay", side_effect=Exception("broker down")), \
+                patch("knowledge.task.embedding.maxkb_logger.error") as m_err:
+            emb_task.embedding_by_knowledge(str(self.knowledge.id), str(self.model.id))
+        self.assertTrue(m_err.called)
+        self.assertIn(str(self.document.id), str(m_err.call_args))
+
+
+class CreateKnowledgeIndexTests(TestCase):
+    """P2-8：索引 DDL 幂等（IF NOT EXISTS / IF EXISTS），防并发向量化收尾竞态。"""
+
+    def test_create_index_uses_if_not_exists(self):
+        from knowledge.serializers.common import create_knowledge_index
+
+        with patch("knowledge.serializers.common.sql_execute", side_effect=[[], [{"dims": 1024}]]), \
+                patch("knowledge.serializers.common.update_execute") as m_upd:
+            create_knowledge_index(knowledge_id=uuid.uuid7())
+        self.assertIn("CREATE INDEX IF NOT EXISTS", m_upd.call_args[0][0])
+
+    def test_drop_index_uses_if_exists(self):
+        from knowledge.serializers.common import drop_knowledge_index
+
+        with patch("knowledge.serializers.common.sql_execute", return_value=[{"indexname": "x"}]), \
+                patch("knowledge.serializers.common.update_execute") as m_upd:
+            drop_knowledge_index(knowledge_id=uuid.uuid7())
+        self.assertIn("DROP INDEX IF EXISTS", m_upd.call_args[0][0])
+
 class DocumentSyncTransactionTests(TestCase):
     """K2：Sync.sync 网络抓取移出事务——成功/失败路径行为保持（结构重排回归）。"""
 

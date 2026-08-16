@@ -264,7 +264,8 @@ def create_knowledge_index(knowledge_id=None, document_id=None):
         dims = result[0]['dims']
         # 超过2000维度不创建索引，pgvector hnsw索引不支持超过2000维度
         if dims < 2000:
-            sql = f"""CREATE INDEX "embedding_hnsw_idx_{k_id}" ON embedding USING hnsw ((embedding::vector({dims})) vector_cosine_ops) WHERE knowledge_id = '{k_id}'"""
+            # 内核审查 P2-8：IF NOT EXISTS 防并发竞态（多文档同时向量化收尾时重复 CREATE INDEX 会报错）
+            sql = f"""CREATE INDEX IF NOT EXISTS "embedding_hnsw_idx_{k_id}" ON embedding USING hnsw ((embedding::vector({dims})) vector_cosine_ops) WHERE knowledge_id = '{k_id}'"""
             update_execute(sql, [])
             maxkb_logger.info(f'Created index for knowledge ID: {k_id}')
 
@@ -282,7 +283,8 @@ def drop_knowledge_index(knowledge_id=None, document_id=None):
     sql = f"SELECT indexname, indexdef FROM pg_indexes WHERE tablename = 'embedding' AND indexname = 'embedding_hnsw_idx_{k_id}'"
     index = sql_execute(sql, [])
     if index:
-        sql = f'DROP INDEX "embedding_hnsw_idx_{k_id}"'
+        # 内核审查 P2-8：IF EXISTS 幂等（并发 drop 不报错）
+        sql = f'DROP INDEX IF EXISTS "embedding_hnsw_idx_{k_id}"'
         update_execute(sql, [])
         maxkb_logger.info(f'Dropped index for knowledge ID: {k_id}')
 

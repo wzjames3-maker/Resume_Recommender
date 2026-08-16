@@ -126,7 +126,12 @@ def embedding_by_knowledge(knowledge_id, model_id):
             try:
                 embedding_by_document.delay(document.id, model_id)
             except Exception as e:
-                pass
+                # 内核审查 P2-7：不再静默吞掉——记录失败文档与原因（此前 broker 故障时部分文档永不向量化且无迹可查）
+                maxkb_logger.error(
+                    _("Failed to dispatch embedding task for document {document_id}: {error}").format(
+                        document_id=document.id, error=str(e)
+                    )
+                )
     except Exception as e:
         maxkb_logger.error(
             _("Vectorized knowledge: {knowledge_id} error {error} {traceback}").format(
