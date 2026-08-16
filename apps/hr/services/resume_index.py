@@ -7,13 +7,16 @@
           设计见 docs/superpowers/specs/2026-08-15-end-to-end-pipeline-combined-design.md；
           链路见 docs/superpowers/specs/2026-08-15-resume-upload-split-embed-flow.md §8。
 """
+import uuid_utils.compat as uuid
+from celery_once import AlreadyQueued
+from django.db import transaction
 from django.db.models import QuerySet
 
+from common.chunk import text_to_chunk
 from common.exception.app_exception import AppApiException
 from knowledge.models import Document, Embedding, Knowledge, KnowledgeFolder, KnowledgeScope, KnowledgeType, Paragraph
-from knowledge.serializers.document import DocumentSerializers
 from knowledge.serializers.knowledge import KnowledgeSerializer
-from knowledge.task.embedding import delete_embedding_by_document
+from knowledge.task.embedding import delete_embedding_by_document, embedding_by_document
 from models_provider.models import Model
 
 from hr.services.flow_log import log_flow
@@ -89,18 +92,52 @@ def index_resume(workspace_id, user_id, resume, text, chat_fn, stats=None):
             raise ValueError(f"切片内容仍包含未掩码的 PII（{chunk['title']}），拒绝入库")
     if resume.document_id:
         _delete_document(str(resume.document_id))
-    serializer = DocumentSerializers.Create(data={"knowledge_id": str(knowledge.id), "user_id": str(user_id)})
-    saved = serializer.save(
-        {
-            "name": resume.file_name,
-            "paragraphs": [{"title": chunk["title"], "content": chunk["content"]} for chunk in chunks],
-        },
-        with_valid=True,
-    )
-    # save 经 @post 装饰器返回文档详情 dict（内部已触发 refresh → embedding_by_document.delay）
-    document_id = saved.get("id") if isinstance(saved, dict) else str(saved)
+    # T2：HR 自建 Document/Paragraph（chunks 携带 "{title}\n" 前缀参与向量化/分词，
+    # content 保持原文——保真/展示/证据回溯不受影响）。默认 status 即 PENDING，
+    # embedding 任务 state_list 含 PENDING，delay 后可直接拾取，无需复刻 refresh() 状态置位。
+    document_id = _create_document_with_chunks(knowledge, user_id, resume.file_name, chunks)
     resume.document_id = document_id
     resume.save(update_fields=["document_id", "update_time"])
+    try:
+        embedding_by_document.delay(document_id, str(knowledge.embedding_model_id))
+    except AlreadyQueued:
+        raise AppApiException(500, "向量化任务已在执行中，请勿重复提交")
+    return str(document_id)
+
+
+def _create_document_with_chunks(knowledge, user_id, file_name, chunks):
+    """自建 Document/Paragraph（原子）：chunks = ["{title}\n{chunk}" ...]（title 入向量）；
+    content 字段保持原文。字段构造对照 kernel paragraph.py:419-426 与 document.py:1085-1097。"""
+    document_id = uuid.uuid7()
+    contents = [chunk["content"] for chunk in chunks]
+    with transaction.atomic():
+        document = Document(
+            id=document_id,
+            knowledge_id=knowledge.id,
+            name=file_name,
+            char_length=sum(len(c) for c in contents),
+            meta={"allow_download": True},
+            type=KnowledgeType.BASE.value,
+            user_id=user_id,
+        )
+        document.save()
+        paragraph_list = [
+            Paragraph(
+                id=uuid.uuid7(),
+                document_id=document_id,
+                knowledge_id=knowledge.id,
+                content=chunk["content"],
+                title=chunk["title"],
+                chunks=[
+                    f"{chunk['title']}\n{c}" if chunk["title"] else c
+                    for c in text_to_chunk(chunk["content"])
+                ],
+                position=index + 1,
+            )
+            for index, chunk in enumerate(chunks)
+        ]
+        if paragraph_list:
+            QuerySet(Paragraph).bulk_create(paragraph_list)
     return str(document_id)
 
 

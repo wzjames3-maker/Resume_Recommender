@@ -3342,9 +3342,9 @@ class ResumeIndexTests(TestCase):
         self.assertEqual(str(k1.embedding_model_id), str(self.model.id))
         self.assertEqual(k1.workspace_id, self.workspace_id)
 
-    @patch("knowledge.serializers.document.DocumentSerializers.Operate.refresh")
+    @patch("hr.services.resume_index.embedding_by_document.delay")
     @patch("knowledge.serializers.knowledge.embedding_by_knowledge.delay")
-    def test_index_resume_creates_document_and_paragraphs(self, mock_delay, mock_refresh):
+    def test_index_resume_creates_document_and_paragraphs(self, mock_k_delay, mock_embed_delay):
         resume = self._resume()
         text = "姓名：李冠光\n\n【教育经历】\n- 院校：北京师范大学 | 学位：硕士"
         doc_id = index_resume(self.workspace_id, self.user_id, resume, text, self._stub_chat())
@@ -3355,9 +3355,9 @@ class ResumeIndexTests(TestCase):
         self.assertEqual(document.name, "r.txt")
         self.assertEqual(document.knowledge_id, get_or_create_resume_knowledge(self.workspace_id, self.user_id).id)
         self.assertEqual(Paragraph.objects.filter(document_id=doc_id).count(), 2)
-        mock_refresh.assert_called()  # 向量化被触发
+        mock_embed_delay.assert_called()  # 向量化被触发
 
-    @patch("knowledge.serializers.document.DocumentSerializers.Operate.refresh")
+    @patch("hr.services.resume_index.embedding_by_document.delay")
     def test_index_resume_replaces_old_document(self, mock_refresh):
         resume = self._resume()
         text = "姓名：李冠光\n\n【教育经历】\n- 院校：北京师范大学 | 学位：硕士"
@@ -3367,7 +3367,7 @@ class ResumeIndexTests(TestCase):
         self.assertFalse(Document.objects.filter(id=doc_id_1).exists())
         self.assertTrue(Document.objects.filter(id=doc_id_2).exists())
 
-    @patch("knowledge.serializers.document.DocumentSerializers.Operate.refresh")
+    @patch("hr.services.resume_index.embedding_by_document.delay")
     def test_delete_resume_index_removes_document(self, mock_refresh):
         resume = self._resume()
         text = "姓名：李冠光\n\n【教育经历】\n- 院校：北京师范大学 | 学位：硕士"
@@ -3377,7 +3377,7 @@ class ResumeIndexTests(TestCase):
         resume.refresh_from_db()
         self.assertIsNone(resume.document_id)
 
-    @patch("knowledge.serializers.document.DocumentSerializers.Operate.refresh")
+    @patch("hr.services.resume_index.embedding_by_document.delay")
     def test_set_resume_index_active_toggles_document(self, mock_refresh):
         resume = self._resume()
         text = "姓名：李冠光\n\n【教育经历】\n- 院校：北京师范大学 | 学位：硕士"
@@ -3408,6 +3408,27 @@ class ResumeIndexTests(TestCase):
         from hr.services.resume_splitter import scan_residual_pii
         self.assertTrue(any("[已脱敏]" in p.content for p in paragraphs))
         self.assertTrue(all(not scan_residual_pii(p.content) for p in paragraphs))
+
+    @patch("hr.services.resume_index.embedding_by_document.delay")
+    def test_index_resume_chunks_carry_title_prefix(self, mock_embed_delay):
+        """T2：chunks 携带 title 前缀（参与向量化/分词），content 保持原文（保真/展示不变）。"""
+        resume = self._resume()
+        text = "姓名：李冠光\n\n【教育经历】\n- 院校：北京师范大学 | 学位：硕士"
+        doc_id = index_resume(self.workspace_id, self.user_id, resume, text, self._stub_chat())
+        paragraphs = list(Paragraph.objects.filter(document_id=doc_id).order_by("position"))
+        self.assertEqual(len(paragraphs), 2)
+        # content 保持原文（保真协议：不被 title 污染）
+        self.assertEqual([p.content for p in paragraphs],
+                         ["姓名：李冠光", "【教育经历】\n- 院校：北京师范大学 | 学位：硕士"])
+        for p in paragraphs:
+            # chunks 携带 title 前缀（title 非空时），原文首行保留在 chunks 内
+            if p.title:
+                self.assertTrue(p.chunks[0].startswith(p.title + "\n"))
+            self.assertIn(p.content.split("\n")[0], "\n".join(p.chunks))
+        # 教育经历段：title 前缀 + 原文内容都在 chunks 里
+        edu = next(p for p in paragraphs if p.title and "教育经历" in p.title)
+        self.assertTrue(edu.chunks[0].startswith(edu.title))
+        self.assertIn("北京师范大学", "\n".join(edu.chunks))
 
 
 class ResumeParserDocxTableTests(TestCase):
