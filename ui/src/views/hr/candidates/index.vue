@@ -835,6 +835,9 @@ function openCandidateFromQuery() {
       openCandidateDialog(response.data)
     }).catch(() => {})
   }
+  if (route.query.new === '1') {
+    openCandidateDialog()
+  }
 }
 
 onMounted(() => {
@@ -853,6 +856,9 @@ watch(() => route.query.edit_candidate, (editCandidateId) => {
       openCandidateDialog(response.data)
     }).catch(() => {})
   }
+})
+watch(() => route.query.new, (isNew) => {
+  if (isNew === '1') openCandidateDialog()
 })
 watch(uploadDialogVisible, (visible) => {
   if (!visible) stopResumePolling()

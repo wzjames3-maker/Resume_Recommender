@@ -11,9 +11,15 @@ const hrRouter = {
     group: 'workspace',
     order: 5,
   },
-  redirect: '/hr/candidates',
+  redirect: '/hr/dashboard',
   component: () => import('@/layout/layout-template/SimpleLayout.vue'),
   children: [
+    {
+      path: '/hr/dashboard',
+      name: 'hr-dashboard',
+      meta: { title: '工作台', activeMenu: '/hr', sameRoute: 'hr' },
+      component: () => import('@/views/hr/dashboard/index.vue'),
+    },
     {
       path: '/hr/candidates',
       name: 'hr-candidates',
