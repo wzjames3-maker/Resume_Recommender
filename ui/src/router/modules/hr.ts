@@ -39,6 +39,12 @@ const hrRouter = {
       component: () => import('@/views/hr/jobs/index.vue'),
     },
     {
+      path: '/hr/offers',
+      name: 'hr-offers',
+      meta: { title: 'Offer 管理', activeMenu: '/hr', sameRoute: 'hr', permission: [HrRoleConst.ADMIN] },
+      component: () => import('@/views/hr/offers/index.vue'),
+    },
+    {
       path: '/hr/search',
       name: 'hr-search',
       meta: { title: '简历检索', activeMenu: '/hr', sameRoute: 'hr' },

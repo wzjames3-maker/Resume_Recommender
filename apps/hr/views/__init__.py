@@ -21,6 +21,7 @@ from .ai import HrAIConfigAPI, HrResumeSearchAPI, HrSearchParseAPI, HrSkillExtra
 from .access import HrAccessAPI, HrAccessMeAPI, HrAuditLogAPI
 from .import_views import CandidateImportAPI, CandidateImportTemplateAPI
 from .offer_views import (
+    AllOffersAPI,
     HandoffConfigAPI,
     HandoffListAPI,
     HandoffRetryAPI,
@@ -53,6 +54,7 @@ __all__ = [
     "HrAccessAPI",
     "HrAccessMeAPI",
     "HrAuditLogAPI",
+    "AllOffersAPI",
     "HandoffConfigAPI",
     "HandoffListAPI",
     "HandoffRetryAPI",

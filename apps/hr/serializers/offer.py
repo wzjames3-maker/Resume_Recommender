@@ -262,6 +262,27 @@ class OfferService:
         ).order_by("-version")
         return [self._offer_output(offer) for offer in offers]
 
+    def page_offers(self, current_page, page_size, params=None):
+        """分页返回当前工作区全部 Offer（供独立 Offer 管理页使用）。"""
+        params = params or {}
+        queryset = Offer.objects.filter(workspace_id=self.workspace_id).select_related(
+            "candidate", "job", "assignment"
+        ).order_by("-update_time")
+        status = params.get("status")
+        if status:
+            queryset = queryset.filter(status=status)
+        total = queryset.count()
+        start = (current_page - 1) * page_size
+        offers = queryset[start:start + page_size]
+        records = []
+        for offer in offers:
+            item = self._offer_output(offer)
+            item["candidate_name"] = offer.candidate.name
+            item["job_name"] = offer.job.name
+            item["assignment_status"] = offer.assignment.status
+            records.append(item)
+        return {"total": total, "records": records}
+
     def get_offer(self, offer_id):
         return self._offer_output(self._offer(offer_id))
 

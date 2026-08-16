@@ -132,6 +132,9 @@ const submitInterviewFeedback = (interviewId: string, data: Record<string, unkno
 const getOffers = (assignmentId: string) =>
   get(`${prefix.value}/assignments/${assignmentId}/offers`) as Promise<Result<Offer[]>>
 
+const getAllOffers = (page: pageRequest, params?: Record<string, unknown>) =>
+  get(`${prefix.value}/offers/page/${page.current_page}/${page.page_size}`, params) as Promise<Result<PageResult<Offer>>>
+
 const createOffer = (assignmentId: string, data: Partial<Offer>) =>
   post(`${prefix.value}/assignments/${assignmentId}/offers`, data) as Promise<Result<Offer>>
 
@@ -267,6 +270,7 @@ export default {
   getMyHrRole,
   getMyInterviews,
   getOffer,
+  getAllOffers,
   getOffers,
   getResumeBatchStatus,
   getResumeContent,

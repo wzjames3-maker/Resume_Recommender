@@ -121,6 +121,9 @@ export interface Offer {
   attachment_name: string
   create_time: string
   update_time: string
+  candidate_name?: string
+  job_name?: string
+  assignment_status?: AssignmentStatus
 }
 
 export interface ImportRecord {

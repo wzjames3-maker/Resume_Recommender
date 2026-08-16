@@ -2780,6 +2780,15 @@ class OfferServiceTests(TestCase):
         self.assertEqual(offer["currency"], "USD")
         self.assertEqual(offer["note"], "含期权")
 
+    def test_page_offers_returns_all_workspace_offers(self):
+        self._to_offer()
+        self.service.create_offer(self.assignment_id, {"salary_amount": "25000"})
+        page = self.service.page_offers(1, 10)
+        self.assertEqual(page["total"], 1)
+        self.assertEqual(page["records"][0]["candidate_name"], "Alice")
+        self.assertEqual(page["records"][0]["job_name"], "Engineer")
+        self.assertEqual(page["records"][0]["assignment_status"], "OFFER")
+
     def test_update_offer_only_in_draft(self):
         offer_id = self._sent_offer()
         with self.assertRaisesRegex(AppApiException, "draft offer"):

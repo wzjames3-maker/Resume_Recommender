@@ -26,6 +26,7 @@ urlpatterns = [
     path("workspace/<str:workspace_id>/hr/assignments/<str:assignment_id>", views.AssignmentAPI.as_view()),
     path("workspace/<str:workspace_id>/hr/assignments/<str:assignment_id>/interviews", views.InterviewAPI.as_view()),
     path("workspace/<str:workspace_id>/hr/assignments/<str:assignment_id>/offers", views.OfferListAPI.as_view()),
+    path("workspace/<str:workspace_id>/hr/offers/page/<int:current_page>/<int:page_size>", views.AllOffersAPI.as_view()),
     path("workspace/<str:workspace_id>/hr/offers/<str:offer_id>", views.OfferDetailAPI.as_view()),
     path("workspace/<str:workspace_id>/hr/offers/<str:offer_id>/approve", views.OfferDetailAPI.Approve.as_view()),
     path("workspace/<str:workspace_id>/hr/offers/<str:offer_id>/send", views.OfferDetailAPI.Send.as_view()),

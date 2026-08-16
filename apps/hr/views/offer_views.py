@@ -48,6 +48,15 @@ class OfferListAPI(APIView):
         return result.success(_offer_service(request, workspace_id).create_offer(assignment_id, request.data))
 
 
+class AllOffersAPI(APIView):
+    authentication_classes = [TokenAuth]
+
+    @hr_access_required
+    def get(self, request, workspace_id, current_page, page_size):
+        params = {key: request.query_params.get(key) for key in ("status",) if request.query_params.get(key)}
+        return result.success(_offer_service(request, workspace_id).page_offers(current_page, page_size, params))
+
+
 class OfferDetailAPI(APIView):
     authentication_classes = [TokenAuth]
 
