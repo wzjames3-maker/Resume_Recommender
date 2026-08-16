@@ -101,6 +101,7 @@ def _mask_for_role(candidate, hr_role):
         "status": candidate.status,
         "phone": candidate.phone,
         "email": candidate.email,
+        "current_city": candidate.current_city,  # A2 复审：评测核对与前端展示用（城市非 PII）
     }
     if hr_role == "VIEWER":
         out["phone"] = _mask_phone(candidate.phone)

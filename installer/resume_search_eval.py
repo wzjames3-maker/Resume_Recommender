@@ -61,6 +61,7 @@ def build_typed_anchors(count: int = 10):
     from django.db.models import QuerySet
 
     from hr.models import Candidate, ResumeFile
+    from hr.services.query_understand import _DEGREE_LEVELS
 
     anchors = []
     candidates = list(QuerySet(Candidate).filter(workspace_id=WORKSPACE, status="ACTIVE"))
@@ -78,7 +79,8 @@ def build_typed_anchors(count: int = 10):
         if cand.years_experience:
             anchors.append({"q": f"{cand.years_experience}年以上", "targets": [target], "type": "conditional",
                             "structured": {**base, "years": cand.years_experience}})
-        if cand.highest_degree:
+        # A2 复审：仅词表内学历生成 degree 锚点（高中/中专等 extract_slots 无法结构化，查询不可靠）
+        if cand.highest_degree and cand.highest_degree in _DEGREE_LEVELS:
             anchors.append({"q": cand.highest_degree, "targets": [target], "type": "conditional",
                             "structured": {**base, "degree": cand.highest_degree}})
         if cand.current_city:
