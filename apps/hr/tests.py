@@ -3176,8 +3176,8 @@ class ResumeSplitterTests(SimpleTestCase):
         self.assertEqual(len(result), 2)
         joined = "\n".join(row["content"] for row in result)
         # 非空行数与原文一致（掩码不改变行结构）
-        self.assertEqual(len([l for l in joined.split("\n") if l.strip()]),
-                         len([l for l in text.split("\n") if l.strip()]))
+        self.assertEqual(len([ln for ln in joined.split("\n") if ln.strip()]),
+                         len([ln for ln in text.split("\n") if ln.strip()]))
         self.assertIn("[已脱敏]", result[0]["content"])
         self.assertNotIn("13812345678", joined)
         self.assertNotIn("a@b.com", joined)
@@ -3328,6 +3328,40 @@ class QueryUnderstandTests(SimpleTestCase):
         self.assertEqual(slots["degree_level"], 3)
         self.assertEqual(slots["cities"], ["深圳"])
         self.assertEqual(slots["semantic_query"], "")
+
+
+class SkillNormalizeTests(SimpleTestCase):
+    """T5：技能词归一。"""
+
+    def test_normalize_variants(self):
+        from hr.services.skill_normalize import normalize_skill
+
+        self.assertEqual(normalize_skill("Java"), "java")
+        self.assertEqual(normalize_skill("JAVA"), "java")
+        self.assertEqual(normalize_skill("Java8"), "java")
+        self.assertEqual(normalize_skill("K8s"), "kubernetes")
+        self.assertEqual(normalize_skill("Spring Boot"), "springboot")
+        self.assertEqual(normalize_skill("  Docker "), "docker")
+        self.assertEqual(normalize_skill("未知技能"), "未知技能")
+        self.assertEqual(normalize_skill(""), "")
+
+
+class CandidateSkillBackfillTests(TestCase):
+    """T5：回填命令幂等。"""
+
+    def test_backfill_and_idempotent(self):
+        from django.core.management import call_command
+
+        from hr.models import Candidate, CandidateSkill
+
+        candidate = Candidate.objects.create(workspace_id="ws-backfill", name="甲", skills=["Java", "K8s", "  Docker "])
+        call_command("backfill_candidate_skills", "--workspace", "ws-backfill", verbosity=0)
+        norms = sorted(
+            CandidateSkill.objects.filter(candidate=candidate).values_list("skill_norm", flat=True)
+        )
+        self.assertEqual(norms, ["docker", "java", "kubernetes"])
+        call_command("backfill_candidate_skills", "--workspace", "ws-backfill", verbosity=0)
+        self.assertEqual(CandidateSkill.objects.filter(candidate=candidate).count(), 3)  # 幂等
 
 
 class ResumeIndexTests(TestCase):
@@ -3925,7 +3959,7 @@ class ResumeSearchTests(TestCase):
         self.candidate.years_experience = 2
         self.candidate.save(update_fields=["years_experience"])
         _, doc2, _ = self._extra_candidate("乙", 8)
-        with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()),                 patch("hr.services.resume_search.EmbeddingSearch") as m_emb,                 patch("hr.services.resume_search.KeywordsSearch") as m_key:
+        with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()),                 patch("hr.services.resume_search.EmbeddingSearch") as m_emb,                 patch("hr.services.resume_search.KeywordsSearch") as _m_key:
             result = search_resumes(self.workspace_id, "5年以上", mode="phrase",
                                     hr_role="ADMIN", user_id=self.user.id)
         self.assertEqual(result["meta"]["search_type"], "structured_only")
@@ -4119,6 +4153,25 @@ class ResumeSearchTests(TestCase):
         for row in rows:
             hit_skills = row.get("hit_skills", [])
             self.assertEqual(len(hit_skills), len(set(hit_skills)), f"hit_skills 重复: {hit_skills}")
+
+    def test_skill_and_structured_via_table(self):
+        """T5：candidate_skill 归一表驱动结构化路——变体查询（k8s）命中归一词（kubernetes），无语义命中也可入选。"""
+        from hr.models import CandidateSkill
+        from hr.services.resume_search import _search_skill_and
+
+        cand2, doc2, _ = self._extra_candidate("乙", 5, skills=["kubernetes"])
+        CandidateSkill.objects.create(candidate=cand2, skill_norm="kubernetes", skill_raw="kubernetes")
+        with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()), \
+                patch("hr.services.resume_search.EmbeddingSearch") as m_emb, \
+                patch("hr.services.resume_search.KeywordsSearch") as m_key:
+            m_emb.return_value.handle.return_value = []  # 无语义命中
+            m_key.return_value.handle.return_value = []
+            ordered, b_meta = _search_skill_and(
+                ["k8s"], self.workspace_id, self.knowledge, self._fake_embedding_model(), 5, 0.2, 5
+            )
+        self.assertEqual(b_meta["structured_hits"], 1)
+        self.assertIn(str(doc2.id), dict(ordered))
+        self.assertIn(str(doc2.id), b_meta["structured_only"])
 
 
 

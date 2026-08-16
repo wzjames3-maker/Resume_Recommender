@@ -119,6 +119,21 @@ class Candidate(models.Model):
         db_table = "hr_candidate"
 
 
+class CandidateSkill(models.Model):
+    """技能归一表（T5）：candidate.skills 的归一化展平，支撑 Skill-AND 的 SQL 精确匹配。"""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
+    candidate = models.ForeignKey(Candidate, on_delete=models.CASCADE, related_name="skill_rows")
+    skill_norm = models.CharField(max_length=128, db_index=True)
+    skill_raw = models.CharField(max_length=128)
+
+    class Meta:
+        db_table = "hr_candidate_skill"
+        constraints = [
+            models.UniqueConstraint(fields=["candidate", "skill_norm"], name="hr_candidate_skill_uniq")
+        ]
+
+
 class Job(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
     workspace_id = models.CharField(max_length=64, db_index=True)

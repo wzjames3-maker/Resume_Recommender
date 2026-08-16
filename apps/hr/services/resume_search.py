@@ -20,11 +20,12 @@ from knowledge.vector.pg_vector import EmbeddingSearch, KeywordsSearch
 
 from common.exception.app_exception import AppApiException
 
-from hr.models import Candidate, CandidateStatus, ResumeFile
+from hr.models import Candidate, CandidateSkill, CandidateStatus, ResumeFile
 from hr.services.ai_parser import parse_search_skills
 from hr.services.audit import write_audit_log
 from hr.services.query_understand import degree_words, extract_slots, norm_city
 from hr.services.resume_index import get_resume_knowledge
+from hr.services.skill_normalize import normalize_skill
 
 _RRF_K = 60
 _MAX_SKILLS = 10
@@ -252,17 +253,33 @@ def _search_skill_and(skills, workspace_id, knowledge, embedding_model, candidat
         vec = doc_skill_vec.setdefault(doc_id, [0] * len(skills))
         for skill_index in row.get("hit_skills", []):
             vec[skill_index] = 1
-    # 结构化路（设计 §2 步骤2）：Candidate.skills 与有序技能列表的精确命中（忽略大小写，排除已删除/已归档候选人）
+    # 结构化路（T5）：candidate_skill 归一表 SQL 查询 (candidate_id, skill_norm) 对 →
+    # Python 重建 per-doc 命中向量（保留"有序技能优先"排序语义）；表为空时回退 Candidate.skills JSON 路径（迁移期兼容）
     structured_vec = {}    # document_id -> hit_vec（结构化命中）
-    candidates = list(QuerySet(Candidate).filter(workspace_id=workspace_id, status=CandidateStatus.ACTIVE))
+    norm_skills = [normalize_skill(skill) for skill in skills]
+    skill_rows = list(
+        QuerySet(CandidateSkill)
+        .filter(candidate__workspace_id=workspace_id, candidate__status=CandidateStatus.ACTIVE)
+        .values_list("candidate_id", "skill_norm")
+    )
     hit_candidate_ids = []
-    for candidate in candidates:
-        candidate_skills = [s.lower() for s in (candidate.skills or [])]
-        if not candidate_skills:
-            continue
-        vec = [1 if skill.lower() in candidate_skills else 0 for skill in skills]
-        if any(vec):
-            hit_candidate_ids.append((candidate.id, vec))
+    if skill_rows:
+        norm_by_candidate = {}
+        for candidate_id, skill_norm in skill_rows:
+            norm_by_candidate.setdefault(str(candidate_id), set()).add(skill_norm)
+        for candidate_id, norms in norm_by_candidate.items():
+            vec = [1 if ns in norms else 0 for ns in norm_skills]
+            if any(vec):
+                hit_candidate_ids.append((candidate_id, vec))
+    else:
+        candidates = list(QuerySet(Candidate).filter(workspace_id=workspace_id, status=CandidateStatus.ACTIVE))
+        for candidate in candidates:
+            candidate_skills = {normalize_skill(s) for s in (candidate.skills or [])}
+            if not candidate_skills:
+                continue
+            vec = [1 if ns in candidate_skills else 0 for ns in norm_skills]
+            if any(vec):
+                hit_candidate_ids.append((candidate.id, vec))
     if hit_candidate_ids:
         resumes = list(QuerySet(ResumeFile).filter(
             candidate_id__in=[candidate_id for candidate_id, _ in hit_candidate_ids], document_id__isnull=False))
