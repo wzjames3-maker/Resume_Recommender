@@ -22,6 +22,7 @@ from .access import HrAccessAPI, HrAccessMeAPI, HrAuditLogAPI
 from .import_views import CandidateImportAPI, CandidateImportTemplateAPI
 from .offer_views import (
     AllOffersAPI,
+    ApplicationOfferListAPI,
     HandoffConfigAPI,
     HandoffListAPI,
     HandoffRetryAPI,
@@ -30,11 +31,14 @@ from .offer_views import (
 )
 from .application_views import (
     ApplicationEventAPI,
+    ApplicationInterviewAPI,
     ApplicationListAPI,
     ApplicationMoveStageAPI,
     ApplicationPageAPI,
     ApplicationRestoreAPI,
     ApplicationTerminalAPI,
+    JobCloseAPI,
+    JobClosePreviewAPI,
     JobStageListAPI,
 )
 
@@ -64,6 +68,7 @@ __all__ = [
     "HrAccessMeAPI",
     "HrAuditLogAPI",
     "AllOffersAPI",
+    "ApplicationOfferListAPI",
     "HandoffConfigAPI",
     "HandoffListAPI",
     "HandoffRetryAPI",
@@ -72,10 +77,13 @@ __all__ = [
     "CandidateImportAPI",
     "CandidateImportTemplateAPI",
     "ApplicationEventAPI",
+    "ApplicationInterviewAPI",
     "ApplicationListAPI",
     "ApplicationMoveStageAPI",
     "ApplicationPageAPI",
     "ApplicationRestoreAPI",
     "ApplicationTerminalAPI",
+    "JobCloseAPI",
+    "JobClosePreviewAPI",
     "JobStageListAPI",
 ]

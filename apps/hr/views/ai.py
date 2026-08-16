@@ -90,4 +90,6 @@ class HrResumeSearchAPI(APIView):
             user_id=request.user.id,
             llm_model=_service(request, workspace_id)._model_or_none(),
             rerank_model=_service(request, workspace_id)._rerank_model_or_none(),
+            candidate_id=request.data.get("candidate_id"),
+            document_ids=request.data.get("document_ids"),
         ))

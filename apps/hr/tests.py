@@ -19,7 +19,9 @@ from django.db.models import Value
 from unittest.mock import Mock
 
 from hr.models import (
+    Application,
     ApplicationEvent,
+    ApplicationEventType,
     ApplicationStatus,
     JobStage,
     AssignmentStatus,
@@ -598,7 +600,7 @@ class InterviewerCollaborationTests(TestCase):
 
     def test_create_interview_rejects_non_member_interviewer(self):
         stranger = User.objects.create(
-            username="sys-admin", nick_name="系统管理员", password="p", role="ADMIN"
+            username="sys-admin-{}".format(uuid.uuid7().hex[:8]), nick_name="非成员面试官", password="p", role="ADMIN"
         )
         with self.assertRaisesRegex(AppApiException, "workspace member"):
             self.admin.create_interview(self.assignment_id, {"interviewer_user_id": str(stranger.id)})
@@ -1607,12 +1609,17 @@ class CloseReopenRouteTests(TestCase):
 
     def test_close_reopen_routes_are_registered_and_protected(self):
         from django.urls import resolve
+        from hr.views.application_views import JobCloseAPI, JobClosePreviewAPI
         from hr.views.recruitment import JobDetailAPI
 
-        for suffix in ("close", "reopen"):
+        for suffix, expected in (
+            ("close", JobCloseAPI),
+            ("close-preview", JobClosePreviewAPI),
+            ("reopen", JobDetailAPI.Reopen),
+        ):
             path = f"/admin/api/workspace/workspace-a/hr/jobs/{uuid.uuid7()}/{suffix}"
             resolved = resolve(path)
-            self.assertIs(resolved.func.cls, JobDetailAPI.Close if suffix == "close" else JobDetailAPI.Reopen)
+            self.assertIs(resolved.func.cls, expected)
             response = self.client.put(path, data={}, content_type="application/json")
             self.assertIn(response.status_code, (401, 403), f"{path} 未注册或未受保护: {response.status_code}")
 
@@ -2760,6 +2767,7 @@ class OfferServiceTests(TestCase):
     def _sent_offer(self):
         self._to_offer()
         offer_id = self.service.create_offer(self.assignment_id, {"salary_amount": "25000", "currency": "CNY"})["id"]
+        self.service.approve_offer(offer_id, {"approval_status": "APPROVED", "approver_id": str(self.user_id)})
         self.service.send_offer(offer_id)
         return offer_id
 
@@ -2819,6 +2827,7 @@ class OfferServiceTests(TestCase):
     def test_send_offer_marks_sent(self):
         self._to_offer()
         offer_id = self.service.create_offer(self.assignment_id, {})["id"]
+        self.service.approve_offer(offer_id, {"approval_status": "APPROVED", "approver_id": str(self.user_id)})
         sent = self.service.send_offer(offer_id)
         self.assertEqual(sent["status"], "SENT")
         self.assertIsNotNone(sent["sent_at"])
@@ -2827,6 +2836,15 @@ class OfferServiceTests(TestCase):
                 workspace_id="workspace-a", user_id=self.user_id, action="OFFER_SEND", object_type="OFFER"
             ).exists()
         )
+
+    def test_send_requires_approval(self):
+        self._to_offer()
+        offer_id = self.service.create_offer(self.assignment_id, {})["id"]
+        with self.assertRaisesRegex(AppApiException, "approved before sending"):
+            self.service.send_offer(offer_id)
+        self.service.approve_offer(offer_id, {"approval_status": "REJECTED", "approver_id": str(self.user_id)})
+        with self.assertRaisesRegex(AppApiException, "approved before sending"):
+            self.service.send_offer(offer_id)
 
     def test_send_from_non_draft_rejected(self):
         offer_id = self._sent_offer()
@@ -2948,6 +2966,7 @@ class HandoffTests(TestCase):
         self.offer_id = self.offer_service.create_offer(
             self.assignment_id, {"salary_amount": "25000", "currency": "CNY"}
         )["id"]
+        self.offer_service.approve_offer(self.offer_id, {"approval_status": "APPROVED", "approver_id": str(self.user_id)})
         self.offer_service.send_offer(self.offer_id)
 
     def test_accept_creates_handoff_with_full_payload(self):
@@ -3122,6 +3141,7 @@ class HandoffApiTests(_HrApiBase):
             recruitment.update_assignment(self.assignment_id, {"status": status})
         offer = OfferService(workspace_id="workspace-a", user_id=self.admin.id, hr_role="ADMIN")
         self.offer_id = offer.create_offer(self.assignment_id, {})["id"]
+        offer.approve_offer(self.offer_id, {"approval_status": "APPROVED", "approver_id": str(self.admin.id)})
         offer.send_offer(self.offer_id)
         offer.accept_offer(self.offer_id)
         self.handoff = OnboardingHandoff.objects.get(assignment_id=self.assignment_id)
@@ -4795,3 +4815,633 @@ class ApplicationV2Tests(TestCase):
         restored = self.service.restore_application(app["id"], {"reason_text": "restore"})
         self.assertEqual(restored["status"], "ACTIVE")
         self.assertIsNone(restored["termination_reason"])
+
+
+class JobCloseV2Tests(TestCase):
+    """R2：两阶段关闭（STRICT 409 / BULK 确认 / 事件 / Offer 自动撤回 / legacy 指派收尾）"""
+
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.workspace_id = "workspace-a"
+        self.recruitment = RecruitmentService(self.workspace_id, self.user_id, hr_role="ADMIN")
+        self.service = ApplicationService(self.workspace_id, self.user_id, hr_role="ADMIN")
+        self.candidate = Candidate.objects.create(name="Alice", workspace_id=self.workspace_id)
+        job_data = self.recruitment.create_job({"name": "Engineer", "department": "Eng", "headcount": 1})
+        self.job = Job.objects.get(id=job_data["id"])
+
+    def _apply(self):
+        return self.service.create_application(self.job.id, self.candidate.id, {})
+
+    def _stages(self):
+        return list(JobStage.objects.filter(job=self.job).order_by("order"))
+
+    def test_preview_lists_active_applications(self):
+        app = self._apply()
+        preview = self.service.close_preview(self.job.id)
+        self.assertEqual(preview["active_application_count"], 1)
+        self.assertEqual(preview["applications"][0]["application_id"], app["id"])
+        self.assertEqual(preview["applications"][0]["candidate_name"], "Alice")
+        self.assertEqual(preview["applications"][0]["current_stage"], "APPLIED")
+
+    def test_strict_with_active_returns_409(self):
+        self._apply()
+        with self.assertRaises(AppApiException) as ctx:
+            self.service.close_job(self.job.id, {"close_reason": "FILLED", "mode": "STRICT"})
+        self.assertEqual(ctx.exception.code, 409)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, "OPEN")
+
+    def test_strict_without_active_closes_job(self):
+        result = self.service.close_job(self.job.id, {"close_reason": "CANCELLED", "mode": "STRICT"})
+        self.assertEqual(result["closed_count"], 0)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, "CLOSED")
+        self.assertEqual(self.job.close_reason, "CANCELLED")
+
+    def test_bulk_requires_confirmation(self):
+        self._apply()
+        with self.assertRaisesRegex(AppApiException, "bulk_confirmed"):
+            self.service.close_job(self.job.id, {"close_reason": "FILLED", "mode": "BULK"})
+
+    def test_bulk_closes_applications_and_writes_events(self):
+        app = self._apply()
+        second = Candidate.objects.create(name="Bob", workspace_id=self.workspace_id)
+        app2 = self.service.create_application(self.job.id, second.id, {})
+        result = self.service.close_job(
+            self.job.id, {"close_reason": "FILLED", "mode": "BULK", "bulk_confirmed": True}
+        )
+        self.assertEqual(result["closed_count"], 2)
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.status, "CLOSED")
+        for application_id in (app["id"], app2["id"]):
+            application = Application.objects.get(id=application_id)
+            self.assertEqual(application.status, ApplicationStatus.CLOSED)
+            self.assertEqual(application.termination_reason, "JOB_CLOSED")
+            self.assertIsNotNone(application.terminated_at)
+            self.assertTrue(
+                ApplicationEvent.objects.filter(
+                    application=application, event_type="CLOSED", reason_code="JOB_CLOSED"
+                ).exists()
+            )
+        # 确定性幂等键：再次关闭不新增事件（等待中的 Application 已全部 CLOSED）
+        initial = ApplicationEvent.objects.filter(application_id=app["id"]).count()
+        second_run = self.service.close_job(
+            self.job.id, {"close_reason": "FILLED", "mode": "BULK", "bulk_confirmed": True}
+        )
+        self.assertEqual(second_run["closed_count"], 0)
+        self.assertEqual(ApplicationEvent.objects.filter(application_id=app["id"]).count(), initial)
+
+    def test_bulk_withdraws_draft_and_sent_offers(self):
+        app = self._apply()
+        for stage in self._stages()[1:]:
+            self.service.move_stage(app["id"], stage.id, {"reason_text": "advance"})
+        offer_service = OfferService(self.workspace_id, self.user_id, hr_role="ADMIN")
+        offer_id = offer_service.create_offer_for_application(app["id"], {"salary_amount": "30000"})["id"]
+        offer_service.approve_offer(offer_id, {"approval_status": "APPROVED", "approver_id": str(self.user_id)})
+        offer_service.send_offer(offer_id)
+        self.service.close_job(self.job.id, {"close_reason": "FILLED", "mode": "BULK", "bulk_confirmed": True})
+        offer = Offer.objects.get(id=offer_id)
+        self.assertEqual(offer.status, "WITHDRAWN")
+        self.assertIsNotNone(offer.withdrawn_at)
+        self.assertEqual(Application.objects.get(id=app["id"]).status, ApplicationStatus.CLOSED)
+
+    def test_page_jobs_active_count_includes_applications(self):
+        self._apply()
+        page = self.recruitment.page_jobs(1, 20, {})
+        self.assertEqual(page["records"][0]["active_assignment_count"], 1)
+        detail = self.recruitment.get_job(self.job.id)
+        self.assertEqual(detail["active_assignment_count"], 1)
+
+    def test_close_also_ends_legacy_assignments(self):
+        assignment_id = self.recruitment.create_assignment(self.job.id, self.candidate.id, {})["id"]
+        self._apply()
+        self.service.close_job(self.job.id, {"close_reason": "FILLED", "mode": "BULK", "bulk_confirmed": True})
+        assignment = CandidateAssignment.objects.get(id=assignment_id)
+        self.assertEqual(assignment.status, "CLOSED")
+        self.assertEqual(assignment.termination_reason, "JOB_CLOSED")
+        self.assertTrue(
+            HrAuditLog.objects.filter(
+                workspace_id=self.workspace_id, user_id=self.user_id, action="JOB_CLOSE", object_type="JOB"
+            ).exists()
+        )
+
+
+class JobCloseApiTests(_HrApiBase):
+    """R2 路由：close-preview / close STRICT|BULK 与权限"""
+
+    def setUp(self):
+        self.admin = self._user("hr-admin", "HR Admin")
+        self.operator = self._user("hr-operator", "HR Operator")
+        self.viewer = self._user("hr-viewer", "HR Viewer")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.admin.id, role="ADMIN")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.operator.id, role="OPERATOR")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.viewer.id, role="VIEWER")
+        service = ApplicationService("workspace-a", self.admin.id, hr_role="ADMIN")
+        recruitment = RecruitmentService("workspace-a", self.admin.id, hr_role="ADMIN")
+        self.candidate = Candidate.objects.create(name="Alice", workspace_id="workspace-a")
+        job_data = recruitment.create_job({"name": "Engineer", "headcount": 1})
+        self.job = Job.objects.get(id=job_data["id"])
+        self.application_id = service.create_application(self.job.id, self.candidate.id, {})["id"]
+        self.base = "/admin/api/workspace/workspace-a/hr/jobs/{}".format(self.job.id)
+
+    def test_preview_requires_hr_access(self):
+        response = self._client(self.viewer).get(self.base + "/close-preview")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["data"]["active_application_count"], 1)
+
+    def test_close_requires_admin(self):
+        for user in (self.viewer, self.operator):
+            response = self._client(user).post(
+                self.base + "/close", {"close_reason": "FILLED", "mode": "STRICT"},
+                content_type="application/json",
+            )
+            self.assertEqual(response.status_code, 403)
+
+    def test_strict_conflict_returns_409(self):
+        response = self._client(self.admin).post(
+            self.base + "/close", {"close_reason": "FILLED", "mode": "STRICT"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.json()["code"], 409)
+
+    def test_bulk_unconfirmed_returns_400(self):
+        response = self._client(self.admin).post(
+            self.base + "/close", {"close_reason": "FILLED", "mode": "BULK"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.json()["code"], 400)
+
+    def test_bulk_confirmed_closes_and_events(self):
+        response = self._client(self.admin).post(
+            self.base + "/close",
+            {"close_reason": "FILLED", "mode": "BULK", "bulk_confirmed": True},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["data"]["closed_count"], 1)
+        application = Application.objects.get(id=self.application_id)
+        self.assertEqual(application.status, "CLOSED")
+        self.assertTrue(
+            ApplicationEvent.objects.filter(
+                application=application, event_type="CLOSED", reason_code="JOB_CLOSED"
+            ).exists()
+        )
+
+
+class ApplicationInterviewV2Tests(TestCase):
+    """R3：Interview 挂 Application —— ACTIVE + SCREEN/INTERVIEW 阶段守卫、round 服务端生成"""
+
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.service = ApplicationService("workspace-a", self.user_id, hr_role="ADMIN")
+        recruitment = RecruitmentService("workspace-a", self.user_id, hr_role="ADMIN")
+        self.candidate = Candidate.objects.create(name="Alice", workspace_id="workspace-a")
+        job_data = recruitment.create_job({"name": "Engineer", "headcount": 1})
+        self.job = Job.objects.get(id=job_data["id"])
+        self.application_id = self.service.create_application(self.job.id, self.candidate.id, {})["id"]
+
+    def _stages(self):
+        return list(JobStage.objects.filter(job=self.job).order_by("order"))
+
+    def _move_to(self, key):
+        target = next(s for s in self._stages() if s.key == key)
+        self.service.move_stage(self.application_id, target.id, {"reason_text": "advance"})
+
+    def test_create_at_applied_stage_rejected(self):
+        with self.assertRaisesRegex(AppApiException, "SCREEN or INTERVIEW"):
+            self.service.create_interview(self.application_id, {})
+
+    def test_create_at_screen_stage_ok_with_round_increment(self):
+        self._move_to("SCREEN")
+        first = self.service.create_interview(self.application_id, {})
+        self.assertEqual(first["round_no"], 1)
+        self.assertEqual(first["application_id"], self.application_id)
+        second = self.service.create_interview(self.application_id, {})
+        self.assertEqual(second["round_no"], 2)
+        self.assertEqual(len(self.service.list_interviews(self.application_id)), 2)
+
+    def test_create_at_offer_stage_rejected(self):
+        self._move_to("SCREEN")
+        self._move_to("INTERVIEW")
+        self._move_to("OFFER")
+        with self.assertRaisesRegex(AppApiException, "SCREEN or INTERVIEW"):
+            self.service.create_interview(self.application_id, {})
+
+    def test_create_on_terminal_application_rejected(self):
+        self._move_to("SCREEN")
+        self.service.reject_application(self.application_id, {"termination_reason": "NOT_FIT"})
+        with self.assertRaisesRegex(AppApiException, "not active"):
+            self.service.create_interview(self.application_id, {})
+
+    def test_interview_does_not_change_application(self):
+        self._move_to("SCREEN")
+        self.service.create_interview(self.application_id, {})
+        application = Application.objects.get(id=self.application_id)
+        self.assertEqual(application.status, "ACTIVE")
+        self.assertEqual(application.current_stage.key, "SCREEN")
+
+
+class ApplicationInterviewApiTests(_HrApiBase):
+    def setUp(self):
+        self.admin = self._user("hr-admin", "HR Admin")
+        self.operator = self._user("hr-operator", "HR Operator")
+        self.viewer = self._user("hr-viewer", "HR Viewer")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.admin.id, role="ADMIN")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.operator.id, role="OPERATOR")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.viewer.id, role="VIEWER")
+        service = ApplicationService("workspace-a", self.admin.id, hr_role="ADMIN")
+        recruitment = RecruitmentService("workspace-a", self.admin.id, hr_role="ADMIN")
+        self.candidate = Candidate.objects.create(name="Alice", workspace_id="workspace-a")
+        job_data = recruitment.create_job({"name": "Engineer", "headcount": 1})
+        self.job = Job.objects.get(id=job_data["id"])
+        self.application_id = service.create_application(self.job.id, self.candidate.id, {})["id"]
+        self.base = "/admin/api/workspace/workspace-a/hr/applications/{}".format(self.application_id)
+
+    def test_create_requires_operator(self):
+        response = self._client(self.viewer).post(self.base + "/interviews", {}, content_type="application/json")
+        self.assertEqual(response.status_code, 403)
+
+    def test_create_rejected_at_applied_stage(self):
+        response = self._client(self.operator).post(self.base + "/interviews", {}, content_type="application/json")
+        self.assertEqual(response.json()["code"], 400)
+
+    def test_list_by_application(self):
+        service = ApplicationService("workspace-a", self.admin.id, hr_role="ADMIN")
+        stages = list(JobStage.objects.filter(job=self.job).order_by("order"))
+        service.move_stage(self.application_id, stages[1].id, {"reason_text": "scan"})
+        self._client(self.operator).post(self.base + "/interviews", {}, content_type="application/json")
+        response = self._client(self.viewer).get(self.base + "/interviews")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()["data"]), 1)
+
+
+class ApplicationOfferV2Tests(TestCase):
+    """R3：Offer 挂 Application —— OFFER 阶段守卫、单活跃 Offer、接受联动 HIRED、幂等 Handoff"""
+
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.service = ApplicationService("workspace-a", self.user_id, hr_role="ADMIN")
+        self.offer_service = OfferService("workspace-a", self.user_id, hr_role="ADMIN")
+        self.recruitment = RecruitmentService("workspace-a", self.user_id, hr_role="ADMIN")
+        self.candidate = Candidate.objects.create(name="Alice", workspace_id="workspace-a")
+        job_data = self.recruitment.create_job({"name": "Engineer", "headcount": 1})
+        self.job = Job.objects.get(id=job_data["id"])
+        self.application_id = self.service.create_application(self.job.id, self.candidate.id, {})["id"]
+
+    def _stages(self):
+        return list(JobStage.objects.filter(job=self.job).order_by("order"))
+
+    def _to_offer_stage(self):
+        for stage in self._stages()[1:]:
+            self.service.move_stage(self.application_id, stage.id, {"reason_text": "advance"})
+
+    def test_create_requires_offer_stage(self):
+        self.service.move_stage(self.application_id, self._stages()[1].id, {"reason_text": "screen"})
+        with self.assertRaisesRegex(AppApiException, "OFFER stage"):
+            self.offer_service.create_offer_for_application(self.application_id, {"salary_amount": "25000"})
+
+    def test_create_offer_and_single_active(self):
+        self._to_offer_stage()
+        offer = self.offer_service.create_offer_for_application(
+            self.application_id, {"salary_amount": "25000", "currency": "CNY"}
+        )
+        self.assertEqual(offer["version"], 1)
+        self.assertEqual(offer["application_id"], self.application_id)
+        self.assertIsNone(offer["assignment_id"])
+        with self.assertRaisesRegex(AppApiException, "active offer"):
+            self.offer_service.create_offer_for_application(self.application_id, {"salary_amount": "30000"})
+
+    def test_rejected_offer_allows_new_version(self):
+        self._to_offer_stage()
+        offer_id = self.offer_service.create_offer_for_application(self.application_id, {})["id"]
+        self.offer_service.approve_offer(offer_id, {"approval_status": "APPROVED", "approver_id": str(self.user_id)})
+        self.offer_service.send_offer(offer_id)
+        self.offer_service.reject_offer(offer_id, {"note": "拒绝"})
+        second = self.offer_service.create_offer_for_application(self.application_id, {"salary_amount": "30000"})
+        self.assertEqual(second["version"], 2)
+
+    def test_send_guard_single_sent_per_application(self):
+        self._to_offer_stage()
+        first = self.offer_service.create_offer_for_application(self.application_id, {"salary_amount": "25000"})
+        self.offer_service.approve_offer(first["id"], {"approval_status": "APPROVED", "approver_id": str(self.user_id)})
+        self.offer_service.send_offer(first["id"])
+        application = Application.objects.get(id=self.application_id)
+        second = Offer.objects.create(
+            workspace_id="workspace-a", application=application, assignment=None,
+            candidate=application.candidate, job=application.job, version=2,
+            salary_amount="30000", user_id=self.user_id,
+        )
+        self.offer_service.approve_offer(second.id, {"approval_status": "APPROVED", "approver_id": str(self.user_id)})
+        with self.assertRaisesRegex(AppApiException, "already been sent"):
+            self.offer_service.send_offer(second.id)
+        self.assertEqual(Offer.objects.get(id=first["id"]).status, "SENT")
+
+    def test_accept_moves_application_to_hired_with_event(self):
+        self._to_offer_stage()
+        offer_id = self.offer_service.create_offer_for_application(self.application_id, {"salary_amount": "25000"})["id"]
+        self.offer_service.approve_offer(offer_id, {"approval_status": "APPROVED", "approver_id": str(self.user_id)})
+        self.offer_service.send_offer(offer_id)
+        accepted = self.offer_service.accept_offer(offer_id)
+        self.assertEqual(accepted["status"], "ACCEPTED")
+        application = Application.objects.get(id=self.application_id)
+        self.assertEqual(application.status, ApplicationStatus.HIRED)
+        self.assertIsNotNone(application.terminated_at)
+        self.assertTrue(
+            ApplicationEvent.objects.filter(
+                application=application, event_type=ApplicationEventType.HIRED,
+                from_status="ACTIVE", to_status="HIRED",
+            ).exists()
+        )
+
+    def test_handoff_idempotent_per_application(self):
+        self._to_offer_stage()
+        offer_id = self.offer_service.create_offer_for_application(self.application_id, {"salary_amount": "25000"})["id"]
+        self.offer_service.approve_offer(offer_id, {"approval_status": "APPROVED", "approver_id": str(self.user_id)})
+        self.offer_service.send_offer(offer_id)
+        self.offer_service.accept_offer(offer_id)
+        offer = Offer.objects.get(id=offer_id)
+        handoff_service = OnboardingService("workspace-a", self.user_id, hr_role="ADMIN")
+        handoff_service.create_handoff_for_offer(offer)
+        handoff_service.create_handoff_for_offer(offer)
+        self.assertEqual(
+            OnboardingHandoff.objects.filter(workspace_id="workspace-a", application_id=self.application_id).count(), 1
+        )
+        handoff = OnboardingHandoff.objects.get(application_id=self.application_id)
+        self.assertIsNone(handoff.assignment_id)
+
+
+class ApplicationOfferApiTests(_HrApiBase):
+    def setUp(self):
+        self.admin = self._user("hr-admin", "HR Admin")
+        self.operator = self._user("hr-operator", "HR Operator")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.admin.id, role="ADMIN")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.operator.id, role="OPERATOR")
+        self.service = ApplicationService("workspace-a", self.admin.id, hr_role="ADMIN")
+        recruitment = RecruitmentService("workspace-a", self.admin.id, hr_role="ADMIN")
+        candidate = Candidate.objects.create(name="Alice", workspace_id="workspace-a")
+        job_data = recruitment.create_job({"name": "Engineer", "headcount": 1})
+        self.job = Job.objects.get(id=job_data["id"])
+        self.application_id = self.service.create_application(self.job.id, candidate.id, {})["id"]
+        self.base = "/admin/api/workspace/workspace-a/hr/applications/{}".format(self.application_id)
+
+    def test_offer_requires_admin(self):
+        response = self._client(self.operator).post(self.base + "/offers", {}, content_type="application/json")
+        self.assertEqual(response.status_code, 403)
+
+    def test_full_offer_flow_via_application_api(self):
+        stages = list(JobStage.objects.filter(job=self.job).order_by("order"))
+        for stage in stages[1:]:
+            self.service.move_stage(self.application_id, stage.id, {"reason_text": "advance"})
+        admin = self._client(self.admin)
+        offer_id = admin.post(
+            self.base + "/offers", {"salary_amount": "25000", "currency": "CNY"},
+            content_type="application/json",
+        ).json()["data"]["id"]
+        admin.put(
+            "/admin/api/workspace/workspace-a/hr/offers/{}/approve".format(offer_id),
+            {"approval_status": "APPROVED", "approver_id": str(self.admin.id)},
+            content_type="application/json",
+        )
+        admin.put("/admin/api/workspace/workspace-a/hr/offers/{}/send".format(offer_id))
+        accepted = admin.put("/admin/api/workspace/workspace-a/hr/offers/{}/accept".format(offer_id))
+        self.assertEqual(accepted.json()["data"]["status"], "ACCEPTED")
+        application = Application.objects.get(id=self.application_id)
+        self.assertEqual(application.status, "HIRED")
+        offers = admin.get(self.base + "/offers").json()["data"]
+        self.assertEqual(len(offers), 1)
+        self.assertEqual(offers[0]["application_id"], self.application_id)
+
+
+class ApplicationCommandIdempotencyTests(TestCase):
+    """R5：move_stage / 终态事件幂等键"""
+
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.service = ApplicationService("workspace-a", self.user_id, hr_role="ADMIN")
+        recruitment = RecruitmentService("workspace-a", self.user_id, hr_role="ADMIN")
+        self.candidate = Candidate.objects.create(name="Alice", workspace_id="workspace-a")
+        job_data = recruitment.create_job({"name": "Engineer", "headcount": 1})
+        self.job = Job.objects.get(id=job_data["id"])
+        self.application_id = self.service.create_application(self.job.id, self.candidate.id, {})["id"]
+        self.stages = list(JobStage.objects.filter(job=self.job).order_by("order"))
+
+    def test_move_stage_idempotency_key(self):
+        key = "move-{}".format(uuid.uuid7())
+        self.service.move_stage(self.application_id, self.stages[1].id, {"idempotency_key": key, "reason_text": "forward"})
+        # 二次同键：同阶段移动需 reason_text（owner/admin），事件不重复
+        moved = self.service.move_stage(
+            self.application_id, self.stages[1].id, {"idempotency_key": key, "reason_text": "retry"}
+        )
+        self.assertEqual(moved["current_stage"]["key"], "SCREEN")
+        self.assertEqual(
+            ApplicationEvent.objects.filter(
+                application_id=self.application_id, event_type="STAGE_MOVED", idempotency_key=key
+            ).count(), 1
+        )
+
+    def test_terminal_idempotency_key(self):
+        key = "term-{}".format(uuid.uuid7())
+        self.service.reject_application(self.application_id, {"termination_reason": "NOT_FIT", "idempotency_key": key})
+        with self.assertRaisesRegex(AppApiException, "not active"):
+            self.service.reject_application(self.application_id, {"termination_reason": "NOT_FIT", "idempotency_key": key})
+        self.assertEqual(
+            ApplicationEvent.objects.filter(
+                application_id=self.application_id, event_type="REJECTED", idempotency_key=key
+            ).count(), 1
+        )
+
+    def test_skip_stage_requires_owner_or_admin(self):
+        operator = ApplicationService("workspace-a", uuid.uuid7(), hr_role="OPERATOR")
+        with self.assertRaises(AppUnauthorizedFailed):
+            operator.move_stage(self.application_id, self.stages[2].id, {"reason_text": "skip"})
+        # ADMIN 跳级 + reason_text 可放行
+        moved = self.service.move_stage(self.application_id, self.stages[2].id, {"reason_text": "admin skip"})
+        self.assertEqual(moved["current_stage"]["key"], "INTERVIEW")
+
+    def test_terminal_reason_matrix(self):
+        matrix = [
+            ("reject", "REJECTED", ["NOT_FIT", "SALARY", "OTHER"]),
+            ("withdraw", "WITHDRAWN", ["CANDIDATE_WITHDRAW", "UNREACHABLE", "OTHER"]),
+            ("close", "CLOSED", ["MERGED", "OTHER"]),
+        ]
+        for action, status, allowed in matrix:
+            candidate = Candidate.objects.create(name="M-{}".format(action), workspace_id="workspace-a")
+            application = self.service.create_application(self.job.id, candidate.id, {})
+            for reason in ("NOT_FIT", "SALARY", "CANDIDATE_WITHDRAW", "UNREACHABLE", "JOB_CLOSED", "MERGED"):
+                if reason in allowed:
+                    continue
+                with self.assertRaisesRegex(AppApiException, "not allowed"):
+                    getattr(self.service, "{}_application".format(action))(
+                        application["id"], {"termination_reason": reason}
+                    )
+            result = getattr(self.service, "{}_application".format(action))(
+                application["id"], {"termination_reason": allowed[0]}
+            )
+            self.assertEqual(result["status"], status)
+
+
+class ApplicationApiPermissionTests(_HrApiBase):
+    """R5：Application API 权限矩阵"""
+
+    def setUp(self):
+        self.admin = self._user("hr-admin", "HR Admin")
+        self.operator = self._user("hr-operator", "HR Operator")
+        self.viewer = self._user("hr-viewer", "HR Viewer")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.admin.id, role="ADMIN")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.operator.id, role="OPERATOR")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.viewer.id, role="VIEWER")
+        self.service = ApplicationService("workspace-a", self.admin.id, hr_role="ADMIN")
+        recruitment = RecruitmentService("workspace-a", self.admin.id, hr_role="ADMIN")
+        self.candidate = Candidate.objects.create(name="Alice", workspace_id="workspace-a")
+        job_data = recruitment.create_job({"name": "Engineer", "headcount": 1})
+        self.job = Job.objects.get(id=job_data["id"])
+        self.application_id = self.service.create_application(self.job.id, self.candidate.id, {})["id"]
+        self.stages = list(JobStage.objects.filter(job=self.job).order_by("order"))
+        self.app_base = "/admin/api/workspace/workspace-a/hr/applications/{}".format(self.application_id)
+
+    def test_viewer_cannot_create_application(self):
+        response = self._client(self.viewer).post(
+            "/admin/api/workspace/workspace-a/hr/applications",
+            {"job_id": str(self.job.id), "candidate_id": str(self.candidate.id)},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_operator_can_create_application(self):
+        candidate = Candidate.objects.create(name="Bob", workspace_id="workspace-a")
+        response = self._client(self.operator).post(
+            "/admin/api/workspace/workspace-a/hr/applications",
+            {"job_id": str(self.job.id), "candidate_id": str(candidate.id)},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["data"]["status"], "ACTIVE")
+
+    def test_viewer_can_page_and_events_but_not_mutate(self):
+        response = self._client(self.viewer).get("/admin/api/workspace/workspace-a/hr/applications/page/1/20")
+        self.assertEqual(response.status_code, 200)
+        response = self._client(self.viewer).get(self.app_base + "/events")
+        self.assertEqual(response.status_code, 200)
+        response = self._client(self.viewer).post(
+            self.app_base + "/move-stage", {"to_stage_id": str(self.stages[1].id)},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 403)
+        response = self._client(self.viewer).post(
+            self.app_base + "/terminal", {"action": "reject", "termination_reason": "NOT_FIT"},
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_restore_requires_admin(self):
+        self.service.reject_application(self.application_id, {"termination_reason": "NOT_FIT"})
+        response = self._client(self.operator).post(
+            self.app_base + "/restore", {"reason_text": "wrong reject"}, content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 403)
+        response = self._client(self.admin).post(
+            self.app_base + "/restore", {"reason_text": "wrong reject"}, content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+
+
+class ResumeSearchScopeTests(TestCase):
+    """RAG 最小改动：document_ids / candidate_id 仅限定召回集，不改链路"""
+
+    def setUp(self):
+        self.workspace_id = "workspace-scope"
+        self.user = User.objects.create(
+            username="scope-" + uuid.uuid7().hex[:8], nick_name="scope", password="p", role="ADMIN"
+        )
+        self.knowledge = SimpleNamespace(id=uuid.uuid7())
+        self.candidate = Candidate.objects.create(name="Alice", workspace_id=self.workspace_id)
+        self.resume = ResumeFile.objects.create(
+            workspace_id=self.workspace_id, file_name="a.docx", extension="docx",
+            file_path="/tmp/a.docx", file_size=1, sha256="sha-" + uuid.uuid7().hex,
+            source_channel="OTHER", status=ResumeStatus.SUCCESS, user_id=self.user.id,
+            candidate=self.candidate, document_id=uuid.uuid7(),
+        )
+        self.doc_id = str(self.resume.document_id)
+
+    def _patched_search(self, **kwargs):
+        from unittest.mock import Mock as _Mock
+        from hr.services.resume_search import search_resumes
+        fake_emb = _Mock()
+        fake_emb.embed_query.return_value = [0.1] * 8
+        with patch("hr.services.resume_search.get_resume_knowledge", return_value=self.knowledge),                 patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=fake_emb),                 patch("hr.services.resume_search._recall_dual") as recall,                 patch("hr.services.resume_search._rrf_fuse", return_value=[]):
+            recall.return_value = {"dense": [], "sparse": [], "sparse_failed": False}
+            result = search_resumes(self.workspace_id, "java 开发", mode="phrase", hr_role="ADMIN",
+                                    user_id=self.user.id, **kwargs)
+            return result, recall
+
+    def test_document_ids_restrict_recall(self):
+        result, recall = self._patched_search(document_ids=[self.doc_id])
+        self.assertTrue(result["meta"]["scope"]["applied"])
+        self.assertEqual(recall.call_args.kwargs["document_ids"], [self.doc_id])
+        self.assertEqual(result["items"], [])
+
+    def test_candidate_id_resolves_resume_documents(self):
+        result, recall = self._patched_search(candidate_id=str(self.candidate.id))
+        self.assertEqual(recall.call_args.kwargs["document_ids"], [self.doc_id])
+
+    def test_candidate_id_unknown_raises(self):
+        from hr.services.resume_search import search_resumes
+        with self.assertRaises(AppApiException):
+            search_resumes(self.workspace_id, "java 开发", candidate_id=str(uuid.uuid7()),
+                           user_id=self.user.id, hr_role="ADMIN")
+
+    def test_scope_missing_unchanged(self):
+        result, recall = self._patched_search()
+        self.assertNotIn("scope", result["meta"])
+        self.assertIsNone(recall.call_args.kwargs["document_ids"])
+
+    def test_document_ids_invalid_raises(self):
+        from hr.services.resume_search import search_resumes
+        with self.assertRaisesRegex(AppApiException, "document_ids"):
+            search_resumes(self.workspace_id, "java 开发", document_ids=[], user_id=self.user.id, hr_role="ADMIN")
+
+
+class ImportLegacyAssignmentsCommandTests(TestCase):
+    """九：存量 CandidateAssignment 迁移命令（幂等、事件锚点、子对象回填）"""
+
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.workspace_id = "workspace-migrate"
+        self.recruitment = RecruitmentService(self.workspace_id, self.user_id, hr_role="ADMIN")
+        self.candidate = Candidate.objects.create(name="Alice", workspace_id=self.workspace_id)
+        self.job = Job.objects.create(name="Engineer", workspace_id=self.workspace_id, headcount=1)
+        assignment = CandidateAssignment.objects.create(
+            workspace_id=self.workspace_id, user_id=self.user_id, owner_id=self.user_id,
+            candidate=self.candidate, job=self.job, status=AssignmentStatus.SCREEN_PASSED,
+        )
+        self.assignment_id = assignment.id
+        self.interview = Interview.objects.create(
+            workspace_id=self.workspace_id, assignment=assignment, round_no=1,
+            interviewer="张三", user_id=self.user_id,
+        )
+
+    def test_command_imports_and_links(self):
+        from django.core.management import call_command
+        call_command("import_legacy_assignments", workspace=self.workspace_id)
+        application = Application.objects.get(workspace_id=self.workspace_id, candidate=self.candidate, job=self.job)
+        self.assertEqual(application.status, "ACTIVE")
+        self.assertEqual(application.current_stage.key, "SCREEN")
+        self.assertTrue(
+            ApplicationEvent.objects.filter(
+                application=application, event_type="IMPORTED", idempotency_key="import:{}".format(self.assignment_id)
+            ).exists()
+        )
+        self.interview.refresh_from_db()
+        self.assertEqual(self.interview.application_id, application.id)
+        call_command("import_legacy_assignments", workspace=self.workspace_id)
+        self.assertEqual(
+            Application.objects.filter(workspace_id=self.workspace_id, candidate=self.candidate, job=self.job).count(), 1
+        )
+
+    def test_dry_run_does_not_write(self):
+        from django.core.management import call_command
+        call_command("import_legacy_assignments", workspace=self.workspace_id, dry_run=True)
+        self.assertFalse(
+            Application.objects.filter(workspace_id=self.workspace_id, candidate=self.candidate, job=self.job).exists()
+        )
+

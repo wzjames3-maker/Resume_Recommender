@@ -368,12 +368,36 @@ def _search_skill_and(skills, workspace_id, knowledge, embedding_model, candidat
                      "structured_hits": len(structured_vec), "sparse_failed": sparse_failed}
 
 
+def _scope_document_ids(workspace_id, candidate_id, document_ids):
+    """解析可选范围限定：document_ids 直接使用；candidate_id 解析其简历文档集；均不传返回 None。"""
+    if document_ids is not None:
+        if not isinstance(document_ids, list) or not document_ids or any(
+            not isinstance(doc_id, str) or not doc_id.strip() for doc_id in document_ids
+        ):
+            raise AppApiException(400, "document_ids must be a non-empty list of strings")
+        return [doc_id.strip() for doc_id in document_ids]
+    if candidate_id is None or candidate_id == "":
+        return None
+    candidate = QuerySet(Candidate).filter(id=candidate_id, workspace_id=workspace_id).first()
+    if candidate is None:
+        raise AppApiException(404, "Candidate not found")
+    return [
+        str(doc_id) for doc_id in QuerySet(ResumeFile)
+        .filter(candidate=candidate, document_id__isnull=False)
+        .values_list("document_id", flat=True)
+    ]
+
+
 def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
-                   mode="auto", hr_role=None, user_id=None, llm_model=None, rerank_model=None):
+                   mode="auto", hr_role=None, user_id=None, llm_model=None, rerank_model=None,
+                   candidate_id=None, document_ids=None):
     """
     简历语义检索入口。返回 {"items": [...], "meta": {...}}。
     模式 A（整句）/ 模式 B（技能复合，auto 自动判定）。
     降级链：rerank → RRF → dense 单路 → 空结果。
+    可选范围限定（不改召回/精排/降级链，仅限定召回 Document 集合）：
+      document_ids：直接限定召回文档集；
+      candidate_id：先查该候选人全部 ResumeFile.document_id 作为限定。
     """
     t0 = time.time()
     if not isinstance(query, str) or not query.strip():
@@ -388,6 +412,9 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
     recall_k = recall_k if recall_k is not None else max(5, min(60, top_k * 3))
     recall_k = max(5, min(60, recall_k))
     similarity = max(0.0, min(2.0, similarity))
+
+    # 可选范围限定（§八）：document_ids 优先；candidate_id 解析其简历文档集
+    scope_document_ids = _scope_document_ids(workspace_id, candidate_id, document_ids)
 
     knowledge = get_resume_knowledge(workspace_id)
     if knowledge is None:
@@ -529,6 +556,16 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
             meta["prefilter"]["applied"] = True
             prefilter_ids = doc_ids
 
+    # 范围限定与结构化预筛取交集；仅传 scope 时直接作为限定集
+    if scope_document_ids is not None:
+        if prefilter_ids is None:
+            prefilter_ids = scope_document_ids
+        else:
+            scope_set = set(scope_document_ids)
+            prefilter_ids = [doc_id for doc_id in prefilter_ids if doc_id in scope_set]
+        meta["scope"] = {"applied": True, "document_count": len(scope_document_ids),
+                         "restricted_count": len(prefilter_ids)}
+
     # ---------- 模式 B：Skill-AND ----------
     if mode == "skills" and len(skills) >= 2:
         ordered, b_meta = _search_skill_and(
@@ -629,11 +666,10 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
             .select_related()
         )
         if name_candidates:
-            name_resumes = list(
-                QuerySet(ResumeFile)
-                .filter(candidate__in=name_candidates, document_id__isnull=False)
-                .select_related("candidate")
-            )
+            name_qs = QuerySet(ResumeFile).filter(candidate__in=name_candidates, document_id__isnull=False)
+            if scope_document_ids is not None:
+                name_qs = name_qs.filter(document_id__in=scope_document_ids)
+            name_resumes = list(name_qs.select_related("candidate"))
             for rf in name_resumes:
                 name_hits.append({
                     "candidate": _mask_for_role(rf.candidate, hr_role),

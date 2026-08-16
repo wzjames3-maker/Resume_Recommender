@@ -215,7 +215,8 @@ class OfferApprovalStatus(models.TextChoices):
 class Offer(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
     workspace_id = models.CharField(max_length=64, db_index=True)
-    assignment = models.ForeignKey(CandidateAssignment, on_delete=models.CASCADE)
+    assignment = models.ForeignKey(CandidateAssignment, on_delete=models.CASCADE, null=True, blank=True)
+    application = models.ForeignKey("Application", on_delete=models.CASCADE, null=True, blank=True, related_name="offers")
     candidate = models.ForeignKey(Candidate, on_delete=models.CASCADE)
     job = models.ForeignKey(Job, on_delete=models.CASCADE)
     version = models.PositiveSmallIntegerField()
@@ -243,7 +244,10 @@ class Offer(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["workspace_id", "assignment", "version"], name="hr_unique_offer_version_per_assignment"
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["workspace_id", "application", "version"], name="hr_unique_offer_version_per_application"
+            ),
         ]
 
 
@@ -261,7 +265,8 @@ class HandoffTargetType(models.TextChoices):
 class OnboardingHandoff(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
     workspace_id = models.CharField(max_length=64, db_index=True)
-    assignment = models.ForeignKey(CandidateAssignment, on_delete=models.CASCADE)
+    assignment = models.ForeignKey(CandidateAssignment, on_delete=models.CASCADE, null=True, blank=True)
+    application = models.ForeignKey("Application", on_delete=models.CASCADE, null=True, blank=True, related_name="handoffs")
     candidate = models.ForeignKey(Candidate, on_delete=models.CASCADE)
     job = models.ForeignKey(Job, on_delete=models.CASCADE)
     offer = models.ForeignKey(Offer, on_delete=models.CASCADE)
@@ -279,14 +284,18 @@ class OnboardingHandoff(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["workspace_id", "assignment"], name="hr_unique_handoff_per_assignment"
-            )
+            ),
+            models.UniqueConstraint(
+                fields=["workspace_id", "application"], name="hr_unique_handoff_per_application"
+            ),
         ]
 
 
 class Interview(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
     workspace_id = models.CharField(max_length=64, db_index=True)
-    assignment = models.ForeignKey(CandidateAssignment, on_delete=models.CASCADE)
+    assignment = models.ForeignKey(CandidateAssignment, on_delete=models.CASCADE, null=True, blank=True)
+    application = models.ForeignKey("Application", on_delete=models.CASCADE, null=True, blank=True, related_name="interviews")
     round_no = models.PositiveSmallIntegerField()
     interviewer = models.CharField(max_length=64, blank=True, default="")
     interviewer_user_id = models.UUIDField(null=True, blank=True)
@@ -301,6 +310,11 @@ class Interview(models.Model):
 
     class Meta:
         db_table = "hr_interview"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["workspace_id", "application", "round_no"], name="hr_unique_interview_round_per_application"
+            ),
+        ]
 
 
 class ResumeStatus(models.TextChoices):
@@ -410,6 +424,10 @@ class HrAuditObjectType(models.TextChoices):
     CANDIDATE = "CANDIDATE", "Candidate"
     JOB = "JOB", "Job"
     ASSIGNMENT = "ASSIGNMENT", "Assignment"
+    APPLICATION = "APPLICATION", "Application"
+    INTERVIEW = "INTERVIEW", "Interview"
+    OFFER = "OFFER", "Offer"
+    ONBOARDING = "ONBOARDING", "Onboarding"
     RESUME = "RESUME", "Resume"
     HR_ACCESS = "HR_ACCESS", "HR access"
     OTHER = "OTHER", "Other"
@@ -459,6 +477,7 @@ class ApplicationStatus(models.TextChoices):
 
 class ApplicationEventType(models.TextChoices):
     CREATED = "CREATED", "Created"
+    IMPORTED = "IMPORTED", "Imported"
     STAGE_MOVED = "STAGE_MOVED", "Stage moved"
     HIRED = "HIRED", "Hired"
     REJECTED = "REJECTED", "Rejected"

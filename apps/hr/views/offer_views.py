@@ -139,6 +139,24 @@ class OfferDetailAPI(APIView):
                 return FileResponse(handle, as_attachment=True, filename=file_name)
 
 
+class ApplicationOfferListAPI(APIView):
+    """R3 Offer 挂 Application：创建要求 Stage=OFFER 且无活跃 DRAFT/SENT。"""
+
+    authentication_classes = [TokenAuth]
+
+    @hr_admin_required
+    def post(self, request, workspace_id, application_id):
+        return result.success(
+            _offer_service(request, workspace_id).create_offer_for_application(application_id, request.data)
+        )
+
+    @hr_access_required
+    def get(self, request, workspace_id, application_id):
+        return result.success(
+            _offer_service(request, workspace_id).list_offers_for_application(application_id)
+        )
+
+
 class HandoffListAPI(APIView):
     authentication_classes = [TokenAuth]
 

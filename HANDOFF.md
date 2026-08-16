@@ -58,9 +58,17 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
 
 ## 4. 下一步
 
-1. R1：`JobStage` / `Application` / `ApplicationEvent` 迁移与模型；
-2. R2：命令服务与 API（`move_stage` / `reject` / `withdraw` / `close` / `restore`）；
-3. R3：Interview / Offer / Handoff 改挂 Application；
-4. R4：前端动态 Pipeline；
-5. R5：测试与迁移回归；
-6. D1：Screening Agent。
+- R1（基础模型与命令服务）、R2（Job 两阶段关闭 STRICT/BULK）、R3（Interview/Offer/Handoff 挂 Application + Offer 接受联动 HIRED）、R4（前端动态 Pipeline 看板）、R5（API 权限/幂等/终态矩阵测试）已完成，HR 全量 419 tests 通过。
+- 新增：`POST/GET /hr/jobs/{job_id}/close(-preview)`、`/hr/applications/{id}/interviews|offers`；`search_resumes` 增加可选 `candidate_id/document_ids` 范围限定；`import_legacy_assignments` 管理命令（幂等迁移存量 CandidateAssignment）。
+- 下一步：D1 Screening Agent（HrAgentRun / HrAgentProposal，Propose→Confirm→Execute）。
+
+## 5. 测试环境注意
+
+- settings 中 `TEST.TEMPLATE=DB_NAME`：首次创建测试库会用开发库做模板（开发库含演示数据时，按整表计数的旧单测会失败）。
+- 正确姿势：`--keepdb` 复用干净测试库；若测试库被污染，重建空库并装 vector 扩展：
+  ```sql
+  DROP DATABASE IF EXISTS test_maxkb;
+  CREATE DATABASE test_maxkb;
+  \\c test_maxkb; CREATE EXTENSION IF NOT EXISTS vector;
+  ```
+- Offer 发送守卫：未审批（APPROVED）不能 SENT；同 Application/指派至多一条 SENT（R3 验收）。

@@ -19,7 +19,8 @@ urlpatterns = [
     path("workspace/<str:workspace_id>/hr/jobs", views.JobAPI.as_view()),
     path("workspace/<str:workspace_id>/hr/jobs/<int:current_page>/<int:page_size>", views.JobAPI.Page.as_view()),
     path("workspace/<str:workspace_id>/hr/jobs/<str:job_id>", views.JobDetailAPI.as_view()),
-    path("workspace/<str:workspace_id>/hr/jobs/<str:job_id>/close", views.JobDetailAPI.Close.as_view()),
+    path("workspace/<str:workspace_id>/hr/jobs/<str:job_id>/close-preview", views.JobClosePreviewAPI.as_view()),
+    path("workspace/<str:workspace_id>/hr/jobs/<str:job_id>/close", views.JobCloseAPI.as_view()),
     path("workspace/<str:workspace_id>/hr/jobs/<str:job_id>/reopen", views.JobDetailAPI.Reopen.as_view()),
     path("workspace/<str:workspace_id>/hr/jobs/<str:job_id>/assignments", views.JobAPI.Assignment.as_view()),
     path("workspace/<str:workspace_id>/hr/jobs/<str:job_id>/matches/<int:current_page>/<int:page_size>", views.JobMatchAPI.as_view()),
@@ -61,5 +62,7 @@ urlpatterns = [
     path("workspace/<str:workspace_id>/hr/applications/<str:application_id>/terminal", views.ApplicationTerminalAPI.as_view()),
     path("workspace/<str:workspace_id>/hr/applications/<str:application_id>/restore", views.ApplicationRestoreAPI.as_view()),
     path("workspace/<str:workspace_id>/hr/applications/<str:application_id>/events", views.ApplicationEventAPI.as_view()),
+    path("workspace/<str:workspace_id>/hr/applications/<str:application_id>/interviews", views.ApplicationInterviewAPI.as_view()),
+    path("workspace/<str:workspace_id>/hr/applications/<str:application_id>/offers", views.ApplicationOfferListAPI.as_view()),
     path("workspace/<str:workspace_id>/hr/audit-logs", views.HrAuditLogAPI.as_view()),
 ]

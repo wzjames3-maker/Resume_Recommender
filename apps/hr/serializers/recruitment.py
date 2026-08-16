@@ -11,6 +11,8 @@ from celery_once import AlreadyQueued
 from common.exception.app_exception import AppApiException, AppUnauthorizedFailed, NotFound404
 from hr.models import (
     ACTIVE_ASSIGNMENT_STATUSES,
+    Application,
+    ApplicationStatus,
     AssignmentStatus,
     Candidate,
     CandidateAssignment,
@@ -681,6 +683,7 @@ class RecruitmentService:
                 "candidateassignment",
                 filter=Q(candidateassignment__status__in=ACTIVE_ASSIGNMENT_STATUSES),
             )
+            + Count("applications", filter=Q(applications__status=ApplicationStatus.ACTIVE))
         )
         total = queryset.count()
         start = (current_page - 1) * page_size
@@ -697,6 +700,33 @@ class RecruitmentService:
         result["assignments"] = [
             {**self._assignment_output(assignment), "candidate_name": assignment.candidate.name}
             for assignment in assignments
+        ]
+        applications = Application.objects.filter(
+            workspace_id=self.workspace_id,
+            job=job,
+        ).select_related("candidate", "current_stage").order_by("-update_time")
+        result["active_assignment_count"] = applications.filter(status=ApplicationStatus.ACTIVE).count()
+        result["applications"] = [
+            {
+                "application_id": str(application.id),
+                "candidate_id": str(application.candidate_id),
+                "candidate_name": application.candidate.name,
+                "current_stage": {
+                    "id": str(application.current_stage.id),
+                    "key": application.current_stage.key,
+                    "name": application.current_stage.name,
+                    "order": application.current_stage.order,
+                } if application.current_stage else None,
+                "status": application.status,
+                "relation_type": application.relation_type,
+                "channel": application.channel,
+                "owner_id": str(application.owner_id) if application.owner_id else None,
+                "reapply_no": application.reapply_no,
+                "note": application.note,
+                "applied_at": application.applied_at,
+                "update_time": application.update_time,
+            }
+            for application in applications
         ]
         write_audit_log(self.workspace_id, self.user_id, "VIEW_DETAIL", "JOB", job.id)
         return result
@@ -1191,7 +1221,8 @@ class RecruitmentService:
     def _interview_output(interview):
         return {
             "id": str(interview.id),
-            "assignment_id": str(interview.assignment_id),
+            "assignment_id": str(interview.assignment_id) if interview.assignment_id else None,
+            "application_id": str(interview.application_id) if interview.application_id else None,
             "round_no": interview.round_no,
             "interviewer": interview.interviewer,
             "interviewer_user_id": str(interview.interviewer_user_id) if interview.interviewer_user_id else None,

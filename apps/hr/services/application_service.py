@@ -8,24 +8,34 @@
 import uuid
 
 from django.db import IntegrityError, transaction
+from django.db.models import Max
 from django.utils import timezone
 
 from common.exception.app_exception import AppApiException, AppUnauthorizedFailed, NotFound404
 from hr.models import (
+    ACTIVE_ASSIGNMENT_STATUSES,
     Application,
     ApplicationEvent,
     ApplicationEventType,
     ApplicationStatus,
+    AssignmentStatus,
     Candidate,
+    CandidateAssignment,
     CandidateStatus,
+    Interview,
     Job,
+    JobCloseReason,
     JobStage,
     JobStatus,
+    Offer,
+    OfferStatus,
     RelationType,
     ResumeChannel,
     TerminationReason,
 )
 from hr.services.audit import write_audit_log
+from users.models import User
+from users.serializers.user import UserManageSerializer
 
 _DEFAULT_STAGES = [
     ("APPLIED", "待筛选", 1),
@@ -45,6 +55,32 @@ _TERMINAL_STATUSES = [
 _REJECT_REASONS = {TerminationReason.NOT_FIT, TerminationReason.SALARY, TerminationReason.OTHER}
 _WITHDRAW_REASONS = {TerminationReason.CANDIDATE_WITHDRAW, TerminationReason.UNREACHABLE, TerminationReason.OTHER}
 _CLOSE_REASONS = {TerminationReason.MERGED, TerminationReason.OTHER}
+
+# Offer 接受的系统终态：由 Offer accept 同事务触发 Application → HIRED（§2.1）
+_OFFER_STAGE_KEY = "OFFER"
+_INTERVIEW_STAGE_KEYS = ("SCREEN", "INTERVIEW")
+
+
+def write_application_event(workspace_id, actor_id, application, event_type, from_stage, to_stage,
+                            from_status, to_status, reason_code, reason_text, idempotency_key):
+    """写一条不可变流程账本事件；同 (application, event_type, idempotency_key) 幂等。"""
+    event, created = ApplicationEvent.objects.get_or_create(
+        workspace_id=workspace_id,
+        application=application,
+        event_type=event_type,
+        idempotency_key=idempotency_key,
+        defaults={
+            "from_stage": from_stage,
+            "to_stage": to_stage,
+            "from_status": from_status,
+            "to_status": to_status,
+            "actor_id": actor_id,
+            "reason_code": reason_code,
+            "reason_text": reason_text,
+            "trace_id": "",
+        },
+    )
+    return event
 
 
 def create_default_stages(workspace_id, job, user_id=None):
@@ -120,6 +156,35 @@ class ApplicationService:
 
     def _first_stage(self, job):
         return JobStage.objects.filter(workspace_id=self.workspace_id, job=job).order_by("order").first()
+
+    def _interviewer_user_id(self, data):
+        value = data.get("interviewer_user_id")
+        if value in (None, ""):
+            return None
+        try:
+            user_id = uuid.UUID(str(value))
+        except (ValueError, TypeError) as exc:
+            raise AppApiException(400, "interviewer_user_id is invalid") from exc
+        member_ids = {member["id"] for member in UserManageSerializer().get_user_members(self.workspace_id)}
+        if user_id not in member_ids:
+            raise AppApiException(400, "User is not a workspace member")
+        return user_id
+
+    @staticmethod
+    def _optional_string(data, field, maximum):
+        value = data.get(field, "")
+        if value is None:
+            return ""
+        if not isinstance(value, str) or len(value.strip()) > maximum:
+            raise AppApiException(400, f"{field} is invalid")
+        return value.strip()
+
+    @staticmethod
+    def _user_nick_name(user_id):
+        if user_id is None:
+            return ""
+        user = User.objects.filter(id=user_id).only("nick_name").first()
+        return user.nick_name if user else ""
 
     # ---------- 命令 ----------
     def create_application(self, job_id, candidate_id, data):
@@ -199,12 +264,13 @@ class ApplicationService:
                 raise AppApiException(400, "Application is not active")
             target = self._stage(application.job, to_stage_id)
             current = application.current_stage
-            if current is not None and target.order <= current.order:
+            # §2.2：默认只允许按 order 前移一位；回退/同阶段/跳级必须 owner 或 ADMIN，且写 reason_text
+            if current is not None and (target.order <= current.order or target.order > current.order + 1):
                 is_owner = self.user_id and self.user_id == application.owner_id
                 if self.hr_role != "ADMIN" and not is_owner:
-                    raise AppUnauthorizedFailed(403, "Backward or same-stage move requires owner or admin")
+                    raise AppUnauthorizedFailed(403, "Backward or skip move requires owner or admin")
                 if not str(data.get("reason_text") or "").strip():
-                    raise AppApiException(400, "reason_text is required for backward/same-stage move")
+                    raise AppApiException(400, "reason_text is required for backward or skip move")
             application.current_stage = target
             application.save(update_fields=["current_stage", "update_time"])
             self._write_event(
@@ -308,6 +374,145 @@ class ApplicationService:
         )
         return self._output(application)
 
+    # ---------- Job 两阶段关闭（R2） ----------
+    def close_preview(self, job_id):
+        """关闭前预览：返回该职位全部 ACTIVE Application（供 STRICT/BULK 决策）。"""
+        job = self._job(job_id)
+        applications = Application.objects.filter(
+            workspace_id=self.workspace_id,
+            job=job,
+            status=ApplicationStatus.ACTIVE,
+        ).select_related("candidate", "current_stage").order_by("create_time")
+        records = [
+            {
+                "application_id": str(application.id),
+                "candidate_name": application.candidate.name,
+                "current_stage": application.current_stage.key if application.current_stage else "",
+                "owner_id": str(application.owner_id) if application.owner_id else None,
+            }
+            for application in applications
+        ]
+        return {
+            "job_id": str(job.id),
+            "job_status": job.status,
+            "active_application_count": len(records),
+            "applications": records,
+        }
+
+    def close_job(self, job_id, data):
+        """两阶段关闭：STRICT 有 ACTIVE 时 409；BULK 必须显式确认。
+
+        每条 ACTIVE Application → CLOSED + JOB_CLOSED + 写事件（确定性幂等键）；
+        该 Application 下 DRAFT/SENT Offer 自动 WITHDRAWN；legacy 指派同步收尾。
+        """
+        self._require_manage()
+        job = self._job(job_id)
+        reason = data.get("close_reason")
+        if reason not in JobCloseReason.values:
+            raise AppApiException(400, "close_reason is invalid")
+        mode = data.get("mode", "STRICT")
+        if mode not in ("STRICT", "BULK"):
+            raise AppApiException(400, "mode must be STRICT|BULK")
+        with transaction.atomic():
+            job = Job.objects.select_for_update().get(id=job.id)
+            active = list(
+                Application.objects.select_for_update().filter(
+                    workspace_id=self.workspace_id,
+                    job=job,
+                    status=ApplicationStatus.ACTIVE,
+                )
+            )
+            if active and mode == "STRICT":
+                raise AppApiException(409, "Job has active applications; use BULK mode with bulk_confirmed=true")
+            if mode == "BULK" and not data.get("bulk_confirmed"):
+                raise AppApiException(400, "bulk_confirmed=true is required in BULK mode")
+            job.status = JobStatus.CLOSED
+            job.close_reason = reason
+            job.save(update_fields=["status", "close_reason", "update_time"])
+            for application in active:
+                application.status = ApplicationStatus.CLOSED
+                application.termination_reason = TerminationReason.JOB_CLOSED
+                application.terminated_at = timezone.now()
+                application.save(update_fields=["status", "termination_reason", "terminated_at", "update_time"])
+                self._write_event(
+                    application,
+                    ApplicationEventType.CLOSED,
+                    from_stage=application.current_stage,
+                    to_stage=application.current_stage,
+                    from_status=ApplicationStatus.ACTIVE,
+                    to_status=ApplicationStatus.CLOSED,
+                    reason_code=TerminationReason.JOB_CLOSED,
+                    reason_text=f"job closed: {reason}",
+                    idempotency_key=f"job_close:{job.id}:{application.id}",
+                )
+            withdrawn_offers = Offer.objects.filter(
+                workspace_id=self.workspace_id,
+                application__job=job,
+                status__in=[OfferStatus.DRAFT, OfferStatus.SENT],
+            ).update(status=OfferStatus.WITHDRAWN, withdrawn_at=timezone.now(), update_time=timezone.now())
+            # legacy 兼容：存量 CandidateAssignment 一并收尾（迁移期双表并行）
+            closed_assignments = CandidateAssignment.objects.filter(
+                workspace_id=self.workspace_id,
+                job=job,
+                status__in=ACTIVE_ASSIGNMENT_STATUSES,
+            ).update(
+                status=AssignmentStatus.CLOSED,
+                termination_reason=TerminationReason.JOB_CLOSED,
+                update_time=timezone.now(),
+            )
+        write_audit_log(
+            self.workspace_id, self.user_id, "JOB_CLOSE", "JOB", job.id,
+            detail=f"{reason} mode={mode} closed={len(active)} assignments={closed_assignments}",
+        )
+        return {
+            "job_id": str(job.id),
+            "closed_count": len(active),
+            "withdrawn_offer_count": withdrawn_offers,
+            "closed_assignment_count": closed_assignments,
+        }
+
+    # ---------- Interview（R3：挂 Application） ----------
+    def create_interview(self, application_id, data):
+        """Interview 创建守卫：Application ACTIVE 且当前 Stage 为 SCREEN/INTERVIEW；round_no 服务端生成。"""
+        self._require_operator()
+        application = self._application(application_id)
+        if application.status != ApplicationStatus.ACTIVE:
+            raise AppApiException(400, "Application is not active")
+        if application.current_stage is None or application.current_stage.key not in _INTERVIEW_STAGE_KEYS:
+            raise AppApiException(400, "Interview can only be created at SCREEN or INTERVIEW stage")
+        interviewer_user_id = self._interviewer_user_id(data)
+        max_round = Interview.objects.filter(
+            workspace_id=self.workspace_id,
+            application=application,
+        ).aggregate(max_round=Max("round_no"))["max_round"] or 0
+        try:
+            interview = Interview.objects.create(
+                workspace_id=self.workspace_id,
+                application=application,
+                assignment=None,
+                round_no=max_round + 1,
+                interviewer=self._optional_string(data, "interviewer", 64) or self._user_nick_name(interviewer_user_id),
+                interviewer_user_id=interviewer_user_id,
+                feedback_deadline=data.get("feedback_deadline") or None,
+                scheduled_at=data.get("scheduled_at") or None,
+                user_id=self.user_id,
+            )
+        except IntegrityError as exc:
+            raise AppApiException(400, "Interview round already exists") from exc
+        write_audit_log(
+            self.workspace_id, self.user_id, "CREATE", "INTERVIEW",
+            interview.id, detail=f"round {interview.round_no}",
+        )
+        return self._interview_output(interview)
+
+    def list_interviews(self, application_id):
+        application = self._application(application_id)
+        interviews = Interview.objects.filter(
+            workspace_id=self.workspace_id,
+            application=application,
+        ).order_by("round_no")
+        return [self._interview_output(interview) for interview in interviews]
+
     # ---------- 查询 ----------
     def page_applications(self, current_page, page_size, query):
         queryset = Application.objects.filter(workspace_id=self.workspace_id).select_related(
@@ -340,23 +545,10 @@ class ApplicationService:
     # ---------- 内部 ----------
     def _write_event(self, application, event_type, from_stage, to_stage, from_status, to_status,
                      reason_code, reason_text, idempotency_key):
-        event, created = ApplicationEvent.objects.get_or_create(
-            workspace_id=self.workspace_id,
-            application=application,
-            event_type=event_type,
-            idempotency_key=idempotency_key,
-            defaults={
-                "from_stage": from_stage,
-                "to_stage": to_stage,
-                "from_status": from_status,
-                "to_status": to_status,
-                "actor_id": self.user_id,
-                "reason_code": reason_code,
-                "reason_text": reason_text,
-                "trace_id": "",
-            },
+        return write_application_event(
+            self.workspace_id, self.user_id, application, event_type, from_stage, to_stage,
+            from_status, to_status, reason_code, reason_text, idempotency_key,
         )
-        return event
 
     @staticmethod
     def _output(application):
@@ -386,6 +578,22 @@ class ApplicationService:
             "note": application.note,
             "create_time": application.create_time,
             "update_time": application.update_time,
+        }
+
+    def _interview_output(self, interview):
+        return {
+            "id": str(interview.id),
+            "application_id": str(interview.application_id) if interview.application_id else None,
+            "round_no": interview.round_no,
+            "interviewer": interview.interviewer,
+            "interviewer_user_id": str(interview.interviewer_user_id) if interview.interviewer_user_id else None,
+            "feedback_deadline": interview.feedback_deadline,
+            "feedback_submitted_at": interview.feedback_submitted_at,
+            "scheduled_at": interview.scheduled_at,
+            "status": interview.status,
+            "feedback": interview.feedback,
+            "create_time": interview.create_time,
+            "update_time": interview.update_time,
         }
 
     @staticmethod

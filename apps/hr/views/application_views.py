@@ -106,3 +106,52 @@ class ApplicationEventAPI(APIView):
     @hr_access_required
     def get(self, request, workspace_id, application_id):
         return result.success(_service(request, workspace_id).list_events(application_id))
+
+
+class JobClosePreviewAPI(APIView):
+    """R2 关闭预览：返回职位 ACTIVE Application 清单（STRICT/BULK 决策依据）。"""
+
+    authentication_classes = [TokenAuth]
+
+    @hr_access_required
+    def get(self, request, workspace_id, job_id):
+        return result.success(_service(request, workspace_id).close_preview(job_id))
+
+
+class JobCloseAPI(APIView):
+    """R2 两阶段关闭：GET 预览 / POST STRICT|BULK 关闭；PUT 保留 legacy 关闭（兼容期）。"""
+
+    authentication_classes = [TokenAuth]
+
+    @hr_access_required
+    def get(self, request, workspace_id, job_id):
+        return result.success(_service(request, workspace_id).close_preview(job_id))
+
+    @hr_admin_required
+    def post(self, request, workspace_id, job_id):
+        return result.success(_service(request, workspace_id).close_job(job_id, request.data))
+
+    @hr_admin_required
+    def put(self, request, workspace_id, job_id):
+        from hr.serializers.recruitment import RecruitmentService
+
+        legacy = RecruitmentService(
+            workspace_id=workspace_id,
+            user_id=request.user.id,
+            hr_role=getattr(request, "hr_role", None),
+        )
+        return result.success(legacy.close_job(job_id, request.data.get("close_reason")))
+
+
+class ApplicationInterviewAPI(APIView):
+    """R3 面试挂 Application：创建要求 ACTIVE 且 Stage 为 SCREEN/INTERVIEW。"""
+
+    authentication_classes = [TokenAuth]
+
+    @hr_operator_required
+    def post(self, request, workspace_id, application_id):
+        return result.success(_service(request, workspace_id).create_interview(application_id, request.data))
+
+    @hr_access_required
+    def get(self, request, workspace_id, application_id):
+        return result.success(_service(request, workspace_id).list_interviews(application_id))
