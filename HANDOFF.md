@@ -57,7 +57,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 | `README-hr.md` | 各期验收记录（一期到 A 阶段，含测试数演进） |
 | `docs/superpowers/specs/2026-08-13-*.md` | 二至七期规格（简历/搜索匹配/AI/异步/合并） |
 
-## 3. 已完成（当前测试基线：四 app + ops 355/355 PASS，HR 321）
+## 3. 已完成（当前测试基线：四 app + ops 383/383 PASS，HR 349）
 
 ### 3.1 PRD 七期（基础能力）
 
@@ -142,6 +142,15 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
   - **入库前 PII 二次扫描**：scan_residual_pii（全空格分隔手机号/15 位身份证/16-19 位银行卡变体）残留即拒绝入库（设计 §6.8 承诺，不阻塞建档）；
   - **meta 契约与权限小修**：mode=skills 解析失败 meta.mode 如实为 phrase（此前误导）；meta.rerank.model/sparse_failed 补齐；Download/Content 视图改 hr_operator_required（与服务层一致）；title 上限 20 对齐设计；
   - 已知限制记录（设计文档 §9.3）：简历知识库可被系统管理员经内核知识库 API 读取（绕过 HrAccess，P2 待加固）、模型工作区可见性校验在裁剪内核为 no-op（共享 default 模型为当前产品行为）、LLM 切片调用发送未脱敏全文（合规待确认）。
+- ✅ **简历 RAG v2 重构（2026-08-16，T1-T7 七任务 + 16 例回归，全量 383/383）**：设计见 specs/2026-08-16-resume-rag-v2-design.md、方案见 plans/2026-08-16-resume-rag-v2-implementation.md（提交 538a8a8..3797bfe）：
+  - **T1 PII 掩码前置**：掩码先于任何 LLM 调用（行内替换不改行号，边界协议不受影响）；保真语义更新为「相对掩码后原文」；scan_residual_pii 仍为入库 backstop；
+  - **T2 title 入 chunks**：HR 自建 Document/Paragraph（content 保真、chunks 带 "{title}\n" 前缀参与向量化/分词），显式触发向量化——内核零改动；
+  - **T3 证据合成**（仅模式 A）：score = max(段分) + λ·log2(1+命中段数)，λ=0.15（可配，置 0 回退旧行为）；meta.aggregation 新增 evidence_lambda/multi_hit_boosted；
+  - **T4 查询理解 v1 + 结构化预筛**：规则槽位（年限/学历/城市/语义词）→ Candidate SQL 预筛 → document 集限定召回；纯条件查询走纯结构化检索（杜绝 embed_query("")）；NULL 年限纳入并标记 years_unknown；城市双向归一；姓名快速通道（2-4 字中文 → name__icontains 置顶）；prefilter_empty 明确返回空不误导；
+  - **T5 candidate_skill 归一表**：skill_alias.json ~100 条别名 + 幂等回填命令 backfill_candidate_skills；Skill-AND 结构化路 SQL 化（表空回退 JSON 路径）；
+  - **T6 Termbase 词条 + 重嵌命令**：seed_resume_termbase（108 词条，幂等，KeywordsSearch 内部已自动生效）+ reindex_resume_knowledge（dry-run 支持；一次重嵌覆盖 T2 存量 + T6 词条；重嵌窗口检索降级 seq scan，低峰执行；真实执行由项目方操作）；
+  - **T7 技能预筛**：LLM 解析技能（auto→phrase）AND candidate_skill EXISTS，与向量 Skill-AND 并存。
+  - 已知限制同步：phone/email 语义查找因掩码设计性不可行（v1 不做，产品确认点）；查询理解为规则版（LLM 版并入 P3 合并调用）；城市槽子串匹配可能误中（评测暴露后收紧）。
 
 另：人工反馈、更大标注集量化对比、档位 3（200 份）仍后置。docx 格式变体评测集（plans 1.3）并入阶段 3 检索评测。**注意**：冒烟中修复了应用创建/发布链路的 3 个裁剪期 bug（96afbd0），application.tests 现有 10 用例。
 
@@ -167,7 +176,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build --mode chat >/dev/nu
 ## 7. 提交流程与账本
 
 - 每期：docs 规格提交 → docs 实现计划提交 → 实现（TDD）→ 全量验收 → 审查 → 修复
-- 测试数演进：23→31→39→47→76→86→107（一期至七期，四 app 口径）→141→183→207→215（A 阶段，切 HR 单 app 口径）→227（四 app = HR 215 + 内核 12）→231（+ops 4）→240（+候选恢复 9）→255（+面试协作 15）→287（+Offer/交接 32）→301（+批量导入 14，B 阶段完成，2026-08-15）→336（C 阶段收尾，6c022e4 文档同步基线，HR 302）→342（HR 308 + 内核 34，2026-08-15：切片器超长降级 2 + docx 表格 1 + 流转日志 3）→**355（HR 321 + 内核 34，2026-08-16 实测：四 app + ops 355/355，342 后新增 13 例 = ResumeSearchTests 11 + AiService 配置扩展 2）**→357（HR 323 + 内核 34，742fafe 审查修复 4 处）→**367（HR 333 + 内核 34，2026-08-16 第二轮审查修复后实测：四 app + ops 367/367，357 后新增 10 例 = 删除清理 2 + PII 二次扫描 2 + 结构化路 2 + 参数 clamp 1 + embedding 友好错误 2 + mode 退化 meta 1）**
+- 测试数演进：23→31→39→47→76→86→107（一期至七期，四 app 口径）→141→183→207→215（A 阶段，切 HR 单 app 口径）→227（四 app = HR 215 + 内核 12）→231（+ops 4）→240（+候选恢复 9）→255（+面试协作 15）→287（+Offer/交接 32）→301（+批量导入 14，B 阶段完成，2026-08-15）→336（C 阶段收尾，6c022e4 文档同步基线，HR 302）→342（HR 308 + 内核 34，2026-08-15：切片器超长降级 2 + docx 表格 1 + 流转日志 3）→**355（HR 321 + 内核 34，2026-08-16 实测：四 app + ops 355/355，342 后新增 13 例 = ResumeSearchTests 11 + AiService 配置扩展 2）**→357（HR 323 + 内核 34，742fafe 审查修复 4 处）→**367（HR 333 + 内核 34，2026-08-16 第二轮审查修复后实测：四 app + ops 367/367，357 后新增 10 例 = 删除清理 2 + PII 二次扫描 2 + 结构化路 2 + 参数 clamp 1 + embedding 友好错误 2 + mode 退化 meta 1）**→**383（HR 349 + 内核 34，2026-08-16 v2 重构实测：四 app + ops 383/383，367 后新增 16 例 = T1 掩码前置 1 + T2 title-chunks 1 + T3 证据合成 1 + T4 查询理解/预筛 7 + T5 技能归一 3 + T6 重嵌命令 2 + T7 技能预筛 1）**
 - 规格/计划/验收文档路径规范：`docs/superpowers/specs/YYYY-MM-DD-<topic>-design.md`、`docs/superpowers/plans/`、`docs/superpowers/audits/YYYY-MM-DD-<topic>-baseline.md`
 - 提交信息：`feat(人事)/fix(人事)/docs(人事)/test(人事): 中文描述`
 

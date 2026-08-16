@@ -176,4 +176,13 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
   - 模式 B 结构化路补齐（Candidate.skills 精确命中 → 命中向量 OR 合并 → 字典序补位，meta.recall.structured_hits）；
   - 入库前 PII 二次扫描拒绝（scan_residual_pii：全空格手机号/15 位身份证/银行卡变体）；
   - meta 契约与权限小修（mode=skills 退化 meta 如实、rerank.model/sparse_failed、Download/Content → OPERATOR+、title 上限 20）。
-- 设计/计划：docs/superpowers/specs/2026-08-15-end-to-end-pipeline-combined-design.md（权威）、docs/superpowers/specs/2026-08-15-hr-resume-search-design.md（检索设计 v2）、docs/superpowers/plans/2026-08-15-c-stage-resume-rag.md（阶段 3 已完成）。
+- **简历 RAG v2 重构（2026-08-16，T1-T7，16 例回归，383/383 PASS（HR 349））**：设计 specs/2026-08-16-resume-rag-v2-design.md、方案 plans/2026-08-16-resume-rag-v2-implementation.md（提交 538a8a8..3797bfe）：
+  - **T1 PII 掩码前置**：掩码先于任何 LLM 调用（行内替换不改行号，行号边界协议不受影响）；保真语义更新为「相对掩码后原文」；scan_residual_pii 仍为入库 backstop；**修复已知限制 9.3-3（LLM 不再收到未脱敏全文）**；
+  - **T2 title 入 chunks**：HR 自建 Document/Paragraph（content 保真、chunks 带 title 前缀参与向量化/分词），显式触发向量化；内核零改动；
+  - **T3 证据合成**（仅模式 A）：score = max(段分) + λ·log2(1+命中段数)，λ=0.15（置 0 回退旧行为）；meta.aggregation 新增 evidence_lambda/multi_hit_boosted；
+  - **T4 查询理解 v1 + 结构化预筛**：规则槽位（年限 1-2 位数字+年+以上、防年份误抽、学历、城市双向归一）→ Candidate SQL 预筛 → document 集限定召回；纯条件查询走纯结构化检索（杜绝 embed_query 空串）；NULL 年限纳入并标记 years_unknown；姓名快速通道（2-4 字中文 → name__icontains 置顶）；prefilter_empty 明确返回空不误导；
+  - **T5 candidate_skill 技能归一表**：skill_alias.json ~100 条别名 + backfill_candidate_skills 幂等回填；Skill-AND 结构化路 SQL 化（表空回退 JSON 路径）；
+  - **T6 Termbase 词条 + 重嵌命令**：seed_resume_termbase（108 词条，幂等，KeywordsSearch 内部已自动生效）+ reindex_resume_knowledge（dry-run；一次重嵌覆盖 T2 存量 + T6 词条；重嵌窗口检索降级 seq scan，低峰执行；真实执行由项目方操作）；
+  - **T7 技能预筛**：LLM 解析技能（auto→phrase）AND candidate_skill EXISTS，与向量 Skill-AND 并存；
+  - 已知限制同步：phone/email 语义查找因掩码设计性不可行（v1 不做，产品确认点）；查询理解为规则版（LLM 版并入 P3 合并调用）；城市槽子串匹配可能误中（评测暴露后收紧）。
+- 设计/计划：docs/superpowers/specs/2026-08-15-end-to-end-pipeline-combined-design.md（权威）、docs/superpowers/specs/2026-08-15-hr-resume-search-design.md（检索设计 v2）、docs/superpowers/specs/2026-08-16-resume-rag-v2-design.md（v2 目标态）、docs/superpowers/plans/2026-08-16-resume-rag-v2-implementation.md（v2 实施）、docs/superpowers/plans/2026-08-15-c-stage-resume-rag.md（阶段 3 已完成）。

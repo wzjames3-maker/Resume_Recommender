@@ -1,7 +1,7 @@
 # 简历 RAG v2 设计思路（目标态设计）
 
 > 日期：2026-08-16
-> 状态：设计稿（经代码级自审修订 v2；未实施）
+> 状态：设计稿（经代码级自审修订 v2）；**实施状态：P1/P2 已实施（T1-T7，提交 538a8a8..3797bfe；实施计划见 plans/2026-08-16-resume-rag-v2-implementation.md）；P3 后置**
 > 输入：`2026-08-16-kernel-rag-fullflow-review.md`（内核实现级）+ `2026-08-16-resume-rag-design-fit-assessment.md`（设计适配性）
 > 约束：非 EE MaxKB 内核；Embedding=bge-large-zh（512 token）；LLM=sensenova-6.8；Rerank=bge-reranker-v2-m3；pgvector
 > 核心原则：**检索原子=简历，证据原子=段落；结构化优先、语义补位**

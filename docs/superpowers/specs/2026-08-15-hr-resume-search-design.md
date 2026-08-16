@@ -317,7 +317,25 @@ def _search_skill_and(skills, structured_hits, knowledge, embedding_model, candi
 
 1. **简历知识库可经内核知识库 API 读取（绕过 HrAccess）**：简历语义索引为 workspace 内普通知识库（scope=WORKSPACE），内核文档/段落接口按工作区成员权限放行。查证：裁剪内核无 workspace 成员映射，普通 USER 的 permission_list 不含 KNOWLEDGE 资源权限 → 无法读取；实际暴露面为系统管理员/WORKSPACE_MANAGE（本就拥有全部数据权）。风险评级 P2：权限模型不一致 + 管理员可增删文档影响 HR 检索可用性；防线为索引内容 PII 掩码。**建议后续加固**：简历知识库 meta 标记（如 is_hr_resume_index）+ 内核视图拦截，或索引迁移出 knowledge 模块。
 2. **模型工作区可见性校验为 no-op**：get_model_by_id 依赖 get_authorized_model（DatabaseModelManage），裁剪内核未注册（settings 无 MODEL_HANDLES）→ 任何工作区的模型 id 均可被引用。当前单租户部署下「共享 default 模型」即产品行为（README 五期）；多租户部署前须恢复授权查询或显式 workspace 校验。
-3. **LLM 切片调用发送未脱敏全文**：PII 掩码在切片之后（设计定稿），切片 prompt 含电话/邮箱等 → 外部 LLM 供应商可见；PRD §6「默认不发送候选人联系方式」存在张力，需合规确认（或改为切片前对联系方式行先行掩码）。
+3. **LLM 切片调用发送未脱敏全文**：~~PII 掩码在切片之后（设计定稿），切片 prompt 含电话/邮箱等 → 外部 LLM 供应商可见；需合规确认~~ **✅ 已修复（2026-08-16 T1）**：掩码前置至任何 LLM 调用之前（行内替换不改行号，边界协议不受影响）；保真语义更新为「相对掩码后原文」；scan_residual_pii 仍为入库 backstop。
 4. **SEARCH 审计与 A3 审计规范一致（查询原文不入库）**；HrAuditLog 无 trace 字段（PRD §7 已标注未实现）。
 
 > 关联：实施计划 ../plans/2026-08-15-c-stage-resume-rag.md 阶段 3；综合设计 §1.2/§6；HANDOFF §5.3
+
+### 9.4 v2 重构偏差记录（2026-08-16，T1-T7，提交 538a8a8..3797bfe）
+
+> 设计见 specs/2026-08-16-resume-rag-v2-design.md；本节记录 v2 对本文档（检索设计 v2）的增量与偏差。
+
+| 项 | v2 状态 | 备注 |
+|---|---|---|
+| 结构预筛（§3.5） | ✅ 已实现（T4/T7）：规则槽位→Candidate SQL 预筛→document 集限定召回 | 年限含 NULL 纳入+标记 years_unknown；城市双向归一；skills 维度 AND candidate_skill EXISTS（T7） |
+| 纯条件检索 | ✅ 已实现（T4）：semantic_query 空→纯结构化检索（structured_only），杜绝 embed_query("") | 排序 years desc nulls_last + update_time desc |
+| 姓名快速通道 | ✅ 已实现（T4）：2-4 字中文→name__icontains 置顶（name_match） | phone/email 查找因掩码设计性不可行，v1 不做（产品确认点） |
+| title 入向量 | ✅ 已实现（T2）：chunks 带 title 前缀（HR 自建段落，内核零改动） | content 保持原文（保真/展示/回溯不变） |
+| 证据合成 | ✅ 已实现（T3，仅模式 A）：max(段分)+λ·log2(1+命中段数) | λ=0.15 可配，置 0 回退 0.7*max+0.3*avg |
+| 技能归一表 | ✅ 已实现（T5）：candidate_skill（skill_alias ~100 条 + 幂等回填） | 表空回退 Candidate.skills JSON 路径（迁移期兼容） |
+| Termbase 词条 | ✅ 已实现（T6）：seed_resume_termbase 108 词条幂等写入 | KeywordsSearch 内部已自动生效；需全量重嵌使 search_vector 分词一致 |
+| PII 掩码前置 | ✅ 已实现（T1）：掩码先于 LLM 调用 | 修复本文档 §9.3-3；行内替换不改行号 |
+| 查询理解 LLM 版（合并调用） | ⚠️ 后置（P3） | 当前为规则版（extract_slots） |
+| 城市槽匹配精度 | ⚠️ 已知限制：子串匹配可误中（"北京"命中"北京师范大学"） | 评测暴露后收紧 |
+| 重嵌存量 | ⚠️ 待项目方执行：reindex_resume_knowledge（一次覆盖 T2 存量 + T6 词条） | 重嵌窗口检索降级 seq scan，低峰执行 |
