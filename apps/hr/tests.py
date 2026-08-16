@@ -3922,7 +3922,7 @@ class ResumeSearchTests(TestCase):
         self.assertEqual(len(result["items"][0]["paragraphs"]), 2)
 
     def test_aggregate_evidence_synthesis(self):
-        """T3：证据合成——多段命中的简历（低分段）胜过单段高分；λ=0 恢复旧排序。"""
+        """T3：证据合成——多段命中的简历（低分段）胜过单段高分；λ=0 严格回退旧基准 0.7*max+0.3*avg（F2 公式锁定）。"""
         from hr.services.resume_search import _aggregate
 
         doc_a = Document.objects.create(
@@ -3939,8 +3939,8 @@ class ResumeSearchTests(TestCase):
                 file_path="/tmp/" + doc.name, file_size=1, sha256=sha, source_channel="OTHER",
                 status=ResumeStatus.SUCCESS, user_id=self.user.id, candidate=cand, document_id=doc.id,
             )
-        # doc_a 单段 0.90 → 0.90 + 0.15*log2(2) = 1.05
-        # doc_b 两段 0.89/0.88 → 0.89 + 0.15*log2(3) ≈ 1.128 > 1.05 → 证据合成使 doc_b 胜出
+        # doc_a 单段 0.90 → 基准 0.90 + 0.15*log2(2) = 1.05
+        # doc_b 两段 0.89/0.88 → 基准 0.7*0.89+0.3*0.885 ≈ 0.8885 + 0.15*log2(3) ≈ 1.126 > 1.05 → 证据合成使 doc_b 胜出
         paras = [
             {"document_id": str(doc_a.id), "rerank": 0.90},
             {"document_id": str(doc_b.id), "rerank": 0.89},
@@ -3953,6 +3953,9 @@ class ResumeSearchTests(TestCase):
         with patch("hr.services.resume_search._EVIDENCE_LAMBDA", 0):
             results0 = _aggregate(paras, hr_role="ADMIN")
         self.assertEqual([r["document_id"] for r in results0], [str(doc_a.id), str(doc_b.id)])
+        # 公式锁定（F2）：λ=0 必须严格回到旧基准 0.7*max+0.3*avg，防止基准再次静默漂移
+        self.assertAlmostEqual(results0[0]["score"], 0.7 * 0.90 + 0.3 * 0.90)
+        self.assertAlmostEqual(results0[1]["score"], 0.7 * 0.89 + 0.3 * 0.885)
 
     def _extra_candidate(self, name, years, city="", degree="", skills=None):
         """T4 辅助：额外候选人 + 简历文档（带段落/向量）。"""

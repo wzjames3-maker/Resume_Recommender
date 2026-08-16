@@ -31,11 +31,16 @@ _RRF_K = 60
 _MAX_SKILLS = 10
 _DEFAULT_SIMILARITY = 0.2
 _MAX_QUERY_LENGTH = 2000
-# 证据合成（T3，仅模式 A）：score = max(段分) + λ·log2(1 + 命中段数)。
-# 默认 0（关闭）：真实模型消融评测（2026-08-16，12 锚点 × 31 语料）显示 λ=0.15 使 dense/RRF 的
-# recall@5 与 MRR 全面下降（dense 0.75→0.67 / MRR 0.51→0.33；RRF+rerank recall@5 0.92→0.83），
-# 机制保留（多段证据加分），待更大样本评测后再开。
+# 证据合成（T3，仅模式 A）：score = 聚合基准 + λ·log2(1 + 命中段数)。
+# 聚合基准 = 0.7*max(段分) + 0.3*avg(段分)（v2 修复 F2 恢复：λ=0 严格回退旧行为，兑现「置 0 回退」承诺）。
+# λ 默认 0（关闭）：真实模型消融（2026-08-16，12 锚点 × 31 语料，installer/eval_v2_report.txt）显示
+# λ=0.15 综合劣于 λ=0：recall@5 主指标全面下降（dense 0.75→0.67；RRF+rerank 0.92→0.83），
+# 但 RRF 无 rerank 的 recall@5（0.67→0.75）与 RRF+rerank 的 Top-1/MRR（0.58→0.67 / 0.680→0.705）三格回升；
+# 样本 12 锚点不足显著判定，保守置 0，机制保留待规模验证 G4 裁决。
 _EVIDENCE_LAMBDA = 0
+# 聚合权重（与 be6e659 实施前行为一致；tests 有公式锁定断言防再次静默漂移）
+_RESUME_SCORE_MAX_WEIGHT = 0.7
+_RESUME_SCORE_AVG_WEIGHT = 0.3
 # 结构化预筛上限（T4）：预筛文档集超过该值则放弃预筛转全量语义（避免误伤大库）
 _PREFILTER_MAX = 2000
 # 姓名快速通道（T4）：纯 2-4 字中文查询走 name__icontains 并置顶
@@ -182,7 +187,8 @@ def _para_score(p):
 
 def _aggregate(paragraphs, hr_role):
     """Small-to-Big + 简历聚合（模式 A，T3 证据合成）：
-    score = max(段分) + λ·log2(1 + 命中段数)——多段证据加分（"金融背景"命中工作+项目两段 > 只命中一段）。
+    score = (0.7*max(段分) + 0.3*avg(段分)) + λ·log2(1 + 命中段数)——基准加权 + 多段证据加分
+    （"金融背景"命中工作+项目两段 > 只命中一段）。λ=0 严格回退旧行为（0.7*max+0.3*avg，F2 恢复）。
     段分优先 rerank 分（rerank 启用时），否则 rrf 分——避免 rerank 重排被 rrf 覆盖。"""
     doc_ids = [p.get("document_id") for p in paragraphs if p.get("document_id")]
     resumes = []
@@ -196,7 +202,11 @@ def _aggregate(paragraphs, hr_role):
         resume_map.setdefault(doc_id, []).append(p)
     results = []
     for doc_id, ps in resume_map.items():
-        score = max(_para_score(p) for p in ps) + _EVIDENCE_LAMBDA * math.log2(1 + len(ps))
+        para_scores = [_para_score(p) for p in ps]
+        base = _RESUME_SCORE_MAX_WEIGHT * max(para_scores) + _RESUME_SCORE_AVG_WEIGHT * (
+            sum(para_scores) / len(para_scores)
+        )
+        score = base + _EVIDENCE_LAMBDA * math.log2(1 + len(ps))
         resume = resume_by_doc.get(doc_id)
         candidate = resume.candidate if resume else None
         results.append({
@@ -602,6 +612,7 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
         "grouped_resumes": len(aggregated),
         "dropped_orphan_paragraphs": orphan_count,
         "evidence_lambda": _EVIDENCE_LAMBDA,
+        "base_formula": "0.7max+0.3avg",
         "multi_hit_boosted": sum(1 for a in aggregated if len(a["paragraphs"]) > 1),
     }
 
