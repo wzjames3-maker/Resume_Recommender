@@ -53,6 +53,7 @@ from hr.services.application_service import ApplicationService
 from hr.agents import scoring
 from hr.agents.proposals import ProposalService
 from knowledge.models import Document, Embedding, Knowledge, KnowledgeFolder, KnowledgeScope, KnowledgeType, Paragraph
+from knowledge.serializers.knowledge import KnowledgeSerializer
 from models_provider.models import Model
 from hr.services.resume_parser import parse_resume_text
 from users.models import User
@@ -5786,6 +5787,18 @@ class AgentProposalTests(TestCase):
         self.assertEqual(HrAgentProposal.objects.get(id=first.id).status, "EXPIRED")
         self.assertEqual(HrAgentProposal.objects.get(id=second.id).status, "PENDING")
 
+    def test_job_detail_includes_latest_agent_summary(self):
+        proposal = self._proposal("ADVANCE")
+        detail = self.recruitment.get_job(self.job.id)
+        application_record = next(
+            record for record in detail["applications"]
+            if record["application_id"] == self.application["id"]
+        )
+        self.assertEqual(application_record["agent"]["proposal_id"], str(proposal.id))
+        self.assertEqual(application_record["agent"]["action"], "ADVANCE")
+        self.assertEqual(application_record["agent"]["status"], "PENDING")
+        self.assertEqual(application_record["agent"]["score"], 90)
+
     def test_list_for_application_lazily_expires(self):
         proposal = self._proposal("ADVANCE")
         Application.objects.filter(id=self.application["id"]).update(status="REJECTED")
@@ -5935,4 +5948,92 @@ class AgentApiTests(_HrApiBase):
             {"decision_note": "忽略"}, content_type="application/json",
         )
         self.assertEqual(response.json()["data"]["status"], "DISMISSED")
+
+
+
+class ProtectedResumeIndexTests(TestCase):
+    """D1 收尾（PRD-AGENT-RAG §7/§14 #3）：简历语义索引为受保护索引——列表隐藏、禁删禁改"""
+
+    def setUp(self):
+        self.user = User.objects.create(
+            username="protect-" + uuid.uuid7().hex[:8], nick_name="protect", password="p", role="ADMIN"
+        )
+        KnowledgeFolder.objects.get_or_create(
+            id="default", defaults={"name": "default", "workspace_id": "default"}
+        )
+        self.workspace_id = "workspace-protect"
+        self.protected = Knowledge.objects.create(
+            id=uuid.uuid7(), workspace_id=self.workspace_id, name="简历语义索引",
+            desc="", type=KnowledgeType.BASE.value, scope=KnowledgeScope.WORKSPACE.value,
+            user_id=self.user.id, meta={"hr_protected": True},
+        )
+        self.normal = Knowledge.objects.create(
+            id=uuid.uuid7(), workspace_id=self.workspace_id, name="企业政策库",
+            desc="", type=KnowledgeType.BASE.value, scope=KnowledgeScope.WORKSPACE.value,
+            user_id=self.user.id,
+        )
+
+    def _query(self):
+        return KnowledgeSerializer.Query(
+            data={"workspace_id": self.workspace_id, "user_id": str(self.user.id), "name": "",
+                  "folder_id": "default"}
+        )
+
+    def test_list_excludes_protected_index(self):
+        result = self._query().list()
+        ids = {row["id"] for row in result}
+        self.assertIn(str(self.normal.id), ids)
+        self.assertNotIn(str(self.protected.id), ids)
+
+    def test_page_excludes_protected_index(self):
+        result = self._query().page(1, 10)
+        ids = {row["id"] for row in result["records"]}
+        self.assertIn(str(self.normal.id), ids)
+        self.assertNotIn(str(self.protected.id), ids)
+
+    def test_delete_protected_rejected(self):
+        operate = KnowledgeSerializer.Operate(
+            data={"user_id": str(self.user.id), "workspace_id": self.workspace_id,
+                  "knowledge_id": str(self.protected.id)}
+        )
+        with self.assertRaisesRegex(AppApiException, "不可删除"):
+            operate.delete()
+        self.assertTrue(Knowledge.objects.filter(id=self.protected.id).exists())
+        operate = KnowledgeSerializer.Operate(
+            data={"user_id": str(self.user.id), "workspace_id": self.workspace_id,
+                  "knowledge_id": str(self.normal.id)}
+        )
+        self.assertTrue(operate.delete())
+
+    def test_batch_delete_with_protected_rejected(self):
+        from knowledge.serializers.knowledge import KnowledgeBatchOperateSerializer
+        operate = KnowledgeBatchOperateSerializer(
+            data={"user_id": str(self.user.id), "workspace_id": self.workspace_id}
+        )
+        operate.is_valid(raise_exception=True)
+        with self.assertRaisesRegex(AppApiException, "不可删除"):
+            operate.batch_delete(
+                {"id_list": [str(self.normal.id), str(self.protected.id)]}, with_valid=False
+            )
+        self.assertTrue(Knowledge.objects.filter(id=self.protected.id).exists())
+        self.assertTrue(Knowledge.objects.filter(id=self.normal.id).exists())
+
+    def test_edit_protected_rejected(self):
+        operate = KnowledgeSerializer.Operate(
+            data={"user_id": str(self.user.id), "workspace_id": self.workspace_id,
+                  "knowledge_id": str(self.protected.id)}
+        )
+        with self.assertRaisesRegex(AppApiException, "不可编辑"):
+            operate.edit({"name": "改名"}, select_one=False)
+
+    def test_get_resume_knowledge_backfills_marker(self):
+        from hr.services.resume_index import get_resume_knowledge
+        legacy = Knowledge.objects.create(
+            id=uuid.uuid7(), workspace_id="workspace-legacy", name="简历语义索引",
+            desc="", type=KnowledgeType.BASE.value, scope=KnowledgeScope.WORKSPACE.value,
+            user_id=self.user.id,
+        )
+        found = get_resume_knowledge("workspace-legacy")
+        self.assertEqual(found.id, legacy.id)
+        self.assertTrue((found.meta or {}).get("hr_protected"))
 

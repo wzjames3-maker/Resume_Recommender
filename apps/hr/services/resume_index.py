@@ -32,8 +32,12 @@ class ResidualPIIError(ValueError):
 
 
 def get_resume_knowledge(workspace_id):
-    """按工作区查找简历语义知识库。"""
-    return QuerySet(Knowledge).filter(workspace_id=workspace_id, name=_KNOWLEDGE_NAME).first()
+    """按工作区查找简历语义知识库（自动补保护标记，PRD-AGENT-RAG §7：受人事模块管理的受保护索引）。"""
+    knowledge = QuerySet(Knowledge).filter(workspace_id=workspace_id, name=_KNOWLEDGE_NAME).first()
+    if knowledge is not None and not (knowledge.meta or {}).get("hr_protected"):
+        knowledge.meta = {**(knowledge.meta or {}), "hr_protected": True}
+        knowledge.save(update_fields=["meta", "update_time"])
+    return knowledge
 
 
 def get_or_create_resume_knowledge(workspace_id, user_id):
@@ -59,6 +63,7 @@ def get_or_create_resume_knowledge(workspace_id, user_id):
             "embedding_model_id": str(embedding_model.id),
             "type": KnowledgeType.BASE.value,
             "scope": KnowledgeScope.WORKSPACE.value,
+            "meta": {"hr_protected": True},
         },
         with_valid=True,
     )

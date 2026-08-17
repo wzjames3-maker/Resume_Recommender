@@ -204,6 +204,7 @@ class KnowledgeSerializer(serializers.Serializer):
                         "temp.folder_id": models.CharField(),
                         "temp.id": models.CharField(),
                         "temp.scope": models.CharField(),
+                        "temp.meta": models.JSONField(),
                     }
                 )
             )
@@ -229,6 +230,8 @@ class KnowledgeSerializer(serializers.Serializer):
                 query_set = query_set.filter(**{"temp.scope": self.data.get("scope")})
             if "create_user" in self.data and self.data.get("create_user") is not None:
                 query_set = query_set.filter(**{"temp.user_id": self.data.get("create_user")})
+            # 受人事模块管理的受保护索引（简历语义索引）不出现在全局知识库列表
+            query_set = query_set.filter(**{"temp.meta__hr_protected__isnull": True})
             query_set = query_set.order_by("-temp.create_time", "temp.id")
             query_set_dict["default_sql"] = query_set
 
@@ -462,6 +465,8 @@ class KnowledgeSerializer(serializers.Serializer):
         def edit(self, instance: Dict, select_one=True):
             self.is_valid()
             knowledge = QuerySet(Knowledge).get(id=self.data.get("knowledge_id"))
+            if (knowledge.meta or {}).get("hr_protected"):
+                raise AppApiException(400, _("受保护的简历语义索引不可编辑"))
             KnowledgeEditRequest(data=instance).is_valid(knowledge=knowledge)
             if "embedding_model_id" in instance:
                 knowledge.embedding_model_id = instance.get("embedding_model_id")
@@ -487,6 +492,8 @@ class KnowledgeSerializer(serializers.Serializer):
         def delete(self):
             self.is_valid()
             knowledge = QuerySet(Knowledge).get(id=self.data.get("knowledge_id"))
+            if (knowledge.meta or {}).get("hr_protected"):
+                raise AppApiException(400, _("受保护的简历语义索引不可删除"))
             document_query_set = QuerySet(Document).filter(knowledge=knowledge)
             QuerySet(ProblemParagraphMapping).filter(knowledge=knowledge).delete()
             QuerySet(Paragraph).filter(knowledge=knowledge).delete()
@@ -1432,6 +1439,10 @@ class KnowledgeBatchOperateSerializer(serializers.Serializer):
             self.is_valid(raise_exception=True)
         id_list = instance.get("id_list")
         workspace_id = self.data.get("workspace_id")
+        if QuerySet(Knowledge).filter(
+            id__in=id_list, workspace_id=workspace_id, meta__hr_protected=True
+        ).exists():
+            raise AppApiException(400, _("受保护的简历语义索引不可删除"))
         knowledge_query_set = QuerySet(Knowledge).filter(id__in=id_list, workspace_id=workspace_id)
 
         # 删除所有关联

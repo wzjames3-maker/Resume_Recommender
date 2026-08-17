@@ -14,6 +14,7 @@ from hr.models import (
     Application,
     ApplicationStatus,
     AssignmentStatus,
+    HrAgentProposal,
     Candidate,
     CandidateAssignment,
     CandidateStatus,
@@ -706,7 +707,7 @@ class RecruitmentService:
             job=job,
         ).select_related("candidate", "current_stage").order_by("-update_time")
         result["active_assignment_count"] = applications.filter(status=ApplicationStatus.ACTIVE).count()
-        result["applications"] = [
+        application_records = [
             {
                 "application_id": str(application.id),
                 "candidate_id": str(application.candidate_id),
@@ -728,6 +729,29 @@ class RecruitmentService:
             }
             for application in applications
         ]
+        # D1：附带最新 Agent 建议摘要（看板徽标与报告卡入口）
+        proposal_by_target = {}
+        if application_records:
+            proposal_rows = HrAgentProposal.objects.filter(
+                workspace_id=self.workspace_id,
+                target_type="APPLICATION",
+                target_id__in=[record["application_id"] for record in application_records],
+            ).order_by("-create_time")
+            seen = set()
+            for proposal in proposal_rows:
+                if proposal.target_id in seen:
+                    continue
+                seen.add(proposal.target_id)
+                proposal_by_target[proposal.target_id] = {
+                    "proposal_id": str(proposal.id),
+                    "action": proposal.action,
+                    "status": proposal.status,
+                    "score": (proposal.payload_json or {}).get("decision", {}).get("score"),
+                    "create_time": proposal.create_time,
+                }
+        for record in application_records:
+            record["agent"] = proposal_by_target.get(record["application_id"])
+        result["applications"] = application_records
         write_audit_log(self.workspace_id, self.user_id, "VIEW_DETAIL", "JOB", job.id)
         return result
 
