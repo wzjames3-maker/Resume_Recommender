@@ -65,7 +65,8 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
   Application 创建时 APPLY/REFERRAL 自动触发（celery-once 防重）、并发/速率护栏、LLM 失败降级 run=FAILED 业务零影响；
   API：`POST /hr/agents/SCREENING/run`、`POST /hr/proposals/{id}/accept|dismiss`、`GET /hr/applications/{id}/proposals`；
   审计新增 AGENT_RUN/AGENT_DECIDE（HrAuditLog 已补 trace_id）。
-- 下一步：D2 JD 起草 + Interview Copilot（企业知识库工具、前端报告卡）。
+- D2 已完成：企业知识库工具 search_knowledge（HrConfig.agent_knowledge_bases 白名单 + PII 掩码）、similar_jobs（SQL 相似 + HIRED 画像）、JD 起草 Agent（JD_DRAFT，propose DRAFT target=JOB，采纳仅写字段需 ADMIN）与 Interview Copilot（INTERVIEW_COPILOT，prepare 面试题 / feedback 评估草稿，仅本人面试官或 OPERATOR+ 触发）、AgentRunAPI 支持三 Agent、job/interview proposals 列表、AI 设置页知识库白名单、职位 JD 草稿抽屉与我的面试 AI 助手；迁移 0023，HR 全量 486 tests 通过。
+- 下一步：D3 Sourcing 人才库激活 + 沟通草稿 + 免审分带配置（采纳率报表进 dashboard）。
 
 ## 5. 测试环境注意
 
