@@ -92,6 +92,8 @@ const actionLabels: Record<string, string> = {
   HANDOFF: '入职交接',
   IMPORT: '批量导入',
   SEARCH: '简历检索',
+  AGENT_RUN: 'Agent 运行',
+  AGENT_DECIDE: 'Agent 决策',
   ACCESS_DENIED: '越权拒绝',
 }
 
@@ -99,6 +101,10 @@ const objectTypeLabels: Record<string, string> = {
   CANDIDATE: '候选人',
   JOB: '职位',
   ASSIGNMENT: '关联',
+  APPLICATION: '申请',
+  INTERVIEW: '面试',
+  OFFER: 'Offer',
+  ONBOARDING: '入职交接',
   RESUME: '简历',
   HR_ACCESS: 'HR 授权',
   OTHER: '其他',

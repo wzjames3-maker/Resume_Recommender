@@ -298,6 +298,52 @@ export interface Application {
   update_time: string
 }
 
+export interface JDDraftSource {
+  kind: 'knowledge' | 'similar_job'
+  ref: string
+  note: string
+}
+
+export interface JDProposalPayload {
+  draft_target: 'JOB'
+  fields: { name: string; description: string; skill_requirements: string[] }
+  summary: string
+  sources: JDDraftSource[]
+}
+
+export type JDProposal = AgentProposal & { payload: JDProposalPayload }
+
+export interface CopilotQuestion {
+  question: string
+  target: string
+  difficulty: '基础' | '进阶' | '深挖'
+  follow_up: string
+}
+
+export interface CopilotWeakSpot {
+  name: string
+  detail: string
+  evidence: { paragraph_id: string | null; excerpt: string; relevance: number }[]
+}
+
+export interface CopilotPreparePayload {
+  phase: 'prepare'
+  weak_spots: CopilotWeakSpot[]
+  questions: CopilotQuestion[]
+  focus: string[]
+}
+
+export interface CopilotFeedbackPayload {
+  phase: 'feedback'
+  evaluation_draft: string
+  recommendation_hint: string
+  open_items: string[]
+}
+
+export type CopilotPayload = CopilotPreparePayload | CopilotFeedbackPayload
+
+export type CopilotProposal = AgentProposal & { payload: CopilotPayload }
+
 export interface JobCloseApplication {
   application_id: string
   candidate_name: string
@@ -375,6 +421,7 @@ export interface ResumeUploadResult {
 export interface HrConfig {
   llm_model_id: string | null
   rerank_model_id: string | null
+  agent_knowledge_bases: string[]
 }
 
 export type ResumeSearchMode = 'auto' | 'hybrid' | 'dense' | 'phrase' | 'skills'
@@ -518,9 +565,21 @@ export type HrAuditAction =
   | 'HANDOFF'
   | 'IMPORT'
   | 'SEARCH'
+  | 'AGENT_RUN'
+  | 'AGENT_DECIDE'
   | 'ACCESS_DENIED'
 
-export type HrAuditObjectType = 'CANDIDATE' | 'JOB' | 'ASSIGNMENT' | 'RESUME' | 'HR_ACCESS' | 'OTHER'
+export type HrAuditObjectType =
+  | 'CANDIDATE'
+  | 'JOB'
+  | 'ASSIGNMENT'
+  | 'APPLICATION'
+  | 'INTERVIEW'
+  | 'OFFER'
+  | 'ONBOARDING'
+  | 'RESUME'
+  | 'HR_ACCESS'
+  | 'OTHER'
 export type HrAuditResult = 'SUCCESS' | 'FAILED' | 'DENIED'
 
 export interface HrAuditLog {

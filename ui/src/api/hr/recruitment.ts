@@ -8,7 +8,9 @@ import type {
   Assignment,
   Candidate,
   CandidateDetail,
+  CopilotProposal,
   DuplicateCheckCandidate,
+  JDProposal,
   HrAccessMember,
   HrAccessSetItem,
   HrAuditAction,
@@ -151,6 +153,18 @@ const dismissProposal = (proposalId: string, data: Record<string, unknown>) =>
 
 const runScreeningAgent = (applicationId: string) =>
   post(`${prefix.value}/agents/SCREENING/run`, { application_id: applicationId }) as Promise<Result<Record<string, unknown>>>
+
+const runJdDraftAgent = (jobId: string) =>
+  post(`${prefix.value}/agents/JD_DRAFT/run`, { job_id: jobId }) as Promise<Result<Record<string, unknown>>>
+
+const runInterviewCopilot = (interviewId: string, data: Record<string, unknown>) =>
+  post(`${prefix.value}/agents/INTERVIEW_COPILOT/run`, { interview_id: interviewId, ...data }) as Promise<Result<Record<string, unknown>>>
+
+const getJobProposals = (jobId: string) =>
+  get(`${prefix.value}/jobs/${jobId}/proposals`) as Promise<Result<JDProposal[]>>
+
+const getInterviewProposals = (interviewId: string) =>
+  get(`${prefix.value}/interviews/${interviewId}/proposals`) as Promise<Result<CopilotProposal[]>>
 
 const createAssignment = (jobId: string, candidateId: string, note = '', extra: Partial<Assignment> = {}) =>
   post(`${prefix.value}/jobs/${jobId}/assignments`, {
@@ -313,12 +327,16 @@ export default {
   getApplicationProposals,
   getApplications,
   getInterviewsByApplication,
+  getInterviewProposals,
   getJobClosePreview,
+  getJobProposals,
   getJobStages,
   getOffersByApplication,
   dismissProposal,
   moveApplicationStage,
   restoreApplication,
+  runInterviewCopilot,
+  runJdDraftAgent,
   runScreeningAgent,
   terminalApplication,
   createAssignment,

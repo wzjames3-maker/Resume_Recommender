@@ -182,7 +182,12 @@
             <el-option v-for="(label, value) in jobCloseReasonLabels" :key="value" :label="label" :value="value" />
           </el-select>
         </el-form-item>
-        <el-form-item label="职位描述"><el-input v-model="jobForm.description" type="textarea" :rows="5" maxlength="4096" show-word-limit /></el-form-item>
+        <el-form-item label="职位描述">
+          <el-input v-model="jobForm.description" type="textarea" :rows="5" maxlength="4096" show-word-limit />
+          <el-button v-if="editingJob && isHrOperator" class="mt-8" size="small" :loading="jdDrafting" @click="startJdDraft()">
+            AI 起草 JD
+          </el-button>
+        </el-form-item>
         <el-form-item label="技能要求">
           <div class="w-full">
             <el-input v-model="jobSkillsText" placeholder="用逗号分隔，例如 Python, Django" />
@@ -192,6 +197,68 @@
       </el-form>
       <template #footer><el-button @click="jobDialogVisible = false">取消</el-button><el-button type="primary" :loading="saving" @click="saveJob">保存</el-button></template>
     </el-dialog>
+
+    <el-drawer v-model="jdDraftVisible" title="AI 职位描述草稿" size="640px">
+      <div v-if="jdDraftLoading" v-loading="true" class="p-16" style="min-height: 200px" />
+      <template v-else-if="jdDraftProposal">
+        <div class="flex-between mb-16">
+          <el-tag :type="proposalStatusTagType(jdDraftProposal.status)" size="small">
+            {{ proposalStatusLabel(jdDraftProposal.status) }}
+          </el-tag>
+          <span class="color-secondary">{{ jdDraftProposal.create_time ? new Date(jdDraftProposal.create_time).toLocaleString() : '' }}</span>
+        </div>
+        <el-alert v-if="jdDraftProposal.payload.summary" :title="jdDraftProposal.payload.summary" type="info" :closable="false" class="mb-16" />
+        <div class="ai-block">
+          <div class="ai-title">建议职位名称</div>
+          <div>{{ jdDraftProposal.payload.fields.name }}</div>
+        </div>
+        <div class="ai-block mt-16">
+          <div class="ai-title">技能要求</div>
+          <el-tag v-for="skill in jdDraftProposal.payload.fields.skill_requirements" :key="skill" class="mr-8" size="small">
+            {{ skill }}
+          </el-tag>
+          <span v-if="!jdDraftProposal.payload.fields.skill_requirements.length" class="color-secondary">（沿用原职位技能要求）</span>
+        </div>
+        <div class="jd-grid mt-16">
+          <div class="ai-block">
+            <div class="ai-title">当前描述（未写入）</div>
+            <pre class="jd-pre">{{ editingJob?.description || '(空)' }}</pre>
+          </div>
+          <div class="ai-block">
+            <div class="ai-title">AI 草稿（采纳后写入）</div>
+            <pre class="jd-pre">{{ jdDraftProposal.payload.fields.description }}</pre>
+          </div>
+        </div>
+        <div v-if="jdDraftProposal.payload.sources?.length" class="ai-block mt-16">
+          <div class="ai-title">依据来源</div>
+          <ul class="ai-list">
+            <li v-for="(source, idx) in jdDraftProposal.payload.sources" :key="idx">
+              <el-tag :type="source.kind === 'knowledge' ? 'primary' : 'success'" size="small">
+                {{ source.kind === 'knowledge' ? '知识库' : '相似职位' }}
+              </el-tag>
+              {{ source.ref }}<span v-if="source.note" class="color-secondary"> — {{ source.note }}</span>
+            </li>
+          </ul>
+        </div>
+        <div class="text-right mt-16">
+          <el-button v-if="jdDraftProposal.status === 'PENDING' && isHrAdmin" type="primary" :loading="jdSaving" @click="acceptJdDraft">
+            采纳写入职位
+          </el-button>
+          <el-button v-if="jdDraftProposal.status === 'PENDING' && isHrOperator" :loading="jdSaving" @click="dismissJdDraft">
+            忽略
+          </el-button>
+          <el-button @click="jdDraftVisible = false">关闭</el-button>
+        </div>
+        <el-alert
+          v-if="jdDraftProposal.status === 'PENDING' && !isHrAdmin"
+          class="mt-16"
+          type="warning"
+          :closable="false"
+          title="职位字段写入需要工作区管理员；如无权限可联系管理员处理。"
+        />
+      </template>
+      <el-empty v-else description="暂无 JD 草稿，可在职位编辑中点击「AI 起草 JD」生成" />
+    </el-drawer>
 
     <el-dialog v-model="interviewDrawerVisible" title="面试记录" width="640px">
       <div class="flex-between mb-16">
@@ -486,6 +553,7 @@ import {
 import type {
   AgentProposal,
   Interview,
+  JDProposal,
   Job,
   JobApplication,
   JobClosePreview,
@@ -725,6 +793,90 @@ function openJobDialog(job?: Job) {
   editingJob.value = job || null
   resetJobForm(job)
   jobDialogVisible.value = true
+}
+
+const jdDraftVisible = ref(false)
+const jdDraftLoading = ref(false)
+const jdDrafting = ref(false)
+const jdSaving = ref(false)
+const jdDraftProposal = ref<JDProposal | null>(null)
+const jdDraftList = ref<JDProposal[]>([])
+
+function loadJdProposals() {
+  if (!editingJob.value) return
+  jdDraftLoading.value = true
+  HrApi.getJobProposals(editingJob.value.id)
+    .then((response) => {
+      jdDraftList.value = response.data || []
+      jdDraftProposal.value = jdDraftList.value.find((p) => p.status === 'PENDING') || jdDraftList.value[0] || null
+    })
+    .catch(() => {})
+    .finally(() => {
+      jdDraftLoading.value = false
+    })
+}
+
+function startJdDraft() {
+  if (!editingJob.value) return
+  MsgConfirm(
+    'AI 起草 JD',
+    '将基于职位信息、企业知识库模板与相似职位生成描述草稿；草稿不会直接写入职位，需人工确认后采纳。',
+  )
+    .then(() => {
+      if (!editingJob.value) return
+      jdDrafting.value = true
+      HrApi.runJdDraftAgent(editingJob.value.id)
+        .then(() => {
+          MsgSuccess('草稿已生成')
+          jdDraftVisible.value = true
+          loadJdProposals()
+        })
+        .catch(() => {})
+        .finally(() => {
+          jdDrafting.value = false
+        })
+    })
+    .catch(() => {})
+}
+
+function acceptJdDraft() {
+  if (!jdDraftProposal.value) return
+  MsgConfirm('采纳草稿', '确认将 AI 草稿写入职位（名称/描述/技能要求）？不会改变职位状态。', { confirmButtonClass: 'danger' })
+    .then(() => {
+      if (!jdDraftProposal.value) return
+      jdSaving.value = true
+      HrApi.acceptProposal(jdDraftProposal.value.id, { decision_note: 'HR 采纳 JD 草稿' })
+        .then(() => {
+          MsgSuccess('已写入职位')
+          jdDraftVisible.value = false
+          if (editingJob.value) loadJobDetail(editingJob.value)
+          refresh()
+        })
+        .catch(() => {})
+        .finally(() => {
+          jdSaving.value = false
+        })
+    })
+    .catch(() => {})
+}
+
+function dismissJdDraft() {
+  if (!jdDraftProposal.value) return
+  MsgConfirm('忽略草稿', '确定忽略这份 AI 草稿？')
+    .then(() => {
+      if (!jdDraftProposal.value) return
+      jdSaving.value = true
+      HrApi.dismissProposal(jdDraftProposal.value.id, { decision_note: 'HR 忽略草稿' })
+        .then(() => {
+          MsgSuccess('已忽略')
+          loadJdProposals()
+        })
+        .catch(() => {})
+        .finally(() => {
+          jdSaving.value = false
+        })
+    })
+    .catch(() => {})
 }
 
 function extractSkillsFromDescription() {
@@ -1342,5 +1494,42 @@ watch(() => route.query.new, (isNew) => {
   align-items: center;
   gap: 6px;
   font-size: 12px;
+}
+
+.ai-block {
+  border: 1px solid var(--el-border-color-lighter);
+  border-radius: 8px;
+  padding: 12px 16px;
+  background: var(--el-fill-color-lighter);
+}
+
+.ai-title {
+  font-weight: 600;
+  font-size: 13px;
+  margin-bottom: 8px;
+  color: var(--el-text-color-primary);
+}
+
+.ai-list {
+  margin: 0;
+  padding-left: 18px;
+  color: var(--el-text-color-regular);
+  line-height: 1.9;
+}
+
+.jd-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.jd-pre {
+  max-height: 320px;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  font-size: 12px;
+  line-height: 1.7;
+  margin: 0;
 }
 </style>
