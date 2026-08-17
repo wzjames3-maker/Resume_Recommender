@@ -71,8 +71,13 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
   反馈闭环统计（GET /hr/agents/stats，agent_type × 动作 × 分数带采纳率，工作台采纳率卡片）、
   真实模型探针管理命令 `hr_agent_probe`（RUN_REAL_MODEL=1 + 环境变量凭据，验证 JSON 能力与 Screening 端到端）；
   迁移 0024，HR 全量 500 tests 通过。
-- 下一步：D1 评测集标定（≥200 例一致性报告，需真实 LLM Key 与标注）与试点观测（采纳率/处理时长），
-  数据支撑后由 ADMIN 显式开启免审分带（保留审计与人工回滚）。
+- D1 评测标定基线已完成（2026-08-17，真实模型）：`import_resume_dataset`（数据集/train.json 300 份语料导入，
+  预切片免 LLM 切片 + 幂等 + 同步向量化）、`eval_screening`（正/负画像配对 + 4 并发真实 Screening，
+  报告 docs/screening-eval-2026-08-17.json 与 docs/SCREENING-EVAL-2026-08-17.md）；
+  基线 200 例宽松一致率 72%（正 44% / 负 100%），未达 ≥80% 目标——诊断：泛技能职位构造 +
+  flash-lite 保守评估（正样本误拒）、LLM 校验失败 13%；建议评测构造升级（完整 JD）与模型档位对比后再标定。
+- 下一步：按评测建议①③升级评测构造/对比更强模型重测，叠加 ≥80 例人工标注集交叉验证后冻结阈值；
+  试点观测（采纳率/处理时长）数据支撑后由 ADMIN 显式开启免审分带（保留审计与人工回滚）。
 
 ## 5. 测试环境注意
 
