@@ -87,8 +87,13 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
   同 seed 7 全量 200 例真实重测：宽松一致率 82.5%（正 65% / 负 100%，达成 ≥80%），严格一致率 55%（ADVANCE 12 例）；
   诊断：残留误拒为 flash-lite 数值标定（清晰匹配评 0-47 分，评论文本却明说一致），彻底解决需更强模型档位（当前账号仅有 flash-lite）；
   报告 docs/SCREENING-EVAL-2026-08-17b.md + JSON、全量 486 tests OK。
+- 部署验证（PRD §8，2026-08-17）已完成：Celery worker+beat 真实调度（探针文件、任务注册、beat 19:00 派发→worker 执行）、
+  对象存储私有读（匿名 403/签名 200）、备份加密+恢复演练+轮转（Salted__/pg_restore 624 条目）、日志 PII 脱敏复核（无真实泄露）、
+  .env.example 600/默认 DEBUG=False、PG 连接加密补齐（MAXKB_DB_SSLMODE→OPTIONS sslmode）；报告 docs/DEPLOYMENT-VERIFY-2026-08-17.md。
+  遗留缺口：租户注销/数据返还未实现（已出设计稿 specs/2026-08-15-hr-tenant-offboarding-design.md，实现排期后续）。
 - 下一步：按评测建议①③升级评测构造/对比更强模型重测，叠加 ≥80 例人工标注集交叉验证后冻结阈值；
-  试点观测（采纳率/处理时长）数据支撑后由 ADMIN 显式开启免审分带（保留审计与人工回滚）。
+  试点观测（采纳率/处理时长）数据支撑后由 ADMIN 显式开启免审分带（保留审计与人工回滚）；
+  排期实现 hr_offboard_workspace（租户注销/数据返还，阶段 A）并过跨工作区隔离测试后再宣称 PRD §7 门槛全满足。
 
 ## 5. 测试环境注意
 
