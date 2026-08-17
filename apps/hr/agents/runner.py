@@ -208,18 +208,18 @@ def _is_number(value):
         return False
 
 
-def _guard_limits(workspace_id, config):
-    """并发与速率护栏：超限返回跳过原因，否则 None。"""
+def _guard_limits(workspace_id, config, agent_type=_AGENT_TYPE):
+    """并发与速率护栏：超限返回跳过原因，否则 None（D2 起按 agent_type 独立统计）。"""
     concurrent = HrAgentRun.objects.filter(
         workspace_id=workspace_id,
-        agent_type=_AGENT_TYPE,
+        agent_type=agent_type,
         status__in=[HrAgentRunStatus.PENDING, HrAgentRunStatus.RUNNING],
     ).count()
     if concurrent >= config.agent_max_concurrent_runs:
         return f"concurrent run limit reached ({config.agent_max_concurrent_runs})"
     since = timezone.now() - timezone.timedelta(hours=1)
     recent = HrAgentRun.objects.filter(
-        workspace_id=workspace_id, agent_type=_AGENT_TYPE, create_time__gte=since
+        workspace_id=workspace_id, agent_type=agent_type, create_time__gte=since
     ).count()
     if recent >= config.agent_run_rate_limit:
         return f"rate limit reached ({config.agent_run_rate_limit}/hour)"

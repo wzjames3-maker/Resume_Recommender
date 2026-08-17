@@ -113,6 +113,41 @@ def search_to_llm(search_result):
     }
 
 
+def knowledge_to_llm(search_result, maximum=_SEARCH_EVIDENCE_LIMIT):
+    """企业知识库检索投影：仅保留文档/段落标题与脱敏摘要，出入库路径一律剔除。"""
+    items = []
+    for item in (search_result or {}).get("items", [])[:maximum]:
+        items.append({
+            "paragraph_id": item.get("paragraph_id"),
+            "knowledge_id": item.get("knowledge_id"),
+            "knowledge_name": item.get("knowledge_name"),
+            "document_id": item.get("document_id"),
+            "document_name": item.get("document_name"),
+            "title": item.get("title", ""),
+            "content": str(item.get("content", ""))[:_MAX_EXCERPT_LENGTH],
+            "score": item.get("score"),
+        })
+    return {"items": items, "meta": (search_result or {}).get("meta") or {}}
+
+
+def similar_jobs_to_llm(rows):
+    """相似职位投影：不含候选人数据；录用画像仅聚合统计。"""
+    output = []
+    for job in (rows or [])[:5]:
+        output.append({
+            "job_id": job.get("job_id"),
+            "name": job.get("name"),
+            "department": job.get("department"),
+            "city": job.get("city"),
+            "level": job.get("level"),
+            "skill_overlap": job.get("skill_overlap", []),
+            "similarity": job.get("similarity"),
+            "hired_count": job.get("hired_count"),
+            "hired_avg_years": job.get("hired_avg_years"),
+        })
+    return output
+
+
 def sanitize_for_trace(value, maximum=200):
     """工具轨迹脱敏：仅保留简短摘要（不记录联系方式/简历原文）。"""
     if isinstance(value, dict):

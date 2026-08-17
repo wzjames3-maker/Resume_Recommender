@@ -361,6 +361,10 @@ class HrConfig(models.Model):
     agent_run_rate_limit = models.PositiveSmallIntegerField(default=10, verbose_name="Agent 每小时触发上限")
     agent_score_version = models.CharField(max_length=32, default="v1", verbose_name="评分函数版本")
     agent_score_bands = models.JSONField(default=dict, verbose_name="评分分带（advance/hold）")
+    agent_knowledge_bases = models.JSONField(
+        default=list, verbose_name="Agent 可用企业知识库白名单（id 列表）"
+    )
+    agent_prompt_versions = models.JSONField(default=dict, verbose_name="Agent 提示词生效版本（只读）")
     create_time = models.DateTimeField(auto_now_add=True)
     update_time = models.DateTimeField(auto_now=True)
 
@@ -579,6 +583,8 @@ class ApplicationEvent(models.Model):
 
 class HrAgentType(models.TextChoices):
     SCREENING = "SCREENING", "Screening"
+    JD_DRAFT = "JD_DRAFT", "JD Draft"
+    INTERVIEW_COPILOT = "INTERVIEW_COPILOT", "Interview Copilot"
 
 
 class HrAgentTriggerType(models.TextChoices):
@@ -599,7 +605,7 @@ class HrAgentRun(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
     workspace_id = models.CharField(max_length=64, db_index=True)
-    agent_type = models.CharField(max_length=16, choices=HrAgentType.choices, default=HrAgentType.SCREENING)
+    agent_type = models.CharField(max_length=32, choices=HrAgentType.choices, default=HrAgentType.SCREENING)
     trigger_type = models.CharField(max_length=16, choices=HrAgentTriggerType.choices, default=HrAgentTriggerType.EVENT)
     ref_object_type = models.CharField(max_length=32, default="APPLICATION")
     ref_object_id = models.CharField(max_length=64, db_index=True)

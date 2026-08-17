@@ -29,7 +29,14 @@ from .offer_views import (
     OfferDetailAPI,
     OfferListAPI,
 )
-from .agent_views import AgentRunAPI, ProposalAcceptAPI, ProposalDismissAPI, ProposalListAPI
+from .agent_views import (
+    AgentRunAPI,
+    InterviewProposalListAPI,
+    JobProposalListAPI,
+    ProposalAcceptAPI,
+    ProposalDismissAPI,
+    ProposalListAPI,
+)
 from .application_views import (
     ApplicationEventAPI,
     ApplicationInterviewAPI,
@@ -78,6 +85,8 @@ __all__ = [
     "CandidateImportAPI",
     "CandidateImportTemplateAPI",
     "AgentRunAPI",
+    "InterviewProposalListAPI",
+    "JobProposalListAPI",
     "ProposalAcceptAPI",
     "ProposalDismissAPI",
     "ProposalListAPI",

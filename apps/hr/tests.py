@@ -791,14 +791,22 @@ class AiServiceTests(TestCase):
         self.service = AiService(workspace_id="workspace-a", user_id=self.user_id, hr_role="ADMIN")
 
     def test_config_default_is_null(self):
-        self.assertEqual(self.service.get_config(), {"llm_model_id": None, "rerank_model_id": None})
+        self.assertEqual(
+            self.service.get_config(),
+            {"llm_model_id": None, "rerank_model_id": None, "agent_knowledge_bases": []},
+        )
 
     @patch("hr.serializers.ai.get_model_by_id")
     def test_save_and_get_config(self, mock_get_model):
         mock_get_model.return_value = SimpleNamespace(model_type="LLM")
         saved = self.service.save_config({"llm_model_id": "model-1"})
-        self.assertEqual(saved, {"llm_model_id": "model-1", "rerank_model_id": None})
-        self.assertEqual(self.service.get_config(), {"llm_model_id": "model-1", "rerank_model_id": None})
+        self.assertEqual(
+            saved, {"llm_model_id": "model-1", "rerank_model_id": None, "agent_knowledge_bases": []}
+        )
+        self.assertEqual(
+            self.service.get_config(),
+            {"llm_model_id": "model-1", "rerank_model_id": None, "agent_knowledge_bases": []},
+        )
         mock_get_model.assert_called_once_with("model-1", "workspace-a")
 
     @patch("hr.serializers.ai.get_model_by_id")
@@ -817,7 +825,9 @@ class AiServiceTests(TestCase):
     def test_save_config_with_rerank(self, mock_get_model):
         mock_get_model.side_effect = [SimpleNamespace(model_type="LLM"), SimpleNamespace(model_type="RERANKER")]
         saved = self.service.save_config({"llm_model_id": "model-1", "rerank_model_id": "rerank-1"})
-        self.assertEqual(saved, {"llm_model_id": "model-1", "rerank_model_id": "rerank-1"})
+        self.assertEqual(
+            saved, {"llm_model_id": "model-1", "rerank_model_id": "rerank-1", "agent_knowledge_bases": []}
+        )
         self.assertEqual(self.service.get_config()["rerank_model_id"], "rerank-1")
 
     @patch("hr.serializers.ai.get_model_by_id")
@@ -6036,4 +6046,495 @@ class ProtectedResumeIndexTests(TestCase):
         found = get_resume_knowledge("workspace-legacy")
         self.assertEqual(found.id, legacy.id)
         self.assertTrue((found.meta or {}).get("hr_protected"))
+
+class KnowledgeSearchToolTests(TestCase):
+    """D2 search_knowledge：白名单强制 + 保护索引排除 + PII 掩码 + 结果形状"""
+
+    def setUp(self):
+        self.user = User.objects.create(
+            username="kb-" + uuid.uuid7().hex[:8], nick_name="kb", password="p", role="ADMIN"
+        )
+        KnowledgeFolder.objects.get_or_create(id="default", defaults={"name": "default", "workspace_id": "default"})
+        self.workspace_id = "workspace-kb"
+        self.kb = Knowledge.objects.create(
+            id=uuid.uuid7(), workspace_id=self.workspace_id, name="JD 模板库",
+            desc="", type=KnowledgeType.BASE.value, scope=KnowledgeScope.WORKSPACE.value, user_id=self.user.id,
+        )
+        self.kb_other = Knowledge.objects.create(
+            id=uuid.uuid7(), workspace_id=self.workspace_id, name="其他库",
+            desc="", type=KnowledgeType.BASE.value, scope=KnowledgeScope.WORKSPACE.value, user_id=self.user.id,
+        )
+        self.kb_protected = Knowledge.objects.create(
+            id=uuid.uuid7(), workspace_id=self.workspace_id, name="受保护简历索引",
+            desc="", type=KnowledgeType.BASE.value, scope=KnowledgeScope.WORKSPACE.value, user_id=self.user.id,
+            meta={"hr_protected": True},
+        )
+        HrConfig.objects.update_or_create(
+            workspace_id=self.workspace_id,
+            defaults={"llm_model_id": "fake", "agent_knowledge_bases": [str(self.kb.id), str(self.kb_protected.id)]},
+        )
+        self.document = Document.objects.create(
+            id=uuid.uuid7(), knowledge=self.kb, name="JD规范.docx", char_length=200,
+            user_id=self.user.id,
+        )
+        self.paragraph = Paragraph.objects.create(
+            id=uuid.uuid7(), document=self.document, knowledge=self.kb, content="请联系 13812345678 或 alice@test.com",
+            title="职位描述",
+        )
+
+    def _fake_embedding_model(self):
+        fake = Mock()
+        fake.embed_query.return_value = [0.1] * 8
+        return fake
+
+    def test_whitelist_enforced(self):
+        from hr.services.knowledge_search import search_knowledge
+        with self.assertRaises(AppApiException) as ctx:
+            search_knowledge(self.workspace_id, "JD", kb_ids=[str(self.kb_other.id)])
+        self.assertEqual(ctx.exception.code, 400)
+
+    def test_whitelist_only_and_protected_excluded(self):
+        with patch("hr.services.knowledge_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()), \
+                patch("hr.services.knowledge_search.EmbeddingSearch") as m_emb, \
+                patch("hr.services.knowledge_search.KeywordsSearch") as m_key:
+            from hr.services.knowledge_search import search_knowledge
+            m_emb.return_value.handle.return_value = [{"paragraph_id": str(self.paragraph.id), "similarity": 0.9}]
+            m_key.return_value.handle.return_value = []
+            result = search_knowledge(self.workspace_id, "JD 模板")
+        self.assertEqual(len(result["items"]), 1)
+        item = result["items"][0]
+        self.assertEqual(item["knowledge_name"], "JD 模板库")
+        self.assertEqual(item["document_name"], "JD规范.docx")
+        self.assertIn("138****5678", item["content"])
+        self.assertNotIn("13812345678", item["content"])
+        self.assertIn("al***@test.com", item["content"])
+        self.assertNotIn("alice@test.com", item["content"])
+        # 受保护简历索引在白名单内也被排除（检索源仅企业知识库）
+        patched = patch("hr.services.knowledge_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model())
+        with patched, patch("hr.services.knowledge_search.EmbeddingSearch") as m_emb2, \
+                patch("hr.services.knowledge_search.KeywordsSearch"):
+            m_emb2.return_value.handle.return_value = [{"paragraph_id": "missing", "similarity": 0.9}]
+            result2 = search_knowledge(self.workspace_id, "JD", kb_ids=[str(self.kb_protected.id)])
+        self.assertEqual(result2["items"], [])
+
+    def test_empty_whitelist_returns_empty(self):
+        from hr.services.knowledge_search import search_knowledge
+        HrConfig.objects.update_or_create(workspace_id=self.workspace_id, defaults={"agent_knowledge_bases": []})
+        result = search_knowledge(self.workspace_id, "JD")
+        self.assertEqual(result["items"], [])
+        self.assertEqual(result["meta"]["knowledge_count"], 0)
+
+
+class SimilarJobsServiceTests(TestCase):
+    """D2 similar_jobs：SQL 相似打分 + HIRED 录用画像，不含候选人联系方式"""
+
+    def setUp(self):
+        self.workspace_id = "workspace-sim"
+        self.recruitment = RecruitmentService(self.workspace_id, uuid.uuid7(), hr_role="ADMIN")
+        base = {"headcount": 1}
+        self.job_a = Job.objects.get(id=self.recruitment.create_job(
+            {"name": "Python 后端", "department": "Eng", "city": "上海", "skill_requirements": ["Python", "Django"], **base})["id"])
+        self.job_b = Job.objects.get(id=self.recruitment.create_job(
+            {"name": "资深 Python", "department": "Eng", "city": "上海", "skill_requirements": ["Python", "FastAPI"], **base})["id"])
+        job_c = self.recruitment.create_job(
+            {"name": "Java 前端", "department": "Ops", "city": "北京", "skill_requirements": ["Java"], **base}
+        )
+        self.job_c_id = job_c["id"]
+
+    def _hired(self, job, skills, years):
+        candidate = Candidate.objects.create(
+            name="Hired-" + uuid.uuid7().hex[:6], workspace_id=self.workspace_id,
+            skills=skills, years_experience=years,
+        )
+        return ApplicationService(self.workspace_id, uuid.uuid7(), hr_role="ADMIN").create_application(
+            job.id, candidate.id, {}
+        )
+
+    def test_rank_and_hired_profile(self):
+        from hr.services.similar_jobs import similar_jobs
+        app = self._hired(self.job_b, ["Python", "Django"], 6)
+        Application.objects.filter(id=app["id"]).update(status="HIRED")
+        rows = similar_jobs(self.workspace_id, str(self.job_a.id))
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["job_id"], str(self.job_b.id))
+        self.assertEqual(row["hired_count"], 1)
+        self.assertEqual(row["hired_avg_years"], 6.0)
+        self.assertTrue(any(skill == "python" for skill in row["hired_top_skills"]))
+        dumped = json.dumps(row)
+        self.assertNotIn("phone", dumped)
+        self.assertNotIn("email", dumped)
+
+    def test_excludes_self_and_unrelated(self):
+        from hr.services.similar_jobs import similar_jobs
+        rows = similar_jobs(self.workspace_id, str(self.job_c_id))
+        self.assertEqual(rows, [])
+
+
+class JdDraftRunnerTests(TestCase):
+    """D2 JD 起草 Runner：固定顺序工具 + LLM 草稿 + DRAFT 提案（target=JOB）"""
+
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.workspace_id = "workspace-jddraft"
+        self.recruitment = RecruitmentService(self.workspace_id, self.user_id, hr_role="ADMIN")
+        HrConfig.objects.update_or_create(
+            workspace_id=self.workspace_id,
+            defaults={"llm_model_id": "fake-llm", "agent_max_concurrent_runs": 2, "agent_run_rate_limit": 100},
+        )
+        job_data = self.recruitment.create_job({
+            "name": "Python Engineer", "department": "Eng", "city": "上海",
+            "skill_requirements": ["Python"], "description": "旧描述",
+        })
+        self.job = Job.objects.get(id=job_data["id"])
+
+    def _fake_model(self, payload):
+        fake = Mock()
+        fake.invoke.return_value = SimpleNamespace(content=json.dumps(payload, ensure_ascii=False))
+        return fake
+
+    def _draft_payload(self):
+        return {
+            "name": "高级 Python 工程师",
+            "description": "# 岗位职责\n负责核心服务开发。",
+            "skill_requirements": ["Python", "Django"],
+            "summary": "对标 JD 模板库与相似职位",
+            "sources": [{"kind": "knowledge", "ref": "JD 模板库", "note": "职责结构"}],
+        }
+
+    def _patches(self, payload=None, kb_raise=False):
+        from hr.agents.jd_runner import run_jd_draft_agent
+        return (patch("hr.agents.jd_runner._load_llm", return_value=(self._fake_model(payload if payload is not None else self._draft_payload()), "fake-llm")),
+                patch("hr.agents.jd_runner.search_knowledge", side_effect=AppApiException(500, "kb down") if kb_raise else lambda *a, **kw: {"items": [{"paragraph_id": "p1", "knowledge_id": "k1", "knowledge_name": "JD模板", "document_id": "d1", "document_name": "规范", "title": "t", "content": "模板内容", "score": 0.9}], "meta": {"knowledge_count": 1, "total": 1}}),
+                patch("hr.agents.jd_runner.similar_jobs", return_value=[{"job_id": "j2", "name": "相似职位", "department": "Eng", "city": "上海", "level": "", "skill_overlap": ["Python"], "similarity": 0.8, "hired_count": 3, "hired_avg_years": 5.0, "hired_top_skills": ["python"]}]),
+                run_jd_draft_agent)
+
+    def test_success_flow_creates_job_draft_proposal(self):
+        from hr.agents.jd_runner import run_jd_draft_agent
+        with patch("hr.agents.jd_runner._load_llm", return_value=(self._fake_model(self._draft_payload()), "fake-llm")), \
+                patch("hr.agents.jd_runner.search_knowledge", return_value={"items": [], "meta": {}}), \
+                patch("hr.agents.jd_runner.similar_jobs", return_value=[]):
+            output = run_jd_draft_agent(str(self.job.id), user_id=self.user_id)
+        self.assertEqual(output["status"], "SUCCEEDED")
+        run = HrAgentRun.objects.get(id=output["run_id"])
+        self.assertEqual(run.agent_type, "JD_DRAFT")
+        self.assertEqual(run.ref_object_type, "JOB")
+        self.assertEqual(run.ref_object_id, str(self.job.id))
+        self.assertEqual(run.prompt_version, "jd-draft-v1")
+        tool_names = [item["tool"] for item in run.tool_trace]
+        self.assertEqual(tool_names, ["get_job", "search_knowledge", "similar_jobs"])
+        proposal = HrAgentProposal.objects.get(id=output["proposal_id"])
+        self.assertEqual(proposal.target_type, "JOB")
+        self.assertEqual(proposal.target_id, str(self.job.id))
+        self.assertEqual(proposal.action, "DRAFT")
+        self.assertEqual(proposal.status, "PENDING")
+        self.assertIn("岗位职责", proposal.payload_json["fields"]["description"])
+        self.assertTrue(
+            HrAuditLog.objects.filter(workspace_id=self.workspace_id, action="AGENT_RUN", trace_id=run.id).exists()
+        )
+        self.assertTrue(HrConfig.objects.get(workspace_id=self.workspace_id).agent_prompt_versions.get("JD_DRAFT"))
+
+    def test_kb_failure_does_not_abort(self):
+        from hr.agents.jd_runner import run_jd_draft_agent
+        with patch("hr.agents.jd_runner._load_llm", return_value=(self._fake_model(self._draft_payload()), "fake-llm")), \
+                patch("hr.agents.jd_runner.search_knowledge", side_effect=AppApiException(500, "kb down")), \
+                patch("hr.agents.jd_runner.similar_jobs", return_value=[]):
+            output = run_jd_draft_agent(str(self.job.id), user_id=self.user_id)
+        self.assertEqual(output["status"], "SUCCEEDED")
+
+    def test_job_not_found_returns_none(self):
+        from hr.agents.jd_runner import run_jd_draft_agent
+        self.assertIsNone(run_jd_draft_agent(str(uuid.uuid7()), user_id=self.user_id))
+
+    def test_closed_job_skips(self):
+        from hr.agents.jd_runner import run_jd_draft_agent
+        Job.objects.filter(id=self.job.id).update(status="CLOSED", close_reason="OTHER")
+        output = run_jd_draft_agent(str(self.job.id), user_id=self.user_id)
+        self.assertEqual(output["status"], "SKIPPED")
+        self.assertIn("closed", output["error"])
+
+    def test_invalid_llm_output_marks_failed(self):
+        from hr.agents.jd_runner import run_jd_draft_agent
+        fake = Mock()
+        fake.invoke.return_value = SimpleNamespace(content="not json")
+        with patch("hr.agents.jd_runner._load_llm", return_value=(fake, "fake-llm")), \
+                patch("hr.agents.jd_runner.search_knowledge", return_value={"items": [], "meta": {}}), \
+                patch("hr.agents.jd_runner.similar_jobs", return_value=[]):
+            output = run_jd_draft_agent(str(self.job.id), user_id=self.user_id)
+        self.assertEqual(output["status"], "FAILED")
+        self.assertTrue(HrAgentRun.objects.get(id=output["run_id"]).error)
+
+    def test_new_run_expires_previous_pending_draft(self):
+        from hr.agents.jd_runner import run_jd_draft_agent
+        with patch("hr.agents.jd_runner._load_llm", return_value=(self._fake_model(self._draft_payload()), "fake-llm")), \
+                patch("hr.agents.jd_runner.search_knowledge", return_value={"items": [], "meta": {}}), \
+                patch("hr.agents.jd_runner.similar_jobs", return_value=[]):
+            first = run_jd_draft_agent(str(self.job.id), user_id=self.user_id)
+            second = run_jd_draft_agent(str(self.job.id), user_id=self.user_id)
+        self.assertEqual(HrAgentProposal.objects.get(id=first["proposal_id"]).status, "EXPIRED")
+        self.assertEqual(HrAgentProposal.objects.filter(
+            workspace_id=self.workspace_id, target_type="JOB", target_id=str(self.job.id), status="PENDING"
+        ).count(), 1)
+        self.assertEqual(second["proposal_id"], str(HrAgentProposal.objects.get(
+            workspace_id=self.workspace_id, target_type="JOB", target_id=str(self.job.id), status="PENDING").id))
+
+
+class JdDraftAcceptTests(TestCase):
+    """D2 JD 草稿采纳：仅写字段不改状态；ADMIN；幂等；关闭后过期"""
+
+    def setUp(self):
+        self.admin_id = uuid.uuid7()
+        self.operator_id = uuid.uuid7()
+        self.workspace_id = "workspace-jdaccept"
+        self.recruitment = RecruitmentService(self.workspace_id, self.admin_id, hr_role="ADMIN")
+        job_data = self.recruitment.create_job(
+            {"name": "Engineer", "department": "Eng", "city": "上海", "skill_requirements": ["Python"]}
+        )
+        self.job = Job.objects.get(id=job_data["id"])
+
+    def _proposal(self):
+        from hr.agents.proposals import propose
+        run = HrAgentRun.objects.create(
+            workspace_id=self.workspace_id, agent_type="JD_DRAFT", trigger_type="MANUAL",
+            ref_object_type="JOB", ref_object_id=str(self.job.id), status="SUCCEEDED",
+            prompt_version="v", user_id=self.admin_id,
+        )
+        return propose(
+            self.workspace_id, run, str(self.job.id), action="DRAFT", target_type="JOB",
+            payload_json={"draft_target": "JOB", "fields": {
+                "name": "高级工程师",
+                "description": "# 岗位职责\n新草稿描述",
+                "skill_requirements": ["Python", "Django"],
+            }},
+        )
+
+    def _service(self, hr_role, user_id=None):
+        return ProposalService(self.workspace_id, user_id or self.admin_id, hr_role)
+
+    def test_accept_applies_fields_without_status_change(self):
+        proposal = self._proposal()
+        accepted = self._service("ADMIN").accept(proposal.id, {"decision_note": "采纳"})
+        self.assertEqual(accepted["status"], "ACCEPTED")
+        self.job.refresh_from_db()
+        self.assertEqual(self.job.name, "高级工程师")
+        self.assertIn("新草稿描述", self.job.description)
+        self.assertEqual(self.job.skill_requirements, ["Python", "Django"])
+        self.assertEqual(self.job.status, "OPEN")
+        self.assertTrue(HrAuditLog.objects.filter(
+            workspace_id=self.workspace_id, action="AGENT_DECIDE", trace_id=proposal.run_id
+        ).exists())
+
+    def test_operator_cannot_apply_job_draft(self):
+        proposal = self._proposal()
+        with self.assertRaises(AppUnauthorizedFailed):
+            self._service("OPERATOR", self.operator_id).accept(proposal.id, {})
+
+    def test_accept_twice_rejected(self):
+        proposal = self._proposal()
+        self._service("ADMIN").accept(proposal.id, {})
+        with self.assertRaises(AppApiException):
+            self._service("ADMIN").accept(proposal.id, {})
+
+    def test_accept_when_job_closed_expires(self):
+        proposal = self._proposal()
+        Job.objects.filter(id=self.job.id).update(status="CLOSED", close_reason="OTHER")
+        with self.assertRaises(AppApiException) as ctx:
+            self._service("ADMIN").accept(proposal.id, {})
+        self.assertEqual(ctx.exception.code, 409)
+        self.assertEqual(HrAgentProposal.objects.get(id=proposal.id).status, "EXPIRED")
+
+
+class InterviewCopilotRunnerTests(TestCase):
+    """D2 Interview Copilot Runner：prepare 面试题 / feedback 评估草稿；面试官权限；无 PII"""
+
+    def setUp(self):
+        self.interviewer = User.objects.create(
+            username="copilot-" + uuid.uuid7().hex[:8], nick_name="copilot", password="p", role="ADMIN"
+        )
+        self.other_id = uuid.uuid7()
+        self.workspace_id = "workspace-copilot"
+        self.recruitment = RecruitmentService(self.workspace_id, self.interviewer.id, hr_role="ADMIN")
+        HrConfig.objects.update_or_create(
+            workspace_id=self.workspace_id,
+            defaults={"llm_model_id": "fake-llm", "agent_max_concurrent_runs": 2, "agent_run_rate_limit": 100},
+        )
+        self.candidate = Candidate.objects.create(
+            name="Alice", workspace_id=self.workspace_id, skills=["python"],
+            current_city="上海", highest_degree="硕士", years_experience=5,
+        )
+        job_data = self.recruitment.create_job({
+            "name": "Python Engineer", "department": "Eng", "city": "上海",
+            "skill_requirements": ["Python", "K8s"],
+        })
+        self.job = Job.objects.get(id=job_data["id"])
+        self.application = ApplicationService(self.workspace_id, self.interviewer.id, hr_role="ADMIN").create_application(
+            self.job.id, self.candidate.id, {}
+        )
+        self.interview = Interview.objects.create(
+            workspace_id=self.workspace_id, application=Application.objects.get(id=self.application["id"]),
+            assignment=None, round_no=1, interviewer=self.interviewer.nick_name,
+            interviewer_user_id=self.interviewer.id, status="PENDING", user_id=self.interviewer.id,
+        )
+
+    def _fake_model(self, payload):
+        fake = Mock()
+        fake.invoke.return_value = SimpleNamespace(content=json.dumps(payload, ensure_ascii=False))
+        return fake
+
+    def _prepare_facts(self):
+        return {
+            "weak_spots": [{"name": "K8s", "detail": "简历未提及容器化经验", "evidence": []}],
+            "questions": [
+                {"question": "请介绍你的 Python 项目", "target": "经验真实性", "difficulty": "基础", "follow_up": ""},
+                {"question": "K8s 部署经验？", "target": "技能深挖", "difficulty": "深挖", "follow_up": "如何排查"},
+                {"question": "如何排查线上故障", "target": "软素质", "difficulty": "进阶", "follow_up": ""},
+                {"question": "为什么加入我们", "target": "动机", "difficulty": "基础", "follow_up": ""},
+                {"question": "团队协作经历", "target": "软素质", "difficulty": "进阶", "follow_up": ""},
+            ],
+            "focus": ["K8s 实操", "排障能力"],
+        }
+
+    def test_prepare_success_by_interviewer(self):
+        from hr.agents.copilot_runner import run_interview_copilot
+        with patch("hr.agents.copilot_runner._load_llm", return_value=(self._fake_model(self._prepare_facts()), "fake-llm")), \
+                patch("hr.agents.copilot_runner.search_resumes", return_value={"items": [], "meta": {}}), \
+                patch("hr.agents.copilot_runner.search_knowledge", return_value={"items": [], "meta": {}}), \
+                patch("hr.agents.copilot_runner.similar_jobs", return_value=[]):
+            output = run_interview_copilot(
+                str(self.interview.id), data={"phase": "prepare"}, user_id=self.interviewer.id, hr_role="VIEWER"
+            )
+        self.assertEqual(output["status"], "SUCCEEDED")
+        run = HrAgentRun.objects.get(id=output["run_id"])
+        self.assertEqual(run.agent_type, "INTERVIEW_COPILOT")
+        self.assertEqual(run.ref_object_type, "INTERVIEW")
+        self.assertEqual(run.ref_object_id, str(self.interview.id))
+        tool_names = [item["tool"] for item in run.tool_trace]
+        self.assertEqual(tool_names, ["get_job", "get_candidate_overview", "search_resumes", "search_knowledge", "similar_jobs"])
+        proposal = HrAgentProposal.objects.get(id=output["proposal_id"])
+        self.assertEqual(proposal.target_type, "INTERVIEW")
+        self.assertEqual(proposal.action, "DRAFT")
+        self.assertEqual(proposal.payload_json["phase"], "prepare")
+        self.assertEqual(len(proposal.payload_json["questions"]), 5)
+
+    def test_no_pii_in_payload(self):
+        from hr.agents.copilot_runner import run_interview_copilot
+        with patch("hr.agents.copilot_runner._load_llm", return_value=(self._fake_model(self._prepare_facts()), "fake-llm")), \
+                patch("hr.agents.copilot_runner.search_resumes", return_value={"items": [{"candidate": {"id": str(self.candidate.id), "name": "Alice", "phone": "13812345678", "email": "a@b.com"}, "resume": {"id": "r1"}, "paragraphs": [{"id": "p1", "title": "t", "content": "Python", "score": 0.8}], "document_id": "d1"}], "meta": {}}), \
+                patch("hr.agents.copilot_runner.search_knowledge", return_value={"items": [], "meta": {}}), \
+                patch("hr.agents.copilot_runner.similar_jobs", return_value=[]):
+            output = run_interview_copilot(str(self.interview.id), user_id=self.interviewer.id, hr_role="ADMIN")
+        run = HrAgentRun.objects.get(id=output["run_id"])
+        dumped = json.dumps({"input": run.input_meta, "trace": run.tool_trace, "output": run.output_json}, ensure_ascii=False)
+        self.assertNotIn("13812345678", dumped)
+        self.assertNotIn("a@b.com", dumped)
+
+    def test_feedback_phase_generates_draft(self):
+        from hr.agents.copilot_runner import run_interview_copilot
+        feedback_facts = {"evaluation_draft": "综合表现良好，K8s 经验欠缺", "recommendation_hint": "推进", "open_items": ["K8s"]}
+        Interview.objects.filter(id=self.interview.id).update(status="PASSED", feedback="表现不错")
+        with patch("hr.agents.copilot_runner._load_llm", return_value=(self._fake_model(feedback_facts), "fake-llm")), \
+                patch("hr.agents.copilot_runner.search_resumes", return_value={"items": [], "meta": {}}), \
+                patch("hr.agents.copilot_runner.search_knowledge", return_value={"items": [], "meta": {}}), \
+                patch("hr.agents.copilot_runner.similar_jobs", return_value=[]):
+            output = run_interview_copilot(
+                str(self.interview.id), data={"phase": "feedback", "feedback": "表现不错但 K8s 欠缺"},
+                user_id=self.interviewer.id, hr_role="VIEWER",
+            )
+        self.assertEqual(output["status"], "SUCCEEDED")
+        proposal = HrAgentProposal.objects.get(id=output["proposal_id"])
+        self.assertEqual(proposal.payload_json["phase"], "feedback")
+        self.assertIn("K8s", proposal.payload_json["evaluation_draft"])
+
+    def test_feedback_phase_requires_feedback_text(self):
+        from hr.agents.copilot_runner import run_interview_copilot
+        output = run_interview_copilot(
+            str(self.interview.id), data={"phase": "feedback"}, user_id=self.interviewer.id, hr_role="ADMIN"
+        )
+        self.assertEqual(output["status"], "SKIPPED")
+        self.assertIn("feedback text", output["error"])
+
+    def test_non_interviewer_viewer_denied(self):
+        from hr.agents.copilot_runner import run_interview_copilot
+        with self.assertRaises(AppUnauthorizedFailed):
+            run_interview_copilot(str(self.interview.id), data={"phase": "prepare"}, user_id=self.other_id, hr_role="VIEWER")
+
+    def test_prepare_skips_when_feedback_submitted(self):
+        from hr.agents.copilot_runner import run_interview_copilot
+        Interview.objects.filter(id=self.interview.id).update(status="PASSED")
+        output = run_interview_copilot(str(self.interview.id), data={"phase": "prepare"}, user_id=self.interviewer.id, hr_role="ADMIN")
+        self.assertEqual(output["status"], "SKIPPED")
+        self.assertIn("interview not pending", output["error"])
+
+    def test_interview_not_found_returns_none(self):
+        from hr.agents.copilot_runner import run_interview_copilot
+        self.assertIsNone(run_interview_copilot(str(uuid.uuid7()), user_id=self.interviewer.id, hr_role="ADMIN"))
+
+
+class InterviewCopilotAcceptTests(TestCase):
+    """D2 Copilot 草稿确认：不改业务状态；prepare 反馈后过期 / feedback 可采纳"""
+
+    def setUp(self):
+        self.owner_id = uuid.uuid7()
+        self.workspace_id = "workspace-copilot-accept"
+        self.recruitment = RecruitmentService(self.workspace_id, self.owner_id, hr_role="ADMIN")
+        self.candidate = Candidate.objects.create(name="Alice", workspace_id=self.workspace_id)
+        job_data = self.recruitment.create_job({"name": "Engineer", "headcount": 1})
+        self.job = Job.objects.get(id=job_data["id"])
+        self.application = ApplicationService(self.workspace_id, self.owner_id, hr_role="ADMIN").create_application(
+            self.job.id, self.candidate.id, {}
+        )
+        self.interview = Interview.objects.create(
+            workspace_id=self.workspace_id, application=Application.objects.get(id=self.application["id"]),
+            assignment=None, round_no=1, interviewer="HR", interviewer_user_id=self.owner_id,
+            status="PENDING", user_id=self.owner_id,
+        )
+
+    def _proposal(self, phase="prepare"):
+        from hr.agents.proposals import propose
+        run = HrAgentRun.objects.create(
+            workspace_id=self.workspace_id, agent_type="INTERVIEW_COPILOT", trigger_type="MANUAL",
+            ref_object_type="INTERVIEW", ref_object_id=str(self.interview.id), status="SUCCEEDED",
+            prompt_version="v", user_id=self.owner_id,
+        )
+        payload = {"phase": phase, "questions": [{"question": "q1", "target": "t", "difficulty": "基础", "follow_up": ""}]}
+        if phase == "feedback":
+            payload = {"phase": phase, "evaluation_draft": "draft", "recommendation_hint": "推进", "open_items": []}
+        return propose(
+            self.workspace_id, run, str(self.interview.id), action="DRAFT", target_type="INTERVIEW",
+            payload_json=payload,
+        )
+
+    def _service(self, hr_role="ADMIN"):
+        return ProposalService(self.workspace_id, self.owner_id, hr_role)
+
+    def test_accept_confirms_without_state_change(self):
+        proposal = self._proposal()
+        accepted = self._service().accept(proposal.id, {})
+        self.assertEqual(accepted["status"], "ACCEPTED")
+        self.interview.refresh_from_db()
+        self.assertEqual(self.interview.status, "PENDING")
+        self.assertEqual(self.interview.feedback, "")
+        self.assertTrue(HrAuditLog.objects.filter(
+            workspace_id=self.workspace_id, action="AGENT_DECIDE"
+        ).exists())
+
+    def test_viewer_cannot_decide(self):
+        proposal = self._proposal()
+        with self.assertRaises(AppUnauthorizedFailed):
+            ProposalService(self.workspace_id, self.owner_id, "VIEWER").accept(proposal.id, {})
+
+    def test_prepare_proposal_expires_after_feedback(self):
+        proposal = self._proposal()
+        Interview.objects.filter(id=self.interview.id).update(status="PASSED", feedback="ok")
+        with self.assertRaises(AppApiException) as ctx:
+            self._service().accept(proposal.id, {})
+        self.assertEqual(ctx.exception.code, 409)
+        self.assertEqual(HrAgentProposal.objects.get(id=proposal.id).status, "EXPIRED")
+
+    def test_feedback_proposal_acceptable_after_feedback(self):
+        proposal = self._proposal(phase="feedback")
+        Interview.objects.filter(id=self.interview.id).update(status="PASSED", feedback="ok")
+        accepted = self._service().accept(proposal.id, {})
+        self.assertEqual(accepted["status"], "ACCEPTED")
+
 

@@ -36,6 +36,7 @@ class AiService:
         return {
             "llm_model_id": config.llm_model_id if config else None,
             "rerank_model_id": config.rerank_model_id if config and config.rerank_model_id else None,
+            "agent_knowledge_bases": [str(kb_id) for kb_id in (config.agent_knowledge_bases or [])] if config else [],
         }
 
     def save_config(self, data):
@@ -63,11 +64,36 @@ class AiService:
             defaults["rerank_model_id"] = rerank_model_id
         else:
             defaults["rerank_model_id"] = ""
+        knowledge_bases = data.get("agent_knowledge_bases")
+        if knowledge_bases is not None:
+            if not isinstance(knowledge_bases, list) or not all(isinstance(kb, str) and kb.strip() for kb in knowledge_bases):
+                raise AppApiException(400, "agent_knowledge_bases must be a list of knowledge base ids")
+            defaults["agent_knowledge_bases"] = self._validate_knowledge_bases(knowledge_bases)
         config, _ = HrConfig.objects.update_or_create(workspace_id=self.workspace_id, defaults=defaults)
         return {
             "llm_model_id": config.llm_model_id,
             "rerank_model_id": config.rerank_model_id if config.rerank_model_id else None,
+            "agent_knowledge_bases": [str(kb_id) for kb_id in (config.agent_knowledge_bases or [])],
         }
+
+    def _validate_knowledge_bases(self, knowledge_bases):
+        """白名单校验：知识库必须属于本工作区且非受保护简历索引。"""
+        from django.db.models import QuerySet
+        from knowledge.models import Knowledge
+
+        requested = []
+        for kb_id in knowledge_bases:
+            kb_id = kb_id.strip()
+            if kb_id not in requested:
+                requested.append(kb_id)
+        allowed = QuerySet(Knowledge).filter(
+            workspace_id=self.workspace_id, id__in=requested, meta__hr_protected__isnull=True
+        )
+        allowed_ids = {str(knowledge.id) for knowledge in allowed}
+        invalid = [kb_id for kb_id in requested if kb_id not in allowed_ids]
+        if invalid:
+            raise AppApiException(400, "知识库不在本工作区或为受保护简历索引：" + "、".join(invalid))
+        return requested
 
     def _model(self):
         model = self._model_or_none()
