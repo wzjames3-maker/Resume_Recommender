@@ -609,3 +609,22 @@ class HrAgentProposal(models.Model):
                 name="hr_agent_proposal_ws_target_st",
             )
         ]
+
+
+class HrOffboard(models.Model):
+    """HR 工作区注销账本（tombstone）：注销后唯一保留的 HR 记录。
+
+    既是幂等锚点（workspace_id 唯一，重复执行报已注销），也是注销留痕
+    （执行人 / 时间 / 各表计数 / 数据返还包路径），满足设计验收「注销全程留痕」。
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
+    workspace_id = models.CharField(max_length=64, unique=True)
+    offboarded_at = models.DateTimeField(auto_now_add=True)
+    user_id = models.UUIDField(null=True, blank=True)
+    exported_path = models.CharField(max_length=1024, blank=True, default="")
+    counts = models.JSONField(default=dict)
+    force = models.BooleanField(default=False)
+
+    class Meta:
+        db_table = "hr_offboard"

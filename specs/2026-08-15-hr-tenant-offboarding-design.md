@@ -52,7 +52,14 @@
 4. 不影响其它 workspace（跨工作区数据隔离断言）。
 5. 注销全程留痕（EXPORT/DELETE 审计，含执行人/时间）。
 
-## 6. 后续拆分
+## 6. 实现状态与后续拆分
 
-- 阶段 A：hr_offboard_workspace 命令（如上）——本轮验证报告标注的遗留缺口；
-- 阶段 B：内核 workspace 注销编排回调 HR 清理 + 对象存储统一回收；租户数据返还 Web 流程。
+- ✅ 阶段 A（已完成，2026-08-18，命令 + 跨工作区隔离测试）：`hr_offboard_workspace` 已落地并提交。
+  - 实现与设计的差异说明：
+    1. `--purge` 未单列参数——本稿「默认行为=审计+清理」即默认执行物理删除，保留 `--dry-run` / `--export` / `--force`；
+    2. 幂等锚点为新增 `hr_offboard` tombstone（模型 + 迁移 0026）：`workspace_id` 唯一、注销后唯一保留的 HR 记录（执行人/时间/各表计数/导出包路径/force），重复执行报「已注销」不重删；
+    3. 「无人成员在线」守卫在本阶段以可落库的活跃业务代理：无 `--force` 时，存在 PENDING/RUNNING Agent 运行、ACTIVE 申请、非 CLOSED 职位任一即拒绝；
+    4. 审计：EXPORT/DELETE 审计行照写，但按 §2 数据清单随 `hr_audit_log` 最后清空，存证以 `hr_offboard` tombstone 为准（满足 §5 留痕）；
+    5. 简历语义索引用 `delete_resume_knowledge`（`delete_resume_index` 同底层 `_delete_document`，且覆盖未挂接简历的孤儿文档），索引文档/段落/向量/知识库一并清空。
+  - 验收：本稿 §5 全部通过（hr hr_* 全表归零仅 tombstone 保留、幂等、dry-run 与实际一致、跨工作区隔离断言、EXPORT/DELETE 留痕）+ 真实开发库端到端验证。
+- 阶段 B（未开始）：内核 workspace 注销编排回调 HR 清理 + 对象存储统一回收；租户数据返还 Web 流程。

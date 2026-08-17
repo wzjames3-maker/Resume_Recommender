@@ -90,10 +90,16 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
 - 部署验证（PRD §8，2026-08-17）已完成：Celery worker+beat 真实调度（探针文件、任务注册、beat 19:00 派发→worker 执行）、
   对象存储私有读（匿名 403/签名 200）、备份加密+恢复演练+轮转（Salted__/pg_restore 624 条目）、日志 PII 脱敏复核（无真实泄露）、
   .env.example 600/默认 DEBUG=False、PG 连接加密补齐（MAXKB_DB_SSLMODE→OPTIONS sslmode）；报告 docs/DEPLOYMENT-VERIFY-2026-08-17.md。
-  遗留缺口：租户注销/数据返还未实现（已出设计稿 specs/2026-08-15-hr-tenant-offboarding-design.md，实现排期后续）。
+  遗留缺口：租户注销/数据返还阶段 A 已实现（见下条新增记录）；阶段 B（内核 workspace 注销编排回调 HR 清理 + 对象存储统一回收 + 数据返还 Web 流程）排期后续。
+- 租户注销/数据返还（设计稿阶段 A，2026-08-18）已完成并提交：新增 hr_offboard tombstone（0026 迁移，幂等锚点+留痕：执行人/时间/各表计数/导出包路径，注销后唯一保留的 HR 记录）、
+  hr_offboard_workspace <workspace_id> [--dry-run|--force|--export <dir>|--user-id <uuid>] 命令（默认即审计+清理；dry-run 只统计；export 先出脱敏 JSON 数据返还包再清理；force 绕过活跃守卫：有 PENDING/RUNNING Agent 运行 / ACTIVE 申请 / 非 CLOSED 职位时拒绝）、
+  清理顺序严格按「先子后父、先账本后配置」：简历语义索引 delete_resume_knowledge 批量删文档/段落/向量/知识库（含孤儿）→ 流程对象与级联子对象 → 职位/阶段 → 候选人 → 简历文件 → 配置/授权/审计/流转日志 → 存储对象缺失容忍；
+  全程审计 EXPORT/DELETE 行随 hr_audit_log 一并清空，存证以 hr_offboard 为准；
+  hr.tests 新增 HrOffboardCommandTests 7 例（全量归零/索引与存储清空/dry-run 与实际计数一致/幂等重入报已注销/跨工作区隔离/守卫拒绝/导出脱敏+路径留痕），HR 全量 440 tests OK + ruff 干净；
+  已在真实开发库端到端验证：offboard-e2e 工作区 23 行/1 存储文件清零、7 段导出 JSON 脱敏（138****5678 / e2***@example.com）、二次执行报已注销不重删。
 - 下一步：按评测建议①③升级评测构造/对比更强模型重测，叠加 ≥80 例人工标注集交叉验证后冻结阈值；
   试点观测（采纳率/处理时长）数据支撑后由 ADMIN 显式开启免审分带（保留审计与人工回滚）；
-  排期实现 hr_offboard_workspace（租户注销/数据返还，阶段 A）并过跨工作区隔离测试后再宣称 PRD §7 门槛全满足。
+  PRD §7 租户注销门槛现为：阶段 A（命令+隔离测试）已达成，仅差阶段 B 内核注销编排回调与数据返还 Web 流程。
 
 ## 5. 测试环境注意
 

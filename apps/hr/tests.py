@@ -6169,3 +6169,270 @@ class ReviewFixRegressionTests(TestCase):
         self.assertEqual(len(self.service.page_applications(1, 20, {"relation_type": "REFERRAL"})["records"]), 1)
         self.assertEqual(len(self.service.page_applications(1, 20, {"city": "上海"})["records"]), 1)
         self.assertEqual(len(self.service.page_applications(1, 20, {"q": "Bob"})["records"]), 1)
+
+class HrOffboardCommandTests(TestCase):
+    """阶段 A：hr_offboard_workspace 命令 —— 全量清理 / dry-run 一致 / 幂等 / 跨工作区隔离 / 活跃守卫 / 导出脱敏 / 留痕。"""
+
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.ws = "ws-offboard"
+        self.keep_ws = "ws-keep"
+        self.user = User.objects.create(
+            username="offboard-" + uuid.uuid7().hex[:8], nick_name="offboard", password="p", role="ADMIN"
+        )
+        from hr.services.storage import get_storage
+
+        self.storage = get_storage()
+        # 简历原文件（写到本地存储根，验证注销连带删除存储对象）
+        handle = tempfile.NamedTemporaryFile(suffix=".txt", delete=False)
+        handle.write("姓名：张三\n电话：13812345678\n3年经验".encode("utf-8"))
+        handle.close()
+        self.tmp_resume_src = handle.name
+        self.resume_key = f"resume/{self.ws}/{uuid.uuid7().hex}.txt"
+        self.storage.save(self.resume_key, self.tmp_resume_src)
+        # Offer 附件（第二个存储对象，验证一并删除）
+        self.att_key = f"offer/{self.ws}/{uuid.uuid7().hex}.pdf"
+        att = tempfile.NamedTemporaryFile(suffix=".pdf", delete=False)
+        att.write(b"%PDF-fake")
+        att.close()
+        self.storage.save(self.att_key, att.name)
+
+    def _build_workspace(self, ws, active=True):
+        """构造 ws 工作区的完整 HR 数据（候选人+技能/职位+阶段/申请+事件/面试/Offer/交接/Agent 账本/
+        配置/授权/审计/简历索引/存储对象）。active=False 时职位关闭、申请置终态，用于守卫对比。"""
+        from hr.models import CandidateSkill, ResumeFlowLog
+        from knowledge.models import KnowledgeFolder
+        from hr.services.audit import write_audit_log
+
+        candidate = Candidate.objects.create(
+            name="Alice", workspace_id=ws, phone="13812345678", email="alice@example.com", skills=["Python"]
+        )
+        CandidateSkill.objects.create(candidate=candidate, skill_norm="python", skill_raw="Python")
+        job = Job.objects.create(
+            name="Engineer", workspace_id=ws, headcount=1,
+            status="OPEN" if active else "CLOSED", close_reason=None if active else "FILLED",
+        )
+        stages = [
+            JobStage.objects.create(workspace_id=ws, job=job, key=key, name=name, order=order, is_system=True)
+            for order, (key, name) in enumerate(
+                [("APPLIED", "待筛选"), ("SCREEN", "初筛"), ("INTERVIEW", "面试"), ("OFFER", "Offer")], start=1
+            )
+        ]
+        # 先建申请（此时无 HrConfig，post_save 不触发 Agent 分发），再建配置
+        app = Application.objects.create(
+            workspace_id=ws, candidate=candidate, job=job, current_stage=stages[0],
+            status="ACTIVE" if active else "REJECTED",
+            termination_reason=None if active else "NOT_FIT",
+        )
+        ApplicationEvent.objects.create(workspace_id=ws, application=app, event_type="CREATED", to_status="ACTIVE")
+        Interview.objects.create(workspace_id=ws, application=app, round_no=1)
+        offer = Offer.objects.create(
+            workspace_id=ws, application=app, candidate=candidate, job=job, version=1,
+            attachment_path=self.att_key,
+        )
+        OnboardingHandoff.objects.create(workspace_id=ws, application=app, candidate=candidate, job=job, offer=offer)
+        run = HrAgentRun.objects.create(
+            workspace_id=ws, agent_type="SCREENING", status="SUCCEEDED",
+            ref_object_type="APPLICATION", ref_object_id=str(app.id),
+        )
+        HrAgentProposal.objects.create(
+            workspace_id=ws, run=run, target_type="APPLICATION", target_id=str(app.id), action="ADVANCE"
+        )
+        HrConfig.objects.create(workspace_id=ws, llm_model_id="m-1", agent_enable_screening=True)
+        HrAccess.objects.create(workspace_id=ws, user_id=self.user_id, role="ADMIN")
+        write_audit_log(ws, self.user_id, "CREATE", "CANDIDATE", str(candidate.id))
+        # 简历语义索引（知识库/文档/段落/向量）
+        KnowledgeFolder.objects.get_or_create(id="default", defaults={"name": "default", "workspace_id": "default"})
+        knowledge = Knowledge.objects.create(workspace_id=ws, name="简历语义索引", desc="")
+        document = Document.objects.create(
+            id=uuid.uuid7(), knowledge_id=knowledge.id, name="r.txt", char_length=10, user_id=self.user.id
+        )
+        paragraph = Paragraph.objects.create(
+            id=uuid.uuid7(), document_id=document.id, knowledge_id=knowledge.id, content="内容", title="t"
+        )
+        Embedding.objects.create(
+            id=uuid.uuid7(), document_id=document.id, paragraph_id=paragraph.id,
+            knowledge_id=knowledge.id, embedding=[0.1] * 8, is_active=True,
+        )
+        resume = ResumeFile.objects.create(
+            workspace_id=ws, file_name="r.txt", extension="txt", file_path=self.resume_key,
+            file_size=1, sha256="sha-" + uuid.uuid7().hex, status=ResumeStatus.SUCCESS,
+            candidate=candidate, document_id=document.id, user_id=self.user_id,
+        )
+        ResumeFlowLog.objects.create(workspace_id=ws, resume_id=resume.id, node="EXTRACT")
+        return candidate, job, app, offer, knowledge, document
+
+    def _ws_counts(self, ws):
+        return {
+            "candidates": Candidate.objects.filter(workspace_id=ws).count(),
+            "jobs": Job.objects.filter(workspace_id=ws).count(),
+            "applications": Application.objects.filter(workspace_id=ws).count(),
+            "interviews": Interview.objects.filter(workspace_id=ws).count(),
+            "offers": Offer.objects.filter(workspace_id=ws).count(),
+            "handoffs": OnboardingHandoff.objects.filter(workspace_id=ws).count(),
+        }
+
+    def test_offboard_purges_all_hr_data_and_index_and_storage(self):
+        from django.core.management import call_command
+        from hr.models import CandidateSkill, HrOffboard, ResumeFlowLog
+
+        _c, _j, _a, _o, knowledge, document = self._build_workspace(self.ws)
+        before = self._ws_counts(self.ws)
+        self.assertGreater(sum(before.values()), 0)
+        self.assertTrue(self.storage.exists(self.resume_key))
+        self.assertTrue(self.storage.exists(self.att_key))
+
+        call_command("hr_offboard_workspace", self.ws, force=True, user_id=str(self.user_id))
+
+        # 验收 1：hr_* 该工作区全表归零（hr_offboard tombstone 例外）
+        self.assertEqual(Candidate.objects.filter(workspace_id=self.ws).count(), 0)
+        self.assertEqual(CandidateSkill.objects.filter(candidate__workspace_id=self.ws).count(), 0)
+        self.assertEqual(Job.objects.filter(workspace_id=self.ws).count(), 0)
+        self.assertEqual(JobStage.objects.filter(workspace_id=self.ws).count(), 0)
+        self.assertEqual(Application.objects.filter(workspace_id=self.ws).count(), 0)
+        self.assertEqual(ApplicationEvent.objects.filter(workspace_id=self.ws).count(), 0)
+        self.assertEqual(Interview.objects.filter(workspace_id=self.ws).count(), 0)
+        self.assertEqual(Offer.objects.filter(workspace_id=self.ws).count(), 0)
+        self.assertEqual(OnboardingHandoff.objects.filter(workspace_id=self.ws).count(), 0)
+        self.assertEqual(HrAgentRun.objects.filter(workspace_id=self.ws).count(), 0)
+        self.assertEqual(HrAgentProposal.objects.filter(workspace_id=self.ws).count(), 0)
+        self.assertEqual(HrConfig.objects.filter(workspace_id=self.ws).count(), 0)
+        self.assertEqual(HrAccess.objects.filter(workspace_id=self.ws).count(), 0)
+        self.assertEqual(HrAuditLog.objects.filter(workspace_id=self.ws).count(), 0)
+        self.assertEqual(ResumeFlowLog.objects.filter(workspace_id=self.ws).count(), 0)
+        self.assertEqual(ResumeFile.objects.filter(workspace_id=self.ws).count(), 0)
+        # 简历语义索引：知识库/文档/段落/向量全空
+        self.assertFalse(Knowledge.objects.filter(id=knowledge.id).exists())
+        self.assertFalse(Document.objects.filter(id=document.id).exists())
+        self.assertFalse(Paragraph.objects.filter(document_id=document.id).exists())
+        self.assertFalse(Embedding.objects.filter(document_id=document.id).exists())
+        # 存储对象删除
+        self.assertFalse(self.storage.exists(self.resume_key))
+        self.assertFalse(self.storage.exists(self.att_key))
+        # 留痕：tombstone（执行人/时间/计数/导出包）
+        tombstone = HrOffboard.objects.get(workspace_id=self.ws)
+        self.assertEqual(str(tombstone.user_id), str(self.user_id))
+        self.assertEqual(tombstone.exported_path, "")
+        self.assertEqual(tombstone.counts["applications"], before["applications"])
+        self.assertEqual(tombstone.counts["storage_files"], 2)
+
+    def test_dry_run_matches_actual_delete_counts(self):
+        from django.core.management import call_command
+        from hr.management.commands.hr_offboard_workspace import Command
+        from hr.models import HrOffboard
+
+        self._build_workspace(self.ws)
+        expected = Command._counts(self.ws)
+        self.assertGreater(expected["candidates"], 0)
+
+        # dry-run：只统计不落库
+        call_command("hr_offboard_workspace", self.ws, dry_run=True)
+        self.assertFalse(HrOffboard.objects.filter(workspace_id=self.ws).exists())
+        self.assertEqual(Candidate.objects.filter(workspace_id=self.ws).count(), expected["candidates"])
+
+        # 实际删除：计数必须与 dry-run 一致（验收 3）
+        call_command("hr_offboard_workspace", self.ws, force=True)
+        tombstone = HrOffboard.objects.get(workspace_id=self.ws)
+        self.assertEqual(tombstone.counts, expected)
+        self.assertEqual(Candidate.objects.filter(workspace_id=self.ws).count(), 0)
+
+    def test_second_run_reports_already_offboarded(self):
+        from django.core.management import call_command
+        from io import StringIO
+
+        from hr.models import HrOffboard
+
+        self._build_workspace(self.ws)
+        call_command("hr_offboard_workspace", self.ws, force=True)
+        self.assertEqual(HrOffboard.objects.filter(workspace_id=self.ws).count(), 1)
+
+        out = StringIO()
+        call_command("hr_offboard_workspace", self.ws, force=True, stdout=out)
+        self.assertIn("已注销", out.getvalue())
+        self.assertEqual(HrOffboard.objects.filter(workspace_id=self.ws).count(), 1)  # 不重复删
+
+    def test_cross_workspace_isolation(self):
+        from django.core.management import call_command
+        from hr.models import CandidateSkill
+
+        self._build_workspace(self.ws)
+        keep_knowledge, keep_doc = self._build_workspace(self.keep_ws)[4:6]
+
+        call_command("hr_offboard_workspace", self.ws, force=True)
+
+        # 验收 4：其它工作区数据完整
+        self.assertEqual(Candidate.objects.filter(workspace_id=self.keep_ws).count(), 1)
+        self.assertEqual(CandidateSkill.objects.filter(candidate__workspace_id=self.keep_ws).count(), 1)
+        self.assertEqual(Job.objects.filter(workspace_id=self.keep_ws).count(), 1)
+        self.assertEqual(Application.objects.filter(workspace_id=self.keep_ws).count(), 1)
+        self.assertEqual(Offer.objects.filter(workspace_id=self.keep_ws).count(), 1)
+        self.assertEqual(HrConfig.objects.filter(workspace_id=self.keep_ws).count(), 1)
+        self.assertTrue(Knowledge.objects.filter(id=keep_knowledge.id).exists())
+        self.assertTrue(Document.objects.filter(id=keep_doc.id).exists())
+        self.assertTrue(Embedding.objects.filter(document_id=keep_doc.id).exists())
+
+    def test_guard_refuses_live_workspace_without_force(self):
+        from django.core.management import call_command
+        from io import StringIO
+
+        from hr.models import HrOffboard
+
+        self._build_workspace(self.ws)  # OPEN 职位 + ACTIVE 申请
+        out = StringIO()
+        call_command("hr_offboard_workspace", self.ws, stdout=out)
+        self.assertIn("拒绝注销", out.getvalue())
+        self.assertFalse(HrOffboard.objects.filter(workspace_id=self.ws).exists())
+        self.assertEqual(Application.objects.filter(workspace_id=self.ws).count(), 1)  # 未删
+
+        call_command("hr_offboard_workspace", self.ws, force=True)  # --force 放行
+        self.assertEqual(Application.objects.filter(workspace_id=self.ws).count(), 0)
+        self.assertTrue(HrOffboard.objects.filter(workspace_id=self.ws).exists())
+
+    def test_guard_refuses_pending_agent_run(self):
+        from django.core.management import call_command
+        from io import StringIO
+
+        from hr.models import HrAgentRun, HrOffboard
+
+        self._build_workspace(self.ws, active=False)  # 职位已关、申请已拒，无活跃流程
+        HrAgentRun.objects.create(
+            workspace_id=self.ws, agent_type="SCREENING", status="RUNNING",
+            ref_object_type="APPLICATION", ref_object_id=str(uuid.uuid7()),
+        )
+        out = StringIO()
+        call_command("hr_offboard_workspace", self.ws, stdout=out)
+        self.assertIn("Agent 运行", out.getvalue())
+        self.assertFalse(HrOffboard.objects.filter(workspace_id=self.ws).exists())
+
+        call_command("hr_offboard_workspace", self.ws, force=True)
+        self.assertEqual(HrAgentRun.objects.filter(workspace_id=self.ws).count(), 0)
+        self.assertTrue(HrOffboard.objects.filter(workspace_id=self.ws).exists())
+
+    def test_export_masks_contacts_and_persists_path(self):
+        import glob as glob_module
+
+        from django.core.management import call_command
+        from hr.models import HrOffboard
+
+        self._build_workspace(self.ws)
+        export_dir = tempfile.mkdtemp(prefix="offboard-export")
+        call_command("hr_offboard_workspace", self.ws, force=True, export=export_dir, user_id=str(self.user_id))
+
+        files = glob_module.glob(os.path.join(export_dir, "hr_offboard_*.json"))
+        self.assertEqual(len(files), 1)
+        with open(files[0], "r", encoding="utf-8") as handle:
+            payload = json.load(handle)
+        # 候选人联系方式脱敏（验收 3：可读 JSON + 导出后清理成功）
+        cand = payload["candidates"][0]
+        self.assertEqual(cand["name"], "Alice")
+        self.assertEqual(cand["phone"], "138****5678")
+        self.assertEqual(cand["email"], "al***@example.com")
+        for section in ("candidates", "jobs", "applications", "interviews", "offers", "handoffs", "audit"):
+            self.assertIn(section, payload)
+        self.assertEqual(len(payload["applications"]), 1)
+        self.assertEqual(len(payload["applications"][0]["events"]), 1)
+
+        tombstone = HrOffboard.objects.get(workspace_id=self.ws)
+        self.assertEqual(tombstone.exported_path, files[0])
+        self.assertEqual(Candidate.objects.filter(workspace_id=self.ws).count(), 0)
+

@@ -188,3 +188,16 @@ def set_resume_index_active(resume, is_active):
         return
     QuerySet(Document).filter(id=str(resume.document_id)).update(is_active=is_active)
     QuerySet(Embedding).filter(document_id=str(resume.document_id)).update(is_active=is_active)
+
+
+def delete_resume_knowledge(workspace_id):
+    """工作区注销：清空该工作区「简历语义索引」知识库的全部文档/段落/向量，并删知识库本身（幂等）。
+
+    复用 _delete_document（显式删段落后删向量再删文档，覆盖内核模型无 DB 级联的情况），
+    不依赖 ResumeFile.document_id，可一并收掉未挂接简历的孤儿文档。"""
+    knowledge = get_resume_knowledge(workspace_id)
+    if knowledge is None:
+        return
+    for document_id in QuerySet(Document).filter(knowledge_id=knowledge.id).values_list("id", flat=True):
+        _delete_document(str(document_id))
+    QuerySet(Knowledge).filter(id=knowledge.id).delete()
