@@ -17,6 +17,7 @@ from .recruitment import (
 )
 from .ai import HrAIConfigAPI, HrResumeSearchAPI, HrSearchParseAPI, HrSkillExtractAPI
 from .access import HrAccessAPI, HrAccessMeAPI, HrAuditLogAPI
+from .offboarding import HrOffboardingAPI, HrOffboardingExportAPI, HrOffboardingPreviewAPI
 from .import_views import CandidateImportAPI, CandidateImportTemplateAPI
 from .offer_views import (
     AllOffersAPI,
@@ -71,6 +72,9 @@ __all__ = [
     "HrAccessAPI",
     "HrAccessMeAPI",
     "HrAuditLogAPI",
+    "HrOffboardingAPI",
+    "HrOffboardingExportAPI",
+    "HrOffboardingPreviewAPI",
     "AllOffersAPI",
     "ApplicationOfferListAPI",
     "HandoffConfigAPI",

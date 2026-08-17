@@ -32,6 +32,7 @@ from hr.models import (
     HrAccess,
     HrAuditLog,
     HrConfig,
+    HrOffboard,
     Interview,
     Job,
     Offer,
@@ -6435,4 +6436,91 @@ class HrOffboardCommandTests(TestCase):
         tombstone = HrOffboard.objects.get(workspace_id=self.ws)
         self.assertEqual(tombstone.exported_path, files[0])
         self.assertEqual(Candidate.objects.filter(workspace_id=self.ws).count(), 0)
+
+class HrOffboardingApiTests(_HrApiBase):
+    """阶段 B：HR 注销编排回调/API 的权限、数据返还、确认和跨工作区隔离。"""
+
+    def setUp(self):
+        self.workspace = "workspace-offboarding-api"
+        self.other_workspace = "workspace-offboarding-other"
+        self.admin = self._user("offboard-api-admin", "Offboard API Admin")
+        self.operator = self._user("offboard-api-operator", "Offboard API Operator")
+        HrAccess.objects.create(workspace_id=self.workspace, user_id=self.admin.id, role="ADMIN")
+        HrAccess.objects.create(workspace_id=self.workspace, user_id=self.operator.id, role="OPERATOR")
+
+    def test_preview_is_admin_only_and_workspace_scoped(self):
+        Candidate.objects.create(name="Alice", workspace_id=self.workspace)
+        Candidate.objects.create(name="Other", workspace_id=self.other_workspace)
+        response = self._client(self.admin).get(
+            f"/admin/api/workspace/{self.workspace}/hr/offboarding/preview"
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()["data"]
+        self.assertEqual(data["status"], "DRY_RUN")
+        self.assertEqual(data["counts"]["candidates"], 1)
+        self.assertTrue(data["can_offboard"])
+        self.assertEqual(Candidate.objects.filter(workspace_id=self.other_workspace).count(), 1)
+
+        denied = self._client(self.operator).get(
+            f"/admin/api/workspace/{self.workspace}/hr/offboarding/preview"
+        )
+        self.assertEqual(denied.status_code, 403)
+
+    def test_export_returns_masked_data_without_mutation(self):
+        candidate = Candidate.objects.create(
+            name="Alice", workspace_id=self.workspace, phone="13812345678", email="alice@example.com"
+        )
+        response = self._client(self.admin).get(
+            f"/admin/api/workspace/{self.workspace}/hr/offboarding/export"
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()["data"]
+        self.assertEqual(data["workspace_id"], self.workspace)
+        self.assertEqual(data["candidates"][0]["phone"], "138****5678")
+        self.assertEqual(data["candidates"][0]["email"], "al***@example.com")
+        self.assertTrue(Candidate.objects.filter(id=candidate.id, workspace_id=self.workspace).exists())
+        self.assertFalse(HrOffboard.objects.filter(workspace_id=self.workspace).exists())
+
+    def test_purge_requires_confirmation_and_returns_data_return_package(self):
+        Candidate.objects.create(name="Alice", workspace_id=self.workspace, phone="13812345678")
+        client = self._client(self.admin)
+        wrong = client.post(
+            f"/admin/api/workspace/{self.workspace}/hr/offboarding",
+            {"confirm_workspace_id": "wrong", "export": True},
+            format="json",
+        )
+        self.assertEqual(wrong.json()["code"], 400)
+        self.assertFalse(HrOffboard.objects.filter(workspace_id=self.workspace).exists())
+        self.assertEqual(Candidate.objects.filter(workspace_id=self.workspace).count(), 1)
+
+        response = client.post(
+            f"/admin/api/workspace/{self.workspace}/hr/offboarding",
+            {"confirm_workspace_id": self.workspace, "export": True},
+            format="json",
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()["data"]
+        self.assertEqual(data["status"], "OFFBOARDED")
+        self.assertEqual(data["export"]["candidates"][0]["phone"], "138****5678")
+        self.assertEqual(Candidate.objects.filter(workspace_id=self.workspace).count(), 0)
+        self.assertTrue(HrOffboard.objects.filter(workspace_id=self.workspace).exists())
+
+    def test_purge_blocks_active_workspace_without_force(self):
+        candidate = Candidate.objects.create(name="Alice", workspace_id=self.workspace)
+        job = Job.objects.create(name="Engineer", workspace_id=self.workspace, headcount=1, status="OPEN")
+        stage = JobStage.objects.create(
+            workspace_id=self.workspace, job=job, key="APPLIED", name="待筛选", order=1, is_system=True
+        )
+        Application.objects.create(
+            workspace_id=self.workspace, candidate=candidate, job=job, current_stage=stage, status="ACTIVE"
+        )
+        response = self._client(self.admin).post(
+            f"/admin/api/workspace/{self.workspace}/hr/offboarding",
+            {"confirm_workspace_id": self.workspace},
+            format="json",
+        )
+        self.assertIn(response.json()["code"], (400, 409))
+        self.assertFalse(HrOffboard.objects.filter(workspace_id=self.workspace).exists())
+        self.assertTrue(Application.objects.filter(workspace_id=self.workspace).exists())
+        self.assertTrue(Job.objects.filter(workspace_id=self.workspace).exists())
 

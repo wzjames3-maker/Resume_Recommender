@@ -62,4 +62,9 @@
     4. 审计：EXPORT/DELETE 审计行照写，但按 §2 数据清单随 `hr_audit_log` 最后清空，存证以 `hr_offboard` tombstone 为准（满足 §5 留痕）；
     5. 简历语义索引用 `delete_resume_knowledge`（`delete_resume_index` 同底层 `_delete_document`，且覆盖未挂接简历的孤儿文档），索引文档/段落/向量/知识库一并清空。
   - 验收：本稿 §5 全部通过（hr hr_* 全表归零仅 tombstone 保留、幂等、dry-run 与实际一致、跨工作区隔离断言、EXPORT/DELETE 留痕）+ 真实开发库端到端验证。
-- 阶段 B（未开始）：内核 workspace 注销编排回调 HR 清理 + 对象存储统一回收；租户数据返还 Web 流程。
+- ✅ 阶段 B1（已完成，2026-08-18）：
+  - 新增稳定 callback contract：`hr.services.offboarding.preview_workspace_offboarding`、`export_workspace_data`、`offboard_workspace`，供上层内核 workspace 生命周期在删除其它域前调用；
+  - 新增 Web API（均要求该 workspace 的 HR ADMIN）：`GET /workspace/{workspace_id}/hr/offboarding/preview`、`GET /workspace/{workspace_id}/hr/offboarding/export`、`POST /workspace/{workspace_id}/hr/offboarding`；POST 必须携带 `confirm_workspace_id`，可显式 `force`，可在清理响应中携带脱敏数据返还包；
+  - callback 与命令共用同一无输出执行器，HR 简历/Offer 对象存储在 HR 清账事务中统一回收，预览/导出不落库；跨工作区隔离、权限、确认、防误删和活跃守卫均有测试。
+  - 由于当前精简内核没有统一 Workspace ORM/注销生命周期或跨域对象存储编排入口，B1 只提供可被内核调用的 HR callback；
+- 阶段 B2（未开始）：把 callback 接入实际内核 workspace 注销编排，补齐内核其它业务域的数据返还/删除顺序与统一对象存储回收，以及租户数据返还 Web 前端流程。

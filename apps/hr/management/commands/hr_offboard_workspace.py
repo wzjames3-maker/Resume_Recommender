@@ -266,53 +266,51 @@ class Command(BaseCommand):
         for key, value in counts.items():
             self.stdout.write(f"  {key}: {value}")
 
-    # ------------------------------------------------------------------ 主流程
-    def handle(self, *args, **options):
-        workspace_id = options["workspace_id"]
-        force = options["force"]
-        dry_run = options["dry_run"]
-        export_dir = options.get("export")
-        raw_user_id = options.get("user_id")
+    # ------------------------------------------------------------------ 编排入口
+    def execute_offboarding(self, workspace_id, *, user_id=None, force=False, dry_run=False, export_dir=None, include_export=False):
+        """供管理命令与 workspace 注销编排/API 复用的无输出执行入口。"""
         try:
-            user_id = uuid.UUID(str(raw_user_id)) if raw_user_id else uuid.UUID(int=0)
-        except (ValueError, TypeError):
-            raise SystemExit("--user-id 不是合法 UUID")
+            user_id = uuid.UUID(str(user_id)) if user_id else uuid.UUID(int=0)
+        except (ValueError, TypeError) as exc:
+            raise ValueError("user_id 不是合法 UUID") from exc
 
         already = HrOffboard.objects.filter(workspace_id=workspace_id).first()
         if already is not None:
-            self.stdout.write(self.style.WARNING(
-                f"workspace {workspace_id} 已注销（{already.offboarded_at.isoformat()}，执行人 "
-                f"{already.user_id}，计数 {json.dumps(already.counts, ensure_ascii=False)}），无需重复执行"
-            ))
-            return
+            return {
+                "status": "ALREADY_OFFBOARDED",
+                "workspace_id": workspace_id,
+                "counts": already.counts,
+                "offboarded_at": already.offboarded_at.isoformat(),
+                "user_id": str(already.user_id) if already.user_id else None,
+                "exported_path": already.exported_path,
+            }
 
         counts = self._counts(workspace_id)
-        self._print_counts(workspace_id, counts)
-
+        issues = self._active_activity(workspace_id)
+        result = {
+            "status": "DRY_RUN" if dry_run else "PENDING",
+            "workspace_id": workspace_id,
+            "counts": counts,
+            "active_issues": issues,
+            "can_offboard": not issues,
+        }
         if dry_run:
-            self.stdout.write(self.style.NOTICE("dry-run 完成：以上为将清理的行数/文件数，未做任何删除"))
-            return
+            return result
+        if issues and not force:
+            result["status"] = "BLOCKED"
+            return result
 
-        if not force:
-            issues = self._active_activity(workspace_id)
-            if issues:
-                self.stdout.write(self.style.ERROR(
-                    "工作区存在活跃业务，拒绝注销（确认可清理请加 --force）:\n  - " + "\n  - ".join(issues)
-                ))
-                return
-
-        # 删除前捕获存储对象 keys（行删除后再查会取不到，须先用）
         storage_keys = self._storage_keys(workspace_id)
-
+        export_data = None
         exported_path = ""
+        if export_dir or include_export:
+            export_data = self._build_export(workspace_id)
         if export_dir:
-            payload = self._build_export(workspace_id)
             os.makedirs(export_dir, exist_ok=True)
             file_name = f"hr_offboard_{workspace_id}_{timezone.now().strftime('%Y%m%d%H%M%S')}.json"
             exported_path = os.path.join(export_dir, file_name)
             with open(exported_path, "w", encoding="utf-8") as handle:
-                json.dump(payload, handle, ensure_ascii=False, indent=2, default=str)
-            self.stdout.write(f"exported: {exported_path}")
+                json.dump(export_data, handle, ensure_ascii=False, indent=2, default=str)
 
         with transaction.atomic():
             # 1) 停 Agent 触发（先停再清账本）
@@ -331,7 +329,7 @@ class Command(BaseCommand):
             Candidate.objects.filter(workspace_id=workspace_id).delete()
             ResumeFile.objects.filter(workspace_id=workspace_id).delete()
             # 7) 配置 + 授权（审计行最后清空，留痕以 hr_offboard tombstone 为准）
-            if export_dir:
+            if export_data is not None:
                 write_audit_log(workspace_id, user_id, "EXPORT", "OTHER", object_id=workspace_id,
                                 detail=f"数据返还导出 candidates={counts['candidates']}, jobs={counts['jobs']}")
             write_audit_log(workspace_id, user_id, "DELETE", "OTHER", object_id=workspace_id,
@@ -341,7 +339,7 @@ class Command(BaseCommand):
             HrAuditLog.objects.filter(workspace_id=workspace_id).delete()
             ResumeFlowLog.objects.filter(workspace_id=workspace_id).delete()
             # 8) 幂等锚点 + 注销留痕
-            HrOffboard.objects.create(
+            tombstone = HrOffboard.objects.create(
                 workspace_id=workspace_id, user_id=user_id,
                 exported_path=exported_path, counts=counts, force=force,
             )
@@ -353,8 +351,50 @@ class Command(BaseCommand):
                 except OSError:
                     pass
 
-        total_rows = sum(counts.values())
+        result.update({
+            "status": "OFFBOARDED",
+            "force": force,
+            "exported_path": exported_path,
+            "export": export_data if include_export else None,
+            "offboarded_at": tombstone.offboarded_at.isoformat(),
+        })
+        return result
+
+    # ------------------------------------------------------------------ 主流程
+    def handle(self, *args, **options):
+        workspace_id = options["workspace_id"]
+        try:
+            result = self.execute_offboarding(
+                workspace_id,
+                user_id=options.get("user_id"),
+                force=options["force"],
+                dry_run=options["dry_run"],
+                export_dir=options.get("export"),
+            )
+        except ValueError as exc:
+            raise SystemExit(str(exc)) from exc
+
+        status = result["status"]
+        if status == "ALREADY_OFFBOARDED":
+            self.stdout.write(self.style.WARNING(
+                f"workspace {workspace_id} 已注销（{result['offboarded_at']}，执行人 "
+                f"{result['user_id']}，计数 {json.dumps(result['counts'], ensure_ascii=False)}），无需重复执行"
+            ))
+            return
+
+        self._print_counts(workspace_id, result["counts"])
+        if status == "DRY_RUN":
+            self.stdout.write(self.style.NOTICE("dry-run 完成：以上为将清理的行数/文件数，未做任何删除"))
+            return
+        if status == "BLOCKED":
+            self.stdout.write(self.style.ERROR(
+                "工作区存在活跃业务，拒绝注销（确认可清理请加 --force）：\n  - "
+                + "\n  - ".join(result["active_issues"])
+            ))
+            return
+        if result.get("exported_path"):
+            self.stdout.write(f"exported: {result['exported_path']}")
         self.stdout.write(self.style.SUCCESS(
-            f"workspace {workspace_id} 已注销：清理 {total_rows} 行 / {counts['storage_files']} 存储文件；"
-            f"hr_offboard tombstone 已记录"
+            f"workspace {workspace_id} 已注销：清理 {sum(result['counts'].values())} 行 / "
+            f"{result['counts']['storage_files']} 存储文件；hr_offboard tombstone 已记录"
         ))
