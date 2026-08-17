@@ -2,6 +2,7 @@ import type { Result } from '@/request/Result'
 import { exportFile, exportFilePost, del, get, post, put } from '@/request'
 import type {
   AiConditions,
+  AgentProposal,
   Application,
   ApplicationEvent,
   Assignment,
@@ -138,6 +139,18 @@ const createOfferByApplication = (applicationId: string, data: Partial<Offer>) =
 
 const getOffersByApplication = (applicationId: string) =>
   get(`${prefix.value}/applications/${applicationId}/offers`) as Promise<Result<Offer[]>>
+
+const getApplicationProposals = (applicationId: string) =>
+  get(`${prefix.value}/applications/${applicationId}/proposals`) as Promise<Result<AgentProposal[]>>
+
+const acceptProposal = (proposalId: string, data: Record<string, unknown>) =>
+  post(`${prefix.value}/proposals/${proposalId}/accept`, data) as Promise<Result<AgentProposal>>
+
+const dismissProposal = (proposalId: string, data: Record<string, unknown>) =>
+  post(`${prefix.value}/proposals/${proposalId}/dismiss`, data) as Promise<Result<AgentProposal>>
+
+const runScreeningAgent = (applicationId: string) =>
+  post(`${prefix.value}/agents/SCREENING/run`, { application_id: applicationId }) as Promise<Result<Record<string, unknown>>>
 
 const createAssignment = (jobId: string, candidateId: string, note = '', extra: Partial<Assignment> = {}) =>
   post(`${prefix.value}/jobs/${jobId}/assignments`, {
@@ -287,6 +300,7 @@ const getAuditLogs = (params: {
 
 export default {
   acceptOffer,
+  acceptProposal,
   approveOffer,
   archiveCandidate,
   checkDuplicate,
@@ -296,13 +310,16 @@ export default {
   createInterviewByApplication,
   createOfferByApplication,
   getApplicationEvents,
+  getApplicationProposals,
   getApplications,
   getInterviewsByApplication,
   getJobClosePreview,
   getJobStages,
   getOffersByApplication,
+  dismissProposal,
   moveApplicationStage,
   restoreApplication,
+  runScreeningAgent,
   terminalApplication,
   createAssignment,
   createCandidate,

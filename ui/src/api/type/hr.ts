@@ -214,6 +214,14 @@ export interface ApplicationStageRef {
   order: number
 }
 
+export interface AgentProposalSummary {
+  proposal_id: string
+  action: 'ADVANCE' | 'DECLINE' | 'HOLD' | 'DRAFT'
+  status: 'PENDING' | 'ACCEPTED' | 'DISMISSED' | 'EXPIRED'
+  score: number | null
+  create_time: string
+}
+
 export interface JobApplication {
   application_id: string
   candidate_id: string
@@ -226,6 +234,45 @@ export interface JobApplication {
   reapply_no: number
   note: string
   applied_at: string
+  update_time: string
+  agent?: AgentProposalSummary | null
+}
+
+export interface AgentProposalPayload {
+  stage_key?: string
+  hard_conditions: { requirement: string; field: string; met: boolean; detail: string }[]
+  dimensions: {
+    name: string
+    verdict: string
+    evidence: { paragraph_id: string | null; excerpt: string; relevance: number }[]
+    confidence: number
+  }[]
+  concerns: string[]
+  clarifying_questions: string[]
+  decision: {
+    score: number | null
+    suggested_action: 'ADVANCE' | 'DECLINE' | 'HOLD'
+    hard_met: boolean
+    evidence_ok: boolean
+    required_dims_ok: boolean
+    score_version: string
+    dimension_details: { name: string; verdict: string; confidence: number; evidence_strength: number; dimension_score: number; evidence_count: number }[]
+    warnings: { name?: string; reason: string }[]
+  }
+}
+
+export interface AgentProposal {
+  id: string
+  run_id: string | null
+  target_type: string
+  target_id: string
+  action: 'ADVANCE' | 'DECLINE' | 'HOLD' | 'DRAFT'
+  status: 'PENDING' | 'ACCEPTED' | 'DISMISSED' | 'EXPIRED'
+  payload: AgentProposalPayload
+  decided_by: string | null
+  decided_at: string | null
+  decision_note: string
+  create_time: string
   update_time: string
 }
 

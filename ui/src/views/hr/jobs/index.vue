@@ -60,6 +60,12 @@
                               </div>
                               <div class="flex align-center gap-6">
                                 <el-tag v-if="application.reapply_no > 0" size="small" type="warning" effect="plain">重投</el-tag>
+                                <el-tag v-if="application.agent && application.agent.status === 'PENDING'" size="small" :type="agentActionTagType(application.agent.action)" effect="dark">
+                                  AI {{ agentActionLabel(application.agent.action) }}{{ application.agent.score != null ? ' ' + application.agent.score : '' }}
+                                </el-tag>
+                                <el-tag v-if="application.agent && application.agent.status !== 'PENDING'" size="small" type="info" effect="plain">
+                                  AI {{ agentActionLabel(application.agent.action) }} · {{ proposalStatusLabel(application.agent.status) }}
+                                </el-tag>
                                 <el-tag v-if="applicationStatusLabels[application.status] && application.status !== 'ACTIVE'" size="small" :type="applicationStatusTagType(application.status)" effect="plain">
                                   {{ applicationStatusLabels[application.status] }}
                                 </el-tag>
@@ -72,6 +78,7 @@
                             <div class="kanban-card__footer">
                               <span class="color-secondary ellipsis">{{ application.owner_id ? memberName(application.owner_id) : '未分配' }}</span>
                               <div class="flex align-center">
+                                <el-button v-if="application.agent" link size="small" @click="openAiDrawer(row, application)">AI</el-button>
                                 <el-button v-if="isHrOperator" link type="primary" size="small" @click="openInterviewDrawer(row, application)">面试</el-button>
                                 <el-button v-if="isHrAdmin && isOfferStage(application)" link type="primary" size="small" @click="openOfferDrawer(row, application)">Offer</el-button>
                                 <el-dropdown
@@ -84,7 +91,9 @@
                                   <el-button link size="small" @click.stop>更多</el-button>
                                   <template #dropdown>
                                     <el-dropdown-menu>
-                                      <el-dropdown-item v-if="isActiveApplication(application)" command="reject">淘汰</el-dropdown-item>
+                                      <el-dropdown-item command="ai">AI 评估</el-dropdown-item>
+                                      <el-dropdown-item v-if="!application.agent || application.agent.status !== 'PENDING'" command="ai-run">运行 AI 评估</el-dropdown-item>
+                                      <el-dropdown-item v-if="isActiveApplication(application)" command="reject" divided>淘汰</el-dropdown-item>
                                       <el-dropdown-item v-if="isActiveApplication(application)" command="withdraw">候选人退出</el-dropdown-item>
                                       <el-dropdown-item v-if="isActiveApplication(application)" command="close">关闭申请</el-dropdown-item>
                                       <el-dropdown-item v-if="isHrAdmin && application.status === 'REJECTED'" command="restore" divided>恢复申请</el-dropdown-item>
@@ -381,6 +390,73 @@
       </template>
     </el-dialog>
 
+    <el-dialog v-model="aiDrawerVisible" title="AI 初筛评估" width="720px">
+      <div class="flex-between mb-16">
+        <span>{{ aiCandidateName }} · {{ aiJobName }}</span>
+        <div class="flex align-center gap-12">
+          <el-tag v-if="aiLatestProposal()" :type="proposalStatusTagType(aiLatestProposal().status)" size="small">
+            {{ proposalStatusLabel(aiLatestProposal().status) }}
+          </el-tag>
+          <el-button v-if="isHrOperator" size="small" :loading="aiRunning" @click="runAiAssessment">运行评估</el-button>
+        </div>
+      </div>
+      <div v-loading="aiLoading">
+        <template v-if="aiLatestProposal()">
+          <el-alert
+            :title="'建议动作：' + agentActionLabel(aiLatestProposal().action) + (aiLatestProposal().payload?.decision?.score != null ? '（评分 ' + aiLatestProposal().payload.decision.score + '，' + aiLatestProposal().payload.decision.score_version + '）' : '')"
+            :type="aiLatestProposal().action === 'ADVANCE' ? 'success' : aiLatestProposal().action === 'DECLINE' ? 'error' : 'warning'"
+            :closable="false"
+            class="mb-16"
+          >
+            <template #default>
+              <div>硬条件 {{ aiLatestProposal().payload?.decision?.hard_met ? '全部满足' : '未满足' }} · 证据充分性 {{ aiLatestProposal().payload?.decision?.evidence_ok ? '达标' : '不足' }}</div>
+              <div v-if="aiLatestProposal().decision_note" class="color-secondary">审批备注：{{ aiLatestProposal().decision_note }}</div>
+            </template>
+          </el-alert>
+
+          <div v-if="aiLatestProposal().payload?.hard_conditions?.length" class="ai-block">
+            <h4>硬条件核对</h4>
+            <ul class="ai-list">
+              <li v-for="(condition, idx) in aiLatestProposal().payload.hard_conditions" :key="idx">
+                <el-icon :color="condition.met ? 'var(--el-color-success)' : 'var(--el-color-danger)'">
+                  <CircleCheck v-if="condition.met" /><CircleClose v-else />
+                </el-icon>
+                {{ condition.requirement }}<span class="color-secondary ml-8">{{ condition.detail }}</span>
+              </li>
+            </ul>
+          </div>
+
+          <div v-for="dimension in aiLatestProposal().payload?.dimensions || []" :key="dimension.name" class="ai-block">
+            <h4>{{ dimension.name }} <el-tag size="small" :type="dimension.confidence >= 0.5 ? 'success' : 'warning'" effect="plain">置信度 {{ Math.round(dimension.confidence * 100) }}%</el-tag></h4>
+            <p>{{ dimension.verdict }}</p>
+            <ul class="ai-list" v-if="dimension.evidence?.length">
+              <li v-for="(item, idx) in dimension.evidence" :key="idx" class="ai-evidence">
+                <span class="color-secondary">[{{ item.relevance.toFixed(2) }}]</span> {{ item.excerpt }}
+              </li>
+            </ul>
+            <span v-else class="color-secondary">无证据摘录</span>
+          </div>
+
+          <div v-if="aiLatestProposal().payload?.concerns?.length" class="ai-block">
+            <h4>风险点</h4>
+            <ul class="ai-list"><li v-for="(item, idx) in aiLatestProposal().payload.concerns" :key="idx">{{ item }}</li></ul>
+          </div>
+          <div v-if="aiLatestProposal().payload?.clarifying_questions?.length" class="ai-block">
+            <h4>待澄清</h4>
+            <ul class="ai-list"><li v-for="(item, idx) in aiLatestProposal().payload.clarifying_questions" :key="idx">{{ item }}</li></ul>
+          </div>
+          <div v-if="aiLatestProposal().status === 'PENDING'" class="text-right mt-16">
+            <el-button type="primary" :loading="saving" @click="acceptAiProposal(aiLatestProposal())">
+              接受并执行（{{ agentActionLabel(aiLatestProposal().action) }}）
+            </el-button>
+            <el-button :loading="saving" @click="dismissAiProposal(aiLatestProposal())">忽略</el-button>
+          </div>
+        </template>
+        <el-empty v-else-if="!aiLoading" description="暂无 AI 评估结果，可点击「运行评估」生成" />
+      </div>
+      <template #footer><el-button @click="aiDrawerVisible = false">关闭</el-button></template>
+    </el-dialog>
+
     <AiSettingDialog v-model="aiSettingVisible" />
   </div>
 </template>
@@ -408,6 +484,7 @@ import {
   terminationReasonLabels,
 } from '@/views/hr/constants'
 import type {
+  AgentProposal,
   Interview,
   Job,
   JobApplication,
@@ -797,7 +874,9 @@ function isOfferStage(application: JobApplication): boolean {
 
 /** 卡片菜单命令：终态走 terminal 命令 API，恢复走 restore 命令 API（不再直接改 status） */
 function onCardCommand(cmd: string, job: Job, application: JobApplication) {
-  if (cmd === 'reject') openStatusChangeDialog(application, 'reject', job)
+  if (cmd === 'ai') openAiDrawer(job, application)
+  else if (cmd === 'ai-run') openAiDrawer(job, application)
+  else if (cmd === 'reject') openStatusChangeDialog(application, 'reject', job)
   else if (cmd === 'withdraw') openStatusChangeDialog(application, 'withdraw', job)
   else if (cmd === 'close') openStatusChangeDialog(application, 'close', job)
   else if (cmd === 'restore') openStatusChangeDialog(application, 'restore', job)
@@ -1047,6 +1126,100 @@ function removeOfferAttachment(offer: Offer) {
 function downloadOfferAttachment(offer: Offer) {
   HrApi.downloadOfferAttachment(offer.id, offer.attachment_name || 'offer.pdf')
 }
+
+// ---------- AI 初筛评估（D1 报告卡） ----------
+const aiDrawerVisible = ref(false)
+const aiApplication = ref<JobApplication | null>(null)
+const aiJob = ref<Job | null>(null)
+const aiCandidateName = ref('')
+const aiJobName = ref('')
+const aiProposals = ref<AgentProposal[]>([])
+const aiLoading = ref(false)
+const aiRunning = ref(false)
+
+function agentActionLabel(action: string) {
+  return ({ ADVANCE: '建议推进', DECLINE: '建议婉拒', HOLD: '建议人工' } as Record<string, string>)[action] || action
+}
+
+function agentActionTagType(action: string) {
+  if (action === 'ADVANCE') return 'success'
+  if (action === 'DECLINE') return 'danger'
+  return 'warning'
+}
+
+function proposalStatusLabel(status: string) {
+  return ({ PENDING: '待审批', ACCEPTED: '已接受', DISMISSED: '已忽略', EXPIRED: '已过期' } as Record<string, string>)[status] || status
+}
+
+function proposalStatusTagType(status: string) {
+  if (status === 'PENDING') return 'warning'
+  if (status === 'ACCEPTED') return 'success'
+  return 'info'
+}
+
+function aiLatestProposal() {
+  return aiProposals.value[0] || null
+}
+
+function openAiDrawer(job: Job, application: JobApplication) {
+  aiApplication.value = application
+  aiJob.value = job
+  aiCandidateName.value = application.candidate_name || ''
+  aiJobName.value = job.name
+  aiDrawerVisible.value = true
+  loadAiProposals(application.application_id)
+}
+
+function loadAiProposals(applicationId: string) {
+  aiLoading.value = true
+  HrApi.getApplicationProposals(applicationId)
+    .then((response) => { aiProposals.value = response.data })
+    .catch(() => {})
+    .finally(() => { aiLoading.value = false })
+}
+
+function runAiAssessment() {
+  const application = aiApplication.value
+  const job = aiJob.value
+  if (!application) return
+  aiRunning.value = true
+  HrApi.runScreeningAgent(application.application_id)
+    .then((response) => {
+      const status = (response.data as Record<string, unknown>)?.status
+      MsgSuccess(status === 'SUCCEEDED' ? 'AI 评估完成' : 'AI 评估未生成提案（' + String(status) + '）')
+      loadAiProposals(application.application_id)
+      if (job) { loadJobDetail(job); refresh() }
+    })
+    .catch(() => {})
+    .finally(() => { aiRunning.value = false })
+}
+
+function acceptAiProposal(proposal: AgentProposal) {
+  MsgConfirm('接受建议', `确认执行「${'${agentActionLabel(proposal.action)}'}」？将调用 ATS 命令更新流程。`, { confirmButtonClass: 'danger' })
+    .then(() => HrApi.acceptProposal(proposal.id, { decision_note: 'HR 确认执行' }))
+    .then(() => {
+      MsgSuccess('已接受并执行')
+      const application = aiApplication.value
+      const job = aiJob.value
+      if (application) loadAiProposals(application.application_id)
+      if (job) { loadJobDetail(job); refresh() }
+    })
+    .catch(() => {})
+}
+
+function dismissAiProposal(proposal: AgentProposal) {
+  MsgConfirm('忽略建议', '确认忽略该建议？流程保持现状，由人工处理。')
+    .then(() => HrApi.dismissProposal(proposal.id, { decision_note: 'HR 忽略' }))
+    .then(() => {
+      MsgSuccess('已忽略')
+      const application = aiApplication.value
+      const job = aiJob.value
+      if (application) loadAiProposals(application.application_id)
+      if (job) loadJobDetail(job)
+    })
+    .catch(() => {})
+}
+
 
 function openJobFromQuery() {
   if (route.query.new === '1') {
