@@ -70,15 +70,17 @@ def get_or_create_resume_knowledge(workspace_id, user_id):
     return get_resume_knowledge(workspace_id)
 
 
-def index_resume(workspace_id, user_id, resume, text, chat_fn, stats=None):
+def index_resume(workspace_id, user_id, resume, text, chat_fn, stats=None, chunks=None):
     """
     简历入库：清洗已在 split_resume_text 内完成 → 切片 → 建 Document/Paragraph → 触发向量化。
     :param stats: 可选 dict，透传 split_resume_text 的 path/llm_calls（供流转日志）
+    :param chunks: 可选预切片（结构化语料免 LLM 切片，如数据集导入）；缺省走 split_resume_text
     :return: document_id
     :raises: 切片失败（ValueError）/ 知识库或模型缺失（AppApiException）
     """
     knowledge = get_or_create_resume_knowledge(workspace_id, user_id)
-    chunks = split_resume_text(text, chat_fn, stats=stats)
+    if chunks is None:
+        chunks = split_resume_text(text, chat_fn, stats=stats)
     # 入库前二次扫描（设计 §6.8）：掩码未覆盖的 PII 变体 → 拒绝入库（不阻塞候选人建档，错误经任务记入 error_message）
     # 注意：先扫描后写 SPLIT 日志，避免被拒绝的残留 PII 进入流转日志。
     for chunk in chunks:

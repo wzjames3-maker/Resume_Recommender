@@ -6854,6 +6854,160 @@ class AgentProbeCommandTests(TestCase):
         output = StringIO()
         call_command("hr_agent_probe", stdout=output)
         self.assertIn("SKIP", output.getvalue())
+class DatasetImportCommandTests(TestCase):
+    """D1 评测语料导入：掩码/技能抽取/年限估计/chunks 无联系方式/幂等"""
+
+    def setUp(self):
+        self.user = User.objects.create(
+            username="dsimport-" + uuid.uuid7().hex[:8], nick_name="dsimport", password="p", role="ADMIN"
+        )
+        self.workspace_id = "workspace-dsimport"
+
+    def _record(self, name="张三"):
+        return {
+            "姓名": name,
+            "电话": "13812345678",
+            "教育经历": [{"毕业时间": "2018.06", "毕业院校": "某某大学", "学位": "硕士学位"}],
+            "工作经历": [{"工作时间": "2018.07-2022.12", "工作单位": "某公司", "职务": "python后端工程师",
+                          "工作内容": "负责 python 后端与 mysql 开发"}],
+            "项目经历": [{"项目时间": "2020.01-2021.06", "项目名称": "某某系统", "项目责任": "负责数据接口开发"}],
+        }
+
+    def test_mask_phone(self):
+        from hr.management.commands.import_resume_dataset import _mask_phone
+        self.assertEqual(_mask_phone("13812345678"), "138****5678")
+        self.assertEqual(_mask_phone(""), "")
+        self.assertEqual(_mask_phone("12345"), "****")
+
+    def test_extract_skills_and_years(self):
+        from hr.management.commands.import_resume_dataset import _extract_skills, _years_experience
+        skills = _extract_skills("负责 python 后端与 mysql 开发，使用 vue 前端")
+        self.assertIn("python", skills)
+        self.assertIn("mysql", skills)
+        self.assertEqual(_years_experience(self._record()["工作经历"]), 4)
+
+    def test_chunks_have_no_phone(self):
+        from hr.management.commands.import_resume_dataset import _build_chunks
+        chunks = _build_chunks(self._record(), "x.txt")
+        joined = "\n".join(chunk["content"] for chunk in chunks)
+        self.assertNotIn("13812345678", joined)
+        self.assertIn("python", joined)
+
+    def test_import_creates_candidate_and_index(self):
+        import json
+        import os
+        import tempfile
+
+        from django.core.management import call_command
+        from io import StringIO
+
+        record = self._record()
+        with tempfile.TemporaryDirectory() as tmp:
+            path = os.path.join(tmp, "train.json")
+            record_b = {**record, "姓名": "李四", "工作经历": [
+                {"工作时间": "2019.01-2021.06", "工作单位": "乙公司", "职务": "java工程师",
+                 "工作内容": "负责 java 后端开发"}]}
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump({"k" + uuid.uuid7().hex + "a": record, "k" + uuid.uuid7().hex + "b": record_b},
+                          handle, ensure_ascii=False)
+            def fake_index(workspace_id, user_id, resume, text, chat_fn, stats=None, chunks=None):
+                doc = str(uuid.uuid7())
+                resume.document_id = doc
+                resume.save(update_fields=["document_id", "update_time"])
+                return doc
+
+            output = StringIO()
+            with patch("hr.management.commands.import_resume_dataset.index_resume", side_effect=fake_index), \
+                    patch("hr.management.commands.import_resume_dataset.embedding_by_document.run") as m_embed:
+                call_command("import_resume_dataset", path=path, workspace=self.workspace_id, seed=1,
+                             manifest=os.path.join(tmp, "m.json"), stdout=output)
+            self.assertIn("导入 2", output.getvalue())
+            self.assertEqual(Candidate.objects.filter(workspace_id=self.workspace_id).count(), 2)
+            resume = ResumeFile.objects.filter(workspace_id=self.workspace_id).first()
+            self.assertEqual(resume.status, "SUCCESS")
+            self.assertIsNotNone(resume.candidate)
+            self.assertEqual(resume.candidate.phone, "138****5678")
+            from hr.models import CandidateSkill
+            self.assertTrue(CandidateSkill.objects.filter(candidate=resume.candidate).exists())
+            self.assertEqual(m_embed.call_count, 2)
+            # 幂等：重跑跳过（document_id 已存在，不再调用 index/embedding）
+            with patch("hr.management.commands.import_resume_dataset.index_resume") as m_index2, \
+                    patch("hr.management.commands.import_resume_dataset.embedding_by_document.run") as m_embed2:
+                output2 = StringIO()
+                call_command("import_resume_dataset", path=path, workspace=self.workspace_id, seed=1,
+                             manifest=os.path.join(tmp, "m2.json"), stdout=output2)
+            self.assertIn("跳过 2", output2.getvalue())
+            self.assertEqual(m_index2.call_count, 0)
+            self.assertEqual(m_embed2.call_count, 0)
+            self.assertEqual(Candidate.objects.filter(workspace_id=self.workspace_id).count(), 2)
+
+    def test_missing_dataset_reports_error(self):
+        from django.core.management import call_command
+        from io import StringIO
+
+        output = StringIO()
+        call_command("import_resume_dataset", path="/nonexistent/train.json", stderr=output)
+        self.assertIn("不存在", output.getvalue())
+
+
+class EvalScreeningCommandTests(TestCase):
+    """D1 评测命令：门控 + 正/负样本构造逻辑"""
+
+    def setUp(self):
+        self.workspace_id = "workspace-evalcmd"
+
+    def test_skip_without_flag(self):
+        from django.core.management import call_command
+        from io import StringIO
+
+        output = StringIO()
+        call_command("eval_screening", stdout=output)
+        self.assertIn("SKIP", output.getvalue())
+
+    def test_pair_construction(self):
+        from hr.management.commands.eval_screening import Command
+
+        command = Command()
+        candidate_a = {"id": "a", "name": "A", "skills": ["python", "django"], "current_city": "上海",
+                       "years_experience": 5, "highest_degree": "本科"}
+        candidate_b = {"id": "b", "name": "B", "skills": ["java", "spring"], "current_city": "北京",
+                       "years_experience": 3, "highest_degree": "本科"}
+        pool = [candidate_a, candidate_b]
+        positive = command._make_positive(candidate_a)
+        self.assertEqual(positive["kind"], "positive")
+        self.assertEqual(positive["job"]["skill_requirements"], ["python", "django"])
+        negative = command._make_negative(candidate_a, pool)
+        self.assertIsNotNone(negative)
+        self.assertEqual(negative["kind"], "negative")
+        self.assertTrue(set(negative["job"]["skill_requirements"]) & {"java", "spring"})
+        # 相同技能的候选人不产生负样本
+        self.assertIsNone(command._make_negative(candidate_a, [candidate_a, {
+            **candidate_b, "skills": ["python"]}], ))
+
+    def test_ensure_skills_backfills_missing(self):
+        from hr.management.commands.eval_screening import Command
+
+        workspace_id = "workspace-evalskills"
+        candidate = Candidate.objects.create(name="Alice", workspace_id=workspace_id, skills=[])
+        ResumeFile.objects.create(
+            workspace_id=workspace_id, file_name="a.txt", extension="txt", file_path="/tmp/a.txt",
+            file_size=1, sha256="sha-" + uuid.uuid7().hex, source_channel="OTHER",
+            status=ResumeStatus.SUCCESS, candidate=candidate, document_id=uuid.uuid7(),
+        )
+        HrConfig.objects.update_or_create(workspace_id=workspace_id, defaults={"llm_model_id": "fake"})
+        with patch("hr.management.commands.eval_screening.get_model_instance_by_model_workspace_id", return_value=Mock()), \
+                patch("hr.management.commands.eval_screening.Paragraph.objects.filter") as m_para, \
+                patch("hr.services.ai_parser.extract_skills", return_value=["python", "mysql"]):
+            m_para.return_value.values_list.return_value = ["负责 python 后端开发", "mysql 调优"]
+            rows = [{"id": str(candidate.id), "skills": [], "name": "Alice", "current_city": "",
+                     "years_experience": None, "highest_degree": ""}]
+            updated = Command()._ensure_skills(workspace_id, rows, parallel=False)
+        self.assertEqual(updated, 1)
+        candidate.refresh_from_db()
+        self.assertEqual(candidate.skills, ["python", "mysql"])
+        from hr.models import CandidateSkill
+        self.assertEqual(CandidateSkill.objects.filter(candidate=candidate).count(), 2)
+
 
 
 
