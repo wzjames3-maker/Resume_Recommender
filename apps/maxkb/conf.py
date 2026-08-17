@@ -53,6 +53,11 @@ class Config(dict):
         return self.get("TIME_ZONE") if "TIME_ZONE" in self else "Asia/Shanghai"
 
     def get_db_setting(self) -> dict:
+        options = {}
+        # PG 连接加密（PRD §8 / DEPLOYMENT.md）：MAXKB_DB_SSLMODE=require 时启用
+        sslmode = self.get("DB_SSLMODE")
+        if sslmode:
+            options["sslmode"] = sslmode
         return {
             "NAME": self.get("DB_NAME"),
             "HOST": self.get("DB_HOST"),
@@ -60,6 +65,7 @@ class Config(dict):
             "USER": self.get("DB_USER"),
             "PASSWORD": self.get("DB_PASSWORD"),
             "ENGINE": self.get("DB_ENGINE"),
+            "OPTIONS": options,
             "CONN_MAX_AGE": 0,
             "POOL_OPTIONS": {
                 "POOL_SIZE": 20,
