@@ -11,6 +11,7 @@ from common.exception.app_exception import AppApiException
 from rest_framework.views import APIView
 
 from system_manage.services.workspace_offboarding import (
+    WorkspaceOffboardingService,
     export_workspace_data,
     offboard_workspace,
     preview_workspace_offboarding,
@@ -41,6 +42,22 @@ class WorkspaceOffboardingExportAPI(APIView):
         if permission_error:
             return permission_error
         return result.success(export_workspace_data(workspace_id))
+
+
+class WorkspaceOffboardingStorageAPI(APIView):
+    authentication_classes = [TokenAuth]
+
+    def get(self, request, workspace_id):
+        permission_error = _require_workspace_manager(request, workspace_id)
+        if permission_error:
+            return permission_error
+        return result.success(WorkspaceOffboardingService.storage_cleanup_status(workspace_id))
+
+    def post(self, request, workspace_id):
+        permission_error = _require_workspace_manager(request, workspace_id)
+        if permission_error:
+            return permission_error
+        return result.success(WorkspaceOffboardingService.retry_storage_cleanup(workspace_id))
 
 
 class WorkspaceOffboardingAPI(APIView):

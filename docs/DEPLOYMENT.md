@@ -48,7 +48,8 @@ openssl enc -d -aes-256-cbc -pbkdf2 -pass env:BACKUP_PASSPHRASE -in <备份>.enc
 - [ ] 日志脱敏：上线后带真实 PII 走一遍流程，grep 日志目录（maxkb.log / drf_exception.log / unexpected_exception.log）确认无手机/邮箱/口令
 - [ ] 备份任务与轮转就绪，恢复演练通过
 - [ ] .env 权限 600、密钥未入日志、DEBUG=false
-- [ ] 租户注销/数据返还流程按 specs/2026-08-15-hr-tenant-offboarding-design.md 落地
+- [x] 租户注销/数据返还流程按 specs/2026-08-15-hr-tenant-offboarding-design.md 落地（含 `STORAGE_PENDING` 失败对象账本与 `workspace_offboard_storage_retry <workspace_id>` 重试）
+- [ ] staging 完整注销演练：双工作区隔离、返还包敏感字段扫描、备份恢复、对象存储失败后重试、worker/beat 任务观测
 - [ ] 处理真实 PII 前完成以上全部（PRD §7 门槛）
 
 ## 6. 已知部署注意点

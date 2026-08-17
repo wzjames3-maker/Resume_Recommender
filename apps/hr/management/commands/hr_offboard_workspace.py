@@ -349,7 +349,8 @@ class Command(BaseCommand):
                     try:
                         if get_storage().exists(key):
                             get_storage().delete(key)
-                    except OSError:
+                    except Exception:
+                        # WorkspaceOffboardingService owns persistent retry tracking; direct HR cleanup remains best effort.
                         pass
 
         result.update({

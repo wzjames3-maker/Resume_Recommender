@@ -7,7 +7,7 @@ import type {
   WorkspaceMemberItem,
 } from '@/api/type/workspace'
 import type {pageRequest, PageList} from '@/api/type/common'
-import type {WorkspaceOffboardingPlan} from '@/api/type/workspace'
+import type {WorkspaceOffboardingPlan, WorkspaceStorageCleanupStatus} from '@/api/type/workspace'
 
 const prefix = '/workspace'
 
@@ -22,6 +22,12 @@ const offboardWorkspace = (
   data: { confirm_workspace_id: string; force?: boolean; export?: boolean },
   loading?: Ref<boolean>,
 ) => post(`${prefix}/${workspace_id}/offboarding`, data, undefined, loading) as Promise<Result<WorkspaceOffboardingPlan>>
+
+const getOffboardingStorage = (workspace_id: string, loading?: Ref<boolean>) =>
+  get(`${prefix}/${workspace_id}/offboarding/storage`, undefined, loading) as Promise<Result<WorkspaceStorageCleanupStatus>>
+
+const retryOffboardingStorage = (workspace_id: string, loading?: Ref<boolean>) =>
+  post(`${prefix}/${workspace_id}/offboarding/storage`, undefined, undefined, loading) as Promise<Result<WorkspaceStorageCleanupStatus>>
 
 /**
  * 获取首页的工作空间下拉列表
@@ -120,4 +126,6 @@ export default {
   previewOffboarding,
   exportOffboarding,
   offboardWorkspace,
+  getOffboardingStorage,
+  retryOffboardingStorage,
 }

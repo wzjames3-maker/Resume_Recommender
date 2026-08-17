@@ -21,6 +21,24 @@ export interface WorkspaceOffboardingCounts {
   [key: string]: number
 }
 
+export interface WorkspaceStorageCleanupItem {
+  key: string
+  attempts: number
+  error: string
+  last_error_at: string | null
+}
+
+export interface WorkspaceStorageCleanupStatus {
+  status: 'OFFBOARDED'
+  workspace_id: string
+  offboarded_at: string
+  storage_status: 'COMPLETED' | 'STORAGE_PENDING'
+  storage_cleanup_attempts: number
+  storage_last_error: string
+  storage_last_error_at: string | null
+  storage_cleanup_errors: WorkspaceStorageCleanupItem[]
+}
+
 export interface WorkspaceOffboardingPlan {
   workspace_id: string
   status: 'DRY_RUN' | 'PENDING' | 'BLOCKED' | 'OFFBOARDED' | 'ALREADY_OFFBOARDED'
@@ -31,8 +49,13 @@ export interface WorkspaceOffboardingPlan {
   active_issues: string[]
   can_offboard: boolean
   exported_path?: string
+  offboarded_at?: string
   export?: Record<string, any> | null
-  storage_cleanup_errors?: Array<{ key: string; error: string }>
+  storage_status?: 'COMPLETED' | 'STORAGE_PENDING'
+  storage_cleanup_attempts?: number
+  storage_last_error?: string
+  storage_last_error_at?: string | null
+  storage_cleanup_errors?: WorkspaceStorageCleanupItem[]
 }
 
 export type { WorkspaceItem, CreateWorkspaceMemberParamsItem, WorkspaceMemberItem }

@@ -5,7 +5,7 @@ import os
 from celery import Celery
 from kombu import Exchange, Queue
 from maxkb import settings
-from .heartbeat import *
+from .heartbeat import *  # noqa: F403
 from .hmac_signed_serializer import register_hmac_signed_serializer
 
 # set the default Django settings module for the 'celery' program.
@@ -41,5 +41,6 @@ app.conf.update(
         'knowledge.task.generate',
         'knowledge.task.sync',
         'hr.task.resume',
+        'hr.task.agent',
     ]
 )

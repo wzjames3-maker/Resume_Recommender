@@ -14,6 +14,7 @@ urlpatterns = [
     path('workspace/<str:workspace_id>/mapping_resource/<str:resource>/<str:resource_id>/<int:current_page>/<int:page_size>', views.MappingResourceView.as_view()),
     path('workspace/<str:workspace_id>/offboarding/preview', views.WorkspaceOffboardingPreviewAPI.as_view()),
     path('workspace/<str:workspace_id>/offboarding/export', views.WorkspaceOffboardingExportAPI.as_view()),
+    path('workspace/<str:workspace_id>/offboarding/storage', views.WorkspaceOffboardingStorageAPI.as_view()),
     path('workspace/<str:workspace_id>/offboarding', views.WorkspaceOffboardingAPI.as_view()),
     path('email_setting', views.SystemSetting.Email.as_view()),
     path('profile', views.SystemProfile.as_view()),

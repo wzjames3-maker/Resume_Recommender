@@ -8,18 +8,22 @@ from celery.signals import heartbeat_sent, worker_ready, worker_shutdown
 WORKER_TMP_DIR = os.getenv("MAXKB_WORKER_TMP") or "/opt/maxkb-app/tmp"
 
 
+def _probe_path(filename):
+    directory = Path(WORKER_TMP_DIR)
+    directory.mkdir(parents=True, exist_ok=True)
+    return directory / filename
+
+
 @heartbeat_sent.connect
 def heartbeat(sender, **kwargs):
     worker_name = sender.eventer.hostname.split('@')[0]
-    heartbeat_path = Path(WORKER_TMP_DIR) / 'worker_heartbeat_{}'.format(worker_name)
-    heartbeat_path.touch()
+    _probe_path('worker_heartbeat_{}'.format(worker_name)).touch()
 
 
 @worker_ready.connect
 def worker_ready(sender, **kwargs):
     worker_name = sender.hostname.split('@')[0]
-    ready_path = Path(WORKER_TMP_DIR) / 'worker_ready_{}'.format(worker_name)
-    ready_path.touch()
+    _probe_path('worker_ready_{}'.format(worker_name)).touch()
 
 
 @worker_shutdown.connect

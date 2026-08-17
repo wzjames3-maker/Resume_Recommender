@@ -29,6 +29,31 @@
         <div class="actions"><el-button :loading="exportLoading" @click="downloadExport">下载数据返还包</el-button><el-button type="danger" :loading="purging" :disabled="confirmation !== workspaceId" @click="confirmPurge">注销工作空间</el-button></div>
       </div>
     </el-card>
+    <el-card v-if="storageStatus" class="mt-16">
+      <template #header>
+        <div class="flex-between">
+          <span>对象存储回收状态</span>
+          <el-tag :type="storageStatus.storage_status === 'COMPLETED' ? 'success' : 'warning'">
+            {{ storageStatus.storage_status === 'COMPLETED' ? '已完成' : '待重试' }}
+          </el-tag>
+        </div>
+      </template>
+      <div class="storage-summary color-secondary">
+        <span>重试次数：{{ storageStatus.storage_cleanup_attempts }}</span>
+        <span v-if="storageStatus.storage_last_error_at">最后错误：{{ storageStatus.storage_last_error_at }}</span>
+      </div>
+      <el-alert v-if="storageStatus.storage_status === 'STORAGE_PENDING' && storageStatus.storage_last_error" :title="storageStatus.storage_last_error" type="warning" :closable="false" class="mb-12" />
+      <el-table v-if="storageStatus.storage_cleanup_errors.length" :data="storageStatus.storage_cleanup_errors" border>
+        <el-table-column prop="key" label="失败对象" min-width="280" />
+        <el-table-column prop="attempts" label="对象尝试次数" width="120" />
+        <el-table-column prop="error" label="最后错误" min-width="240" />
+        <el-table-column prop="last_error_at" label="最后错误时间" min-width="180" />
+      </el-table>
+      <div v-else class="color-secondary">当前没有待回收对象。</div>
+      <el-button v-if="storageStatus.storage_status === 'STORAGE_PENDING'" class="mt-12" type="warning" :loading="storageRetrying" @click="retryStorage">
+        重试失败对象删除
+      </el-button>
+    </el-card>
   </div>
 </template>
 
@@ -36,7 +61,7 @@
 import { computed, onMounted, ref } from 'vue'
 import WorkspaceApi from '@/api/workspace/workspace'
 import useStore from '@/stores'
-import type { WorkspaceOffboardingPlan } from '@/api/type/workspace'
+import type { WorkspaceOffboardingPlan, WorkspaceStorageCleanupStatus } from '@/api/type/workspace'
 import { MsgConfirm, MsgError, MsgSuccess } from '@/utils/message'
 
 const { user } = useStore()
@@ -44,10 +69,29 @@ const workspaceId = computed(() => user.getWorkspaceId() || 'default')
 const loading = ref(false)
 const exportLoading = ref(false)
 const purging = ref(false)
+const storageRetrying = ref(false)
 const plan = ref<WorkspaceOffboardingPlan | null>(null)
+const storageStatus = ref<WorkspaceStorageCleanupStatus | null>(null)
 const force = ref(false)
 const includeExport = ref(true)
 const confirmation = ref('')
+
+function updateStorageStatus(data: WorkspaceOffboardingPlan) {
+  if (!data.storage_status || !data.offboarded_at) {
+    storageStatus.value = null
+    return
+  }
+  storageStatus.value = {
+    status: 'OFFBOARDED',
+    workspace_id: data.workspace_id,
+    offboarded_at: data.offboarded_at,
+    storage_status: data.storage_status,
+    storage_cleanup_attempts: data.storage_cleanup_attempts || 0,
+    storage_last_error: data.storage_last_error || '',
+    storage_last_error_at: data.storage_last_error_at || null,
+    storage_cleanup_errors: data.storage_cleanup_errors || [],
+  }
+}
 
 const countItems = computed(() => {
   const coreLabels: Record<string, string> = { applications: '应用', knowledge: '知识库', documents: '文档', paragraphs: '段落', embeddings: '向量', chats: '对话', models: '模型配置', core_files: '内核文件', workspace_permissions: '资源权限', resource_mappings: '资源映射', logs: '系统日志' }
@@ -60,7 +104,18 @@ const countItems = computed(() => {
 
 function loadPlan() {
   loading.value = true
-  WorkspaceApi.previewOffboarding(workspaceId.value, loading).then((response) => { plan.value = response.data }).catch(() => MsgError('加载注销预览失败')).finally(() => { loading.value = false })
+  WorkspaceApi.previewOffboarding(workspaceId.value, loading).then((response) => {
+    plan.value = response.data
+    updateStorageStatus(response.data)
+  }).catch(() => MsgError('加载注销预览失败')).finally(() => { loading.value = false })
+}
+
+function retryStorage() {
+  storageRetrying.value = true
+  WorkspaceApi.retryOffboardingStorage(workspaceId.value, storageRetrying).then((response) => {
+    storageStatus.value = response.data
+    MsgSuccess(response.data.storage_status === 'COMPLETED' ? '对象存储回收已完成' : '仍有对象回收失败')
+  }).catch(() => MsgError('重试对象存储回收失败')).finally(() => { storageRetrying.value = false })
 }
 
 function downloadJson(payload: Record<string, any>, filename: string) {
@@ -83,7 +138,12 @@ function confirmPurge() {
   MsgConfirm('确认注销工作空间', '将永久删除工作空间“' + workspaceId.value + '”的核心域与 HR 域数据，且无法恢复。确认继续？', { confirmButtonClass: 'danger' }).then(() => {
     purging.value = true
     return WorkspaceApi.offboardWorkspace(workspaceId.value, { confirm_workspace_id: confirmation.value, force: force.value, export: includeExport.value }, purging)
-  }).then((response) => { if (response.data?.export) downloadJson(response.data.export, 'workspace-offboard-' + workspaceId.value + '.json'); MsgSuccess('工作空间已注销'); plan.value = response.data }).catch(() => {}).finally(() => { purging.value = false })
+  }).then((response) => {
+    if (response.data?.export) downloadJson(response.data.export, 'workspace-offboard-' + workspaceId.value + '.json')
+    MsgSuccess('工作空间已注销')
+    plan.value = response.data
+    updateStorageStatus(response.data)
+  }).catch(() => {}).finally(() => { purging.value = false })
 }
 
 onMounted(loadPlan)
@@ -91,6 +151,9 @@ onMounted(loadPlan)
 
 <style scoped>
 .workspace-offboarding-page { min-width: 0; }
+.storage-summary { display: flex; gap: 24px; margin-bottom: 12px; }
+.mt-12 { margin-top: 12px; }
+.mt-16 { margin-top: 16px; }
 .count-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; }
 .count-label { color: var(--el-text-color-secondary); font-size: 13px; }
 .count-value { color: var(--el-color-danger); font-size: 26px; font-weight: 600; margin-top: 8px; }

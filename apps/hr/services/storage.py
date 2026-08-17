@@ -89,10 +89,12 @@ class S3Storage(StorageBackend):
         return handle.name
 
     def delete(self, key):
+        # Let the offboarding ledger persist failures and provide an operational retry path.
         try:
             self.client.remove_object(self.bucket, key)
-        except Exception:
-            pass
+        except Exception as exc:
+            # Existing HR callers handle OSError; preserve that contract for non-offboarding paths.
+            raise OSError(str(exc)) from exc
 
 
 _storage_instance = None

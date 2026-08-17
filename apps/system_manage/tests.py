@@ -7,7 +7,12 @@ from rest_framework.test import APIClient
 from application.models import Application, ApplicationFolder
 from knowledge.models import Document, File, Knowledge, KnowledgeFolder, Paragraph
 from models_provider.models import Model
-from system_manage.models import WorkspaceOffboard, WorkspaceUserResourcePermission
+from system_manage.models import (
+    StorageCleanupStatus,
+    WorkspaceOffboard,
+    WorkspaceOffboardStorageCleanup,
+    WorkspaceUserResourcePermission,
+)
 from system_manage.models.resource_mapping import ResourceMapping
 from system_manage.services.workspace_offboarding import WorkspaceOffboardingService, offboard_workspace
 from users.models import User
@@ -102,6 +107,69 @@ class WorkspaceOffboardingServiceTests(TestCase):
         self.assertTrue(File.objects.filter(id=other["file"].id).exists())
         self.assertTrue(Model.objects.filter(id=other["model"].id).exists())
 
+    def test_staging_rehearsal_export_isolation_and_storage_recovery(self):
+        import json
+
+        from hr.models import Candidate, ResumeFile
+
+        self._create_workspace(self.workspace)
+        other = self._create_workspace(self.other_workspace)
+        Candidate.objects.create(workspace_id=self.workspace, name="Staging Candidate A")
+        Candidate.objects.create(workspace_id=self.other_workspace, name="Staging Candidate B")
+        ResumeFile.objects.create(
+            workspace_id=self.workspace,
+            file_name="a.pdf",
+            extension="pdf",
+            file_path="resume/staging-a/a.pdf",
+            file_size=1,
+            sha256="sha-" + uuid.uuid7().hex,
+        )
+        ResumeFile.objects.create(
+            workspace_id=self.other_workspace,
+            file_name="b.pdf",
+            extension="pdf",
+            file_path="resume/staging-b/b.pdf",
+            file_size=1,
+            sha256="sha-" + uuid.uuid7().hex,
+        )
+
+        preview = WorkspaceOffboardingService.offboard(self.workspace, user_id=self.user.id, dry_run=True)
+        self.assertEqual(preview["status"], "DRY_RUN")
+        self.assertEqual(preview["counts"]["core"]["applications"], 1)
+        export_payload = WorkspaceOffboardingService.export_data(self.workspace)
+        serialized_export = json.dumps(export_payload, ensure_ascii=False)
+        self.assertIn(self.workspace, serialized_export)
+        self.assertNotIn("secret-credential", serialized_export)
+
+        class OneFailureStorage:
+            failed = True
+
+            def delete(self, key):
+                if self.failed:
+                    self.failed = False
+                    raise OSError("staging object store outage")
+
+        storage = OneFailureStorage()
+        with patch("system_manage.services.workspace_offboarding.get_storage", return_value=storage):
+            failed = WorkspaceOffboardingService.offboard(self.workspace, user_id=self.user.id, force=True)
+        self.assertEqual(failed["storage_status"], StorageCleanupStatus.STORAGE_PENDING)
+        self.assertFalse(Application.objects.filter(workspace_id=self.workspace).exists())
+        self.assertTrue(Application.objects.filter(id=other["application"].id).exists())
+        self.assertFalse(Candidate.objects.filter(workspace_id=self.workspace).exists())
+        self.assertTrue(Candidate.objects.filter(workspace_id=self.other_workspace).exists())
+        self.assertEqual(WorkspaceOffboard.objects.filter(workspace_id=self.workspace).count(), 1)
+        self.assertFalse(WorkspaceOffboard.objects.filter(workspace_id=self.other_workspace).exists())
+
+        with patch("system_manage.services.workspace_offboarding.get_storage", return_value=storage):
+            recovered = WorkspaceOffboardingService.retry_storage_cleanup(self.workspace)
+        self.assertEqual(recovered["storage_status"], StorageCleanupStatus.COMPLETED)
+
+        with patch("system_manage.services.workspace_offboarding.get_storage", return_value=storage):
+            other_result = WorkspaceOffboardingService.offboard(self.other_workspace, user_id=self.user.id, force=True)
+        self.assertEqual(other_result["storage_status"], StorageCleanupStatus.COMPLETED)
+        self.assertFalse(Application.objects.filter(id=other["application"].id).exists())
+        self.assertFalse(Candidate.objects.filter(workspace_id=self.other_workspace).exists())
+
     def test_offboard_rolls_back_hr_and_core_rows_when_core_delete_fails(self):
         self._create_workspace(self.workspace)
         from hr.models import Candidate, HrOffboard
@@ -127,6 +195,97 @@ class WorkspaceOffboardingServiceTests(TestCase):
         self.assertEqual(WorkspaceOffboard.objects.filter(workspace_id=self.workspace).count(), 1)
 
 
+    def test_storage_failure_keeps_database_deleted_and_retries_to_completion(self):
+        from hr.models import Candidate, ResumeFile
+
+        Candidate.objects.create(workspace_id=self.workspace, name="Storage Candidate")
+        ResumeFile.objects.create(
+            workspace_id=self.workspace,
+            file_name="resume.pdf",
+            extension="pdf",
+            file_path="resume/workspace-core-offboard/resume.pdf",
+            file_size=1,
+            sha256="sha-" + uuid.uuid7().hex,
+        )
+
+        class FailingStorage:
+            def exists(self, key):
+                return True
+
+            def delete(self, key):
+                raise OSError("object store unavailable")
+
+        storage = FailingStorage()
+        with patch("system_manage.services.workspace_offboarding.get_storage", return_value=storage):
+            result = WorkspaceOffboardingService.offboard(self.workspace, user_id=self.user.id, force=True)
+
+        self.assertEqual(result["storage_status"], StorageCleanupStatus.STORAGE_PENDING)
+        self.assertEqual(len(result["storage_cleanup_errors"]), 1)
+        self.assertTrue(result["storage_cleanup_errors"][0]["last_error_at"])
+        self.assertFalse(Candidate.objects.filter(workspace_id=self.workspace).exists())
+        tombstone = WorkspaceOffboard.objects.get(workspace_id=self.workspace)
+        cleanup = WorkspaceOffboardStorageCleanup.objects.get(workspace_offboard=tombstone)
+        self.assertEqual(cleanup.status, StorageCleanupStatus.STORAGE_PENDING)
+        self.assertEqual(cleanup.attempts, 1)
+        self.assertEqual(tombstone.storage_cleanup_attempts, 1)
+
+        storage.delete = lambda key: None
+        with patch("system_manage.services.workspace_offboarding.get_storage", return_value=storage):
+            retried = WorkspaceOffboardingService.retry_storage_cleanup(self.workspace)
+
+        self.assertEqual(retried["storage_status"], StorageCleanupStatus.COMPLETED)
+        self.assertEqual(retried["storage_cleanup_errors"], [])
+        cleanup.refresh_from_db()
+        tombstone.refresh_from_db()
+        self.assertEqual(cleanup.status, StorageCleanupStatus.COMPLETED)
+        self.assertEqual(cleanup.attempts, 2)
+        self.assertIsNotNone(cleanup.completed_at)
+        self.assertEqual(tombstone.storage_status, StorageCleanupStatus.COMPLETED)
+        self.assertEqual(tombstone.storage_cleanup_attempts, 2)
+
+
+
+    def test_storage_retry_is_idempotent_after_completion(self):
+        tombstone = WorkspaceOffboard.objects.create(
+            workspace_id=self.workspace,
+            counts={},
+            storage_status=StorageCleanupStatus.COMPLETED,
+            storage_cleanup_attempts=2,
+        )
+        with patch("system_manage.services.workspace_offboarding.get_storage", side_effect=OSError("unused retry")):
+            repeated = WorkspaceOffboardingService.retry_storage_cleanup(self.workspace)
+        self.assertEqual(repeated["storage_status"], StorageCleanupStatus.COMPLETED)
+        tombstone.refresh_from_db()
+        self.assertEqual(tombstone.storage_cleanup_attempts, 2)
+
+    def test_storage_client_initialization_failure_is_persisted(self):
+        from hr.models import Candidate, ResumeFile
+
+        Candidate.objects.create(workspace_id=self.workspace, name="Storage Init Candidate")
+        ResumeFile.objects.create(
+            workspace_id=self.workspace,
+            file_name="resume.docx",
+            extension="docx",
+            file_path="resume/workspace-core-offboard/init-failure.docx",
+            file_size=1,
+            sha256="sha-" + uuid.uuid7().hex,
+        )
+        with patch(
+            "system_manage.services.workspace_offboarding.get_storage",
+            side_effect=OSError("bucket unavailable"),
+        ):
+            result = WorkspaceOffboardingService.offboard(self.workspace, user_id=self.user.id, force=True)
+
+        self.assertEqual(result["storage_status"], StorageCleanupStatus.STORAGE_PENDING)
+        self.assertEqual(result["storage_cleanup_errors"][0]["error"], "bucket unavailable")
+        self.assertFalse(Candidate.objects.filter(workspace_id=self.workspace).exists())
+        tombstone = WorkspaceOffboard.objects.get(workspace_id=self.workspace)
+        self.assertEqual(tombstone.storage_cleanup_attempts, 1)
+        self.assertEqual(
+            WorkspaceOffboardStorageCleanup.objects.get(workspace_offboard=tombstone).attempts,
+            1,
+        )
+
 class WorkspaceOffboardingApiTests(TestCase):
     def setUp(self):
         self.workspace = "workspace-core-api"
@@ -151,6 +310,38 @@ class WorkspaceOffboardingApiTests(TestCase):
         response = denied_client.get(f"/admin/api/workspace/{self.workspace}/offboarding/preview")
         self.assertEqual(response.status_code, 403)
         self.assertEqual(response.json()["code"], 403)
+
+    def test_storage_api_lists_failures_and_retries(self):
+        tombstone = WorkspaceOffboard.objects.create(
+            workspace_id=self.workspace,
+            counts={},
+            storage_status=StorageCleanupStatus.STORAGE_PENDING,
+        )
+        cleanup = WorkspaceOffboardStorageCleanup.objects.create(
+            workspace_offboard=tombstone,
+            key="resume/storage-api/failure.pdf",
+            attempts=1,
+            last_error="temporary outage",
+        )
+        class Storage:
+            def exists(self, key):
+                return True
+
+            def delete(self, key):
+                return None
+
+        base = f"/admin/api/workspace/{self.workspace}/offboarding/storage"
+        status = self.client.get(base)
+        self.assertEqual(status.status_code, 200)
+        self.assertEqual(status.json()["data"]["storage_status"], StorageCleanupStatus.STORAGE_PENDING)
+        self.assertEqual(status.json()["data"]["storage_cleanup_errors"][0]["key"], cleanup.key)
+
+        with patch("system_manage.services.workspace_offboarding.get_storage", return_value=Storage()):
+            retry = self.client.post(base, {}, format="json")
+        self.assertEqual(retry.status_code, 200)
+        self.assertEqual(retry.json()["data"]["storage_status"], StorageCleanupStatus.COMPLETED)
+        cleanup.refresh_from_db()
+        self.assertEqual(cleanup.status, StorageCleanupStatus.COMPLETED)
 
     def test_system_api_preview_and_purge(self):
         Candidate = __import__("hr.models", fromlist=["Candidate"]).Candidate

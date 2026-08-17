@@ -58,7 +58,9 @@ from system_manage.models import (
     Log,
     ResourceChatUserAuthorize,
     ResourceChatUserGroupAuthorize,
+    StorageCleanupStatus,
     WorkspaceOffboard,
+    WorkspaceOffboardStorageCleanup,
     WorkspaceUserResourcePermission,
 )
 
@@ -326,17 +328,116 @@ class WorkspaceOffboardingService:
         WorkspaceOffboardingService._delete_tree(KnowledgeFolder, workspace_id)
         Model.objects.filter(workspace_id=workspace_id).delete()
 
-    @staticmethod
-    def _cleanup_storage(keys):
-        errors = []
-        storage = get_storage()
-        for key in keys:
-            try:
-                if key and storage.exists(key):
-                    storage.delete(key)
-            except OSError as exc:
-                errors.append({"key": key, "error": str(exc)})
-        return errors
+    @classmethod
+    def _storage_payload(cls, tombstone):
+        pending = list(
+            tombstone.storage_cleanup_objects.filter(status=StorageCleanupStatus.STORAGE_PENDING)
+            .order_by("create_time")
+            .values("key", "attempts", "last_error", "last_error_at")
+        )
+        return {
+            "storage_status": tombstone.storage_status,
+            "storage_cleanup_attempts": tombstone.storage_cleanup_attempts,
+            "storage_last_error": tombstone.storage_last_error,
+            "storage_last_error_at": tombstone.storage_last_error_at.isoformat()
+            if tombstone.storage_last_error_at
+            else None,
+            "storage_cleanup_errors": [
+                {
+                    "key": row["key"],
+                    "attempts": row["attempts"],
+                    "error": row["last_error"],
+                    "last_error_at": row["last_error_at"].isoformat() if row["last_error_at"] else None,
+                }
+                for row in pending
+            ],
+        }
+
+    @classmethod
+    def _cleanup_storage(cls, tombstone):
+        pending_ids = list(
+            tombstone.storage_cleanup_objects.filter(status=StorageCleanupStatus.STORAGE_PENDING).values_list(
+                "id", flat=True
+            )
+        )
+        if not pending_ids:
+            return WorkspaceOffboard.objects.get(id=tombstone.id)
+
+        try:
+            storage = get_storage()
+            storage_error = None
+        except Exception as exc:
+            # A broken S3 client/config is still a cleanup failure, not a reason to undo committed deletes.
+            storage = None
+            storage_error = exc
+
+        for cleanup_id in pending_ids:
+            with transaction.atomic():
+                cleanup = (
+                    WorkspaceOffboardStorageCleanup.objects.select_for_update()
+                    .filter(id=cleanup_id, status=StorageCleanupStatus.STORAGE_PENDING)
+                    .first()
+                )
+                if cleanup is None:
+                    continue
+                cleanup.attempts += 1
+                cleanup.save(update_fields=["attempts", "update_time"])
+                try:
+                    if storage_error is not None:
+                        raise storage_error
+                    if cleanup.key:
+                        # delete is idempotent for local/S3 backends; avoid a preflight stat race.
+                        storage.delete(cleanup.key)
+                except Exception as exc:
+                    cleanup.last_error = str(exc)
+                    cleanup.last_error_at = timezone.now()
+                    cleanup.save(update_fields=["last_error", "last_error_at", "update_time"])
+                else:
+                    cleanup.status = StorageCleanupStatus.COMPLETED
+                    cleanup.completed_at = timezone.now()
+                    cleanup.save(update_fields=["status", "completed_at", "update_time"])
+
+        with transaction.atomic():
+            tombstone = WorkspaceOffboard.objects.select_for_update().get(id=tombstone.id)
+            pending = list(
+                tombstone.storage_cleanup_objects.filter(status=StorageCleanupStatus.STORAGE_PENDING)
+                .order_by("create_time")
+                .values("key", "attempts", "last_error", "last_error_at")
+            )
+            latest_error = max(
+                (row for row in pending if row["last_error_at"]),
+                key=lambda row: row["last_error_at"],
+                default=None,
+            )
+            tombstone.storage_cleanup_attempts += 1
+            tombstone.storage_status = (
+                StorageCleanupStatus.STORAGE_PENDING if pending else StorageCleanupStatus.COMPLETED
+            )
+            if latest_error:
+                tombstone.storage_last_error = latest_error["last_error"]
+                tombstone.storage_last_error_at = latest_error["last_error_at"]
+            tombstone.counts = {
+                **tombstone.counts,
+                "storage_cleanup_errors": [
+                    {
+                        "key": row["key"],
+                        "attempts": row["attempts"],
+                        "error": row["last_error"],
+                        "last_error_at": row["last_error_at"].isoformat() if row["last_error_at"] else None,
+                    }
+                    for row in pending
+                ],
+            }
+            tombstone.save(
+                update_fields=[
+                    "storage_cleanup_attempts",
+                    "storage_status",
+                    "storage_last_error",
+                    "storage_last_error_at",
+                    "counts",
+                ]
+            )
+        return tombstone
 
     @classmethod
     def offboard(cls, workspace_id, *, user_id, force=False, dry_run=False, export_dir=None, include_export=False):
@@ -347,6 +448,7 @@ class WorkspaceOffboardingService:
             return {
                 "status": "ALREADY_OFFBOARDED", "workspace_id": workspace_id, "counts": already.counts,
                 "offboarded_at": already.offboarded_at.isoformat(), "exported_path": already.exported_path,
+                **cls._storage_payload(already),
             }
         plan = cls.plan(workspace_id)
         result = {
@@ -377,25 +479,54 @@ class WorkspaceOffboardingService:
                 workspace_id, user_id=user_id, force=force, include_export=False, delete_storage=False
             )
             cls._delete_core(workspace_id, plan["resource_ids"])
+            storage_keys = sorted({str(key) for key in hr_result.get("storage_keys", []) if key})
             tombstone = WorkspaceOffboard.objects.create(
                 workspace_id=workspace_id,
                 user_id=user_id,
                 exported_path=exported_path,
                 counts=result["counts"],
                 force=force,
+                storage_status=StorageCleanupStatus.STORAGE_PENDING
+                if storage_keys
+                else StorageCleanupStatus.COMPLETED,
+            )
+            WorkspaceOffboardStorageCleanup.objects.bulk_create(
+                [WorkspaceOffboardStorageCleanup(workspace_offboard=tombstone, key=key) for key in storage_keys]
             )
 
-        storage_errors = cls._cleanup_storage(hr_result.get("storage_keys", []))
-        if storage_errors:
-            tombstone.counts = {**tombstone.counts, "storage_cleanup_errors": storage_errors}
-            tombstone.save(update_fields=["counts"])
+        tombstone = cls._cleanup_storage(tombstone) if storage_keys else tombstone
         result.update({
             "status": "OFFBOARDED", "force": force, "exported_path": exported_path,
             "export": export_data if include_export else None,
             "offboarded_at": tombstone.offboarded_at.isoformat(),
-            "storage_cleanup_errors": storage_errors,
+            **cls._storage_payload(tombstone),
         })
         return result
+
+    @classmethod
+    def storage_cleanup_status(cls, workspace_id):
+        tombstone = WorkspaceOffboard.objects.filter(workspace_id=workspace_id).first()
+        if tombstone is None:
+            raise AppApiException(404, "workspace has not been offboarded")
+        return {
+            "status": "OFFBOARDED",
+            "workspace_id": workspace_id,
+            "offboarded_at": tombstone.offboarded_at.isoformat(),
+            **cls._storage_payload(tombstone),
+        }
+
+    @classmethod
+    def retry_storage_cleanup(cls, workspace_id):
+        tombstone = WorkspaceOffboard.objects.filter(workspace_id=workspace_id).first()
+        if tombstone is None:
+            raise AppApiException(404, "workspace has not been offboarded")
+        tombstone = cls._cleanup_storage(tombstone)
+        return {
+            "status": "OFFBOARDED",
+            "workspace_id": workspace_id,
+            "offboarded_at": tombstone.offboarded_at.isoformat(),
+            **cls._storage_payload(tombstone),
+        }
 
 
 def preview_workspace_offboarding(workspace_id):

@@ -21,6 +21,14 @@ heartbeat_module = importlib.import_module("ops.celery.heartbeat")
 DEFAULT_WORKER_TMP_DIR = "/opt/maxkb-app/tmp"
 
 
+class CeleryTaskRegistrationTests(SimpleTestCase):
+    def test_hr_screening_task_is_registered(self):
+        from ops import celery_app
+
+        celery_app.loader.import_default_modules()
+        self.assertIn("celery:hr_run_screening_agent", celery_app.tasks)
+
+
 class HeartbeatProbeTests(SimpleTestCase):
     """worker 心跳/就绪/退出探针文件的行为与目录可配置性。"""
 
@@ -38,9 +46,9 @@ class HeartbeatProbeTests(SimpleTestCase):
 
     def test_worker_ready_creates_probe_file(self):
         with tempfile.TemporaryDirectory() as tmp:
-            with patch.object(heartbeat_module, "WORKER_TMP_DIR", tmp):
+            with patch.object(heartbeat_module, "WORKER_TMP_DIR", os.path.join(tmp, "missing")):
                 heartbeat_module.worker_ready(self._sender())
-                self.assertTrue(os.path.exists(os.path.join(tmp, "worker_ready_worker1")))
+                self.assertTrue(os.path.exists(os.path.join(tmp, "missing", "worker_ready_worker1")))
 
     def test_worker_shutdown_removes_probe_files(self):
         with tempfile.TemporaryDirectory() as tmp:

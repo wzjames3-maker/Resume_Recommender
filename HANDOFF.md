@@ -87,10 +87,10 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
   同 seed 7 全量 200 例真实重测：宽松一致率 82.5%（正 65% / 负 100%，达成 ≥80%），严格一致率 55%（ADVANCE 12 例）；
   诊断：残留误拒为 flash-lite 数值标定（清晰匹配评 0-47 分，评论文本却明说一致），彻底解决需更强模型档位（当前账号仅有 flash-lite）；
   报告 docs/SCREENING-EVAL-2026-08-17b.md + JSON、全量 486 tests OK。
-- 部署验证（PRD §8，2026-08-17）已完成：Celery worker+beat 真实调度（探针文件、任务注册、beat 19:00 派发→worker 执行）、
-  对象存储私有读（匿名 403/签名 200）、备份加密+恢复演练+轮转（Salted__/pg_restore 624 条目）、日志 PII 脱敏复核（无真实泄露）、
-  .env.example 600/默认 DEBUG=False、PG 连接加密补齐（MAXKB_DB_SSLMODE→OPTIONS sslmode）；报告 docs/DEPLOYMENT-VERIFY-2026-08-17.md。
-  租户注销/数据返还阶段 A、B1、B2 已实现（见下条新增记录）；若未来接入外部租户平台，仅需让其 Workspace 删除事件调用本仓库的统一 callback。
+- 部署验证（PRD §8，2026-08-17）已完成：Celery worker+beat 真实调度（探针文件、`hr.task.agent` 任务注册、beat 19:00 派发→worker 执行）、
+  对象存储私有读（匿名 403/签名 200）、备份加密+恢复演练+轮转（42M Salted__/pg_restore 637 条目）、日志 PII 脱敏复核（无真实泄露）、
+  .env.example 600/默认 DEBUG=False、PG 连接加密补齐（MAXKB_DB_SSLMODE→OPTIONS sslmode）；本轮还修复探针目录自动创建并增加 Celery 注册测试；报告 docs/DEPLOYMENT-VERIFY-2026-08-17.md。
+  租户注销/数据返还阶段 A、B1、B2、B3 已实现（见下条新增记录）；若未来接入外部租户平台，仅需让其 Workspace 删除事件调用本仓库的统一 callback。
 - 租户注销/数据返还（设计稿阶段 A，2026-08-18）已完成并提交：新增 hr_offboard tombstone（0026 迁移，幂等锚点+留痕：执行人/时间/各表计数/导出包路径，注销后唯一保留的 HR 记录）、
   hr_offboard_workspace <workspace_id> [--dry-run|--force|--export <dir>|--user-id <uuid>] 命令（默认即审计+清理；dry-run 只统计；export 先出脱敏 JSON 数据返还包再清理；force 绕过活跃守卫：有 PENDING/RUNNING Agent 运行 / ACTIVE 申请 / 非 CLOSED 职位时拒绝）、
   清理顺序严格按「先子后父、先账本后配置」：简历语义索引 delete_resume_knowledge 批量删文档/段落/向量/知识库（含孤儿）→ 流程对象与级联子对象 → 职位/阶段 → 候选人 → 简历文件 → 配置/授权/审计/流转日志 → 存储对象缺失容忍；
@@ -98,10 +98,12 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
   hr.tests 新增 HrOffboardCommandTests 7 例（全量归零/索引与存储清空/dry-run 与实际计数一致/幂等重入报已注销/跨工作区隔离/守卫拒绝/导出脱敏+路径留痕），HR 全量 440 tests OK + ruff 干净；
   已在真实开发库端到端验证：offboard-e2e 工作区 23 行/1 存储文件清零、7 段导出 JSON 脱敏（138****5678 / e2***@example.com）、二次执行报已注销不重删。
 - 租户注销阶段 B1（2026-08-18）已完成：新增 `hr.services.offboarding` callback contract（preview/export/offboard），命令与 callback 共用无输出执行器；新增 HR ADMIN 范围内的 preview/export/purge Web API，POST 强制 `confirm_workspace_id`，可返回脱敏数据返还包；新增权限、跨工作区、导出不落库、确认、防误删与活跃守卫测试。当前精简内核没有统一 Workspace ORM/注销生命周期，因此 B2 仍需由实际内核生命周期调用该 callback，并补齐内核其它域与统一对象存储编排。
-- 租户注销阶段 B2（2026-08-18）已完成：新增 `WorkspaceOffboard` 统一跨域 tombstone、`WorkspaceOffboardingService` 与 `workspace_offboard` 命令；编排 application/knowledge/model/权限/映射/日志/chat/HR，按资源 ID 精确清理内核文件，外层事务提交后统一回收 HR 对象存储；新增 Workspace ADMIN 系统 API 与 HR「租户注销」页面，支持预览、脱敏返还包、确认、force、事务失败回滚和幂等；system_manage 4 例、全量后端 501 tests OK，vue-tsc/admin build OK。
+- 租户注销阶段 B2（2026-08-18）已完成：新增 `WorkspaceOffboard` 统一跨域 tombstone、`WorkspaceOffboardingService` 与 `workspace_offboard` 命令；编排 application/knowledge/model/权限/映射/日志/chat/HR，按资源 ID 精确清理内核文件，外层事务提交后统一回收 HR 对象存储；新增 Workspace ADMIN 系统 API 与 HR「租户注销」页面，支持预览、脱敏返还包、确认、force、事务失败回滚和幂等；system_manage 针对性回归与 staging-equivalent 演练通过，全量 backend 498 tests OK，vue-tsc/admin/chat build OK。
+- 租户注销阶段 B3（2026-08-18）已完成：对象存储失败重试闭环；新增 `WorkspaceOffboard` 的 `storage_status`（`COMPLETED`/`STORAGE_PENDING`）、总尝试次数/最后错误/最后错误时间，新增 `WorkspaceOffboardStorageCleanup` 逐对象账本及迁移 0007/0008；失败不回滚跨域数据库删除，`python apps/manage.py workspace_offboard_storage_retry <workspace_id>` 可重试，管理 API `GET/POST /admin/api/workspace/{workspace_id}/offboarding/storage` 可查看失败对象并重新回收，注销页面已显示状态、失败 key、尝试次数和重试按钮；失败删除、客户端初始化失败、完成后重复 retry、API、双工作区 staging-equivalent 均有测试，system_manage 10 tests OK。S3 删除异常不再静默吞掉（兼容旧 HR 调用转换为 OSError）。
+- 本轮 staging-equivalent 验收已完成：双工作区完整资源/权限/文件、preview、返还包敏感字段扫描、目标对象删除失败→`STORAGE_PENDING`→重试恢复、另一工作区不受影响；MinIO 匿名 403/目标删除/另一租户对象保留；加密备份解密恢复 637 entries；隔离 Redis DB15 worker 注册 `celery:hr_run_screening_agent`、探针和真实 cleanup task 均通过。真实 staging 与外部 Workspace 生命周期仍需平台侧演练。
 - 下一步：按评测建议①③升级评测构造/对比更强模型重测，叠加 ≥80 例人工标注集交叉验证后冻结阈值；
   试点观测（采纳率/处理时长）数据支撑后由 ADMIN 显式开启免审分带（保留审计与人工回滚）；
-  PRD §7 租户注销门槛现为：本仓库内核与 HR 域阶段 A/B1/B2 已闭环；外部租户平台若存在独立 Workspace ORM，应将删除事件接入 `system_manage.services.workspace_offboarding.offboard_workspace`。
+  PRD §7 租户注销门槛现为：本仓库内核与 HR 域阶段 A/B1/B2/B3 已闭环；剩余为 staging 真实注销演练与外部租户平台生命周期接入。若存在独立 Workspace ORM，应将删除事件接入 `system_manage.services.workspace_offboarding.offboard_workspace`。
 
 ## 5. 测试环境注意
 
