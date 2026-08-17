@@ -1,0 +1,8092 @@
+{
+ "workspace": "eval-ws",
+ "seed": 7,
+ "total": 200,
+ "positive": 100,
+ "negative": 100,
+ "consistency_loose": 0.675,
+ "consistency_loose_positive": 0.35,
+ "consistency_loose_negative": 1.0,
+ "consistency_strict": 0.675,
+ "action_matrix": {
+  "ADVANCE": 12,
+  "HOLD": 22,
+  "DECLINE": 163,
+  "null": 3
+ },
+ "score_bands": {
+  "80-100": {
+   "count": 12,
+   "hold": 0
+  },
+  "0-59": {
+   "count": 163,
+   "hold": 0
+  },
+  "60-79": {
+   "count": 22,
+   "hold": 22
+  },
+  "no-score": {
+   "count": 3,
+   "hold": 0
+  }
+ },
+ "no_evidence_rate": 0.12,
+ "avg_duration_s": 4.07,
+ "records": [
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e32-4c93-7ea2-ac56-7e679d74e21f",
+    "name": "伍红姬",
+    "skills": [
+     "会员卡营销"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-伍红姬",
+    "city": "",
+    "skill_requirements": [],
+    "description": "岗位职责：\n1. 负责1.根据单位的销售策略，负责开拓市场，完成会员卡的营销工作；2.发展潜在会员，使之成为我们的会员；3.与老会员保持良好的沟通，用服务提高续会质量；4.提供售前、售中、售后一体化的高质量服务；5.市场宣传，接受客户咨询；6带领客户参观，介绍会所设施及配套服务，并做必要的疑问解答。\n\n任职要求：\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "ADVANCE",
+    "score": 86,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e32-4c93-7ea2-ac56-7e679d74e21f",
+    "name": "伍红姬",
+    "skills": [
+     "会员卡营销"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 27,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e34-908e-7860-b008-309ccfd8cdd1",
+    "name": "唐宏鹏",
+    "skills": [
+     "会议组织",
+     "差旅安排",
+     "门店管理",
+     "报表撰写",
+     "资料整理",
+     "报告分析",
+     "跨部门沟通",
+     "VIP卡种",
+     "会员服务",
+     "会员资料管理",
+     "客户服务",
+     "潜在客户发掘",
+     "销售渠道开发",
+     "销售渠道维护",
+     "档案管理",
+     "文件归档",
+     "文件借阅管理",
+     "工程资料管理",
+     "工程图纸管理",
+     "工程文件处理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-唐宏鹏",
+    "city": "",
+    "skill_requirements": [
+     "门店管理",
+     "报表撰写",
+     "资料整理",
+     "报告分析"
+    ],
+    "description": "岗位职责：\n1. 负责1、负责总经理日常事务管理，各类会议工作及差旅事务的组织安排；2、协助总经理开展业务工作，包括门店管理、报表撰写、资料整理及报告分析；3、协助总经理进行集团内部的横向沟通，包括集团各门店各部门之间的沟通，协调各部门关系；4、完成总经理交办的其他事务。\n\n任职要求：\n- 熟练掌握：门店管理、报表撰写、资料整理、报告分析\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 45,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e34-908e-7860-b008-309ccfd8cdd1",
+    "name": "唐宏鹏",
+    "skills": [
+     "会议组织",
+     "差旅安排",
+     "门店管理",
+     "报表撰写",
+     "资料整理",
+     "报告分析",
+     "跨部门沟通",
+     "VIP卡种",
+     "会员服务",
+     "会员资料管理",
+     "客户服务",
+     "潜在客户发掘",
+     "销售渠道开发",
+     "销售渠道维护",
+     "档案管理",
+     "文件归档",
+     "文件借阅管理",
+     "工程资料管理",
+     "工程图纸管理",
+     "工程文件处理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 20,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e32-5a8c-7ff2-bdf8-29b482b630ca",
+    "name": "常艳",
+    "skills": [
+     "ppt",
+     "sql"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-常艳",
+    "city": "",
+    "skill_requirements": [
+     "sql"
+    ],
+    "description": "岗位职责：\n1. 负责1、负责集团鼎捷软件TIPTOPERP系统的二次开发、实施、维护；2、负责业务需求的深入理解，制定解决方案及方案的撰写并付诸开发实施;3、负责责任ERP模块的操作手册编写和流程梳理工作；4、熟练使用4GL开发语言，GeneroStudio，CrystalReport，Oracle或PL/SQL等工具，进行二次开发；5、熟悉关系型数据库平台，如SQLSERVE\n\n任职要求：\n- 熟练掌握：sql\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 45,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e32-5a8c-7ff2-bdf8-29b482b630ca",
+    "name": "常艳",
+    "skills": [
+     "ppt",
+     "sql"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 15,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e30-ab67-7280-be2f-8b63dffd6e2c",
+    "name": "廉露",
+    "skills": [
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-廉露",
+    "city": "",
+    "skill_requirements": [
+     "数据分析"
+    ],
+    "description": "岗位职责：\n1. 负责1.对车辆数据进行系统架构和存储结构设计、建模2.参与大数据应用相关的产品设计，制定项目开发计划，支撑业务的快速迭代3.负责车联网大数据分析、开发工作，发现问题，形成结论帮助产品改善4.参与人工智能在车联网应用的前瞻技术调研\n\n任职要求：\n- 熟练掌握：数据分析\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 24,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e30-ab67-7280-be2f-8b63dffd6e2c",
+    "name": "廉露",
+    "skills": [
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-范超发",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "招聘ppt方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 14,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e32-3d3b-7741-9992-9335b261823a",
+    "name": "余瑾",
+    "skills": [
+     "微信公众服务号维护",
+     "内部培训平台运营",
+     "活动执行",
+     "方案策划",
+     "数据统计报表制作",
+     "市场分析",
+     "饲喂程序设计",
+     "市场开发",
+     "区域销售管理",
+     "客户关系管理",
+     "品牌推广",
+     "营销活动组织"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-余瑾",
+    "city": "",
+    "skill_requirements": [
+     "微信公众服务号维护",
+     "活动执行",
+     "方案策划"
+    ],
+    "description": "岗位职责：\n1. 负责协助学校客户日常维护和管理，为学校品牌活动开展储备相应资源；根据学校的需求开展校企合作活动、品牌联合活动等的方案策划，活动执行，后续效果跟踪，活动总结；完成学校官方微信公众服务号维护；完成线上内部培训平台的基本运营维护；\n\n任职要求：\n- 熟练掌握：微信公众服务号维护、活动执行、方案策划\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "ADVANCE",
+    "score": 88,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e32-3d3b-7741-9992-9335b261823a",
+    "name": "余瑾",
+    "skills": [
+     "微信公众服务号维护",
+     "内部培训平台运营",
+     "活动执行",
+     "方案策划",
+     "数据统计报表制作",
+     "市场分析",
+     "饲喂程序设计",
+     "市场开发",
+     "区域销售管理",
+     "客户关系管理",
+     "品牌推广",
+     "营销活动组织"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 29,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e35-7c6c-7b61-b346-d8eb85de49c8",
+    "name": "和达富",
+    "skills": [
+     "资料管理",
+     "档案管理",
+     "工程技术文档",
+     "文件管理",
+     "图纸管理",
+     "会议纪要",
+     "工程技术档案",
+     "会计凭证",
+     "银行柜面业务",
+     "费用审核",
+     "报销单审核",
+     "工艺设计",
+     "方案设计",
+     "初步设计",
+     "施工图设计",
+     "技术指导",
+     "系统调试",
+     "运行调试",
+     "环保项目设计",
+     "国际贸易"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-和达富",
+    "city": "",
+    "skill_requirements": [
+     "初步设计",
+     "施工图设计",
+     "技术指导",
+     "环保项目设计"
+    ],
+    "description": "岗位职责：\n1. 负责1、负责施工项目技术支持；2、负责编制工程项目的工艺、方案、初步设计、施工图设计等；3、负责施工现场的技术指导和运行、调试。4、必须有相应环保项目设计或施工经验。\n\n任职要求：\n- 熟练掌握：初步设计、施工图设计、技术指导、环保项目设计\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 53,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e35-7c6c-7b61-b346-d8eb85de49c8",
+    "name": "和达富",
+    "skills": [
+     "资料管理",
+     "档案管理",
+     "工程技术文档",
+     "文件管理",
+     "图纸管理",
+     "会议纪要",
+     "工程技术档案",
+     "会计凭证",
+     "银行柜面业务",
+     "费用审核",
+     "报销单审核",
+     "工艺设计",
+     "方案设计",
+     "初步设计",
+     "施工图设计",
+     "技术指导",
+     "系统调试",
+     "运行调试",
+     "环保项目设计",
+     "国际贸易"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 8,
+    "evidence_ok": false,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e32-93bc-7e72-9d87-3f9f1db2b60a",
+    "name": "雷琳",
+    "skills": [
+     "go",
+     "html"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-雷琳",
+    "city": "",
+    "skill_requirements": [
+     "html"
+    ],
+    "description": "岗位职责：\n1. 负责1.对于字节跳动IT产品的WEB端和移动端HTML项目设计，实施，维护工作；2.服务器的部署与监控；3.协助其他后端工程师进行代码测试和集成；4.日常需要与产品经理以及UX部门快速交付迭代；5.平时需要follow字节跳动IT部门的Agile+Sprint的工作模式来做交付以及迭代。\n\n任职要求：\n- 熟练掌握：html\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 46,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e32-93bc-7e72-9d87-3f9f1db2b60a",
+    "name": "雷琳",
+    "skills": [
+     "go",
+     "html"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 17,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e32-483e-7410-819b-62dccc8df916",
+    "name": "鲍浩中",
+    "skills": [
+     "SQL",
+     "ERP",
+     "CRM",
+     "5S",
+     "SAP",
+     "Excel",
+     "财务报表分析",
+     "审计",
+     "质量管理体系",
+     "营销企划",
+     "预算控制",
+     "费用管理",
+     "模具维护",
+     "会计凭证",
+     "对账",
+     "客户满意度调查",
+     "项目品质管理",
+     "团队建设",
+     "需求收集",
+     "用户培训"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-鲍浩中",
+    "city": "",
+    "skill_requirements": [
+     "营销企划",
+     "预算控制",
+     "费用管理"
+    ],
+    "description": "岗位职责：\n1. 负责根据分公司渠道经营目标，分解计划任务并推动目标达成；拟定月度营销企划案及相关业务竞赛方案，推动营销系统运作；做好分公司渠道预算控制和费用管理；1.做好分公司营销业务中长期发展规划，并制定配套政策；2.策划分公司阶段性营销工作安排，并做好方案设计和资源匹配；3.做好分公司营销渠道的预算控制和费用管理，定期完成渠道费用盘点报告；4.加强本室员工工作指导和培养，开\n\n任职要求：\n- 熟练掌握：营销企划、预算控制、费用管理\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 55,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e32-483e-7410-819b-62dccc8df916",
+    "name": "鲍浩中",
+    "skills": [
+     "SQL",
+     "ERP",
+     "CRM",
+     "5S",
+     "SAP",
+     "Excel",
+     "财务报表分析",
+     "审计",
+     "质量管理体系",
+     "营销企划",
+     "预算控制",
+     "费用管理",
+     "模具维护",
+     "会计凭证",
+     "对账",
+     "客户满意度调查",
+     "项目品质管理",
+     "团队建设",
+     "需求收集",
+     "用户培训"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-范超发",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "招聘ppt方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 20,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e34-856c-7190-8f80-3903b2e75be3",
+    "name": "黄朋振",
+    "skills": [
+     "客户关系管理",
+     "应收账款管理",
+     "应付账款管理",
+     "费用核算",
+     "成本管理",
+     "成本预测",
+     "成本控制",
+     "成本分析",
+     "税务申报",
+     "发票开具",
+     "费用预算编制",
+     "会计凭证编制",
+     "氨压缩机操作",
+     "制冷设备维护",
+     "交接班制度",
+     "安全警卫",
+     "培训课程开发",
+     "销售教案编制",
+     "信息披露",
+     "投资者关系管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-黄朋振",
+    "city": "",
+    "skill_requirements": [
+     "费用核算",
+     "成本管理",
+     "成本预测",
+     "发票开具"
+    ],
+    "description": "岗位职责：\n1. 负责1、监管公司应收、应付账款；2、负责公司费用核算、成本管理，进行成本预测、控制、分析；3、收集适用本公司的税收政策，并及时应用到会计工作中；4、各项税务事项办理、熟悉各项税种申报，发票开具；5、负责各部门费用预算组织、编制工作;6、准确无误编制会计凭证；7、负责凭证的装订及保管，整理会计记录资料，管理会计档案;8、完成上级交办的其他财务工作任务。\n\n任职要求：\n- 熟练掌握：费用核算、成本管理、成本预测、发票开具\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "ADVANCE",
+    "score": 81,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e34-856c-7190-8f80-3903b2e75be3",
+    "name": "黄朋振",
+    "skills": [
+     "客户关系管理",
+     "应收账款管理",
+     "应付账款管理",
+     "费用核算",
+     "成本管理",
+     "成本预测",
+     "成本控制",
+     "成本分析",
+     "税务申报",
+     "发票开具",
+     "费用预算编制",
+     "会计凭证编制",
+     "氨压缩机操作",
+     "制冷设备维护",
+     "交接班制度",
+     "安全警卫",
+     "培训课程开发",
+     "销售教案编制",
+     "信息披露",
+     "投资者关系管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 13,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e32-061e-7a42-a86a-e6480d33d597",
+    "name": "姜羽妍",
+    "skills": [
+     "项目管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-姜羽妍",
+    "city": "",
+    "skill_requirements": [
+     "项目管理"
+    ],
+    "description": "岗位职责：\n1. 负责1.监督日常人力资源工作任务；2.负责人力资源规划、招聘、绩效管理、薪资福利等；3.负责培训和员工发展规划；4.为管理层提供人力资源实际工作的指导并发展他们的人员管理技巧及知识；5.同管理层人员合作分析问题及需求已达到组织的有效性，并提供解决方法以及这些解决方法实行的项目管理；6.定期与基层员工进行沟通，协助部门和物业及时发现潜在人事问题并协助处理相关事宜；\n\n任职要求：\n- 熟练掌握：项目管理\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 37,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e32-061e-7a42-a86a-e6480d33d597",
+    "name": "姜羽妍",
+    "skills": [
+     "项目管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 21,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e33-43f0-7373-8c44-4286cd0a05e7",
+    "name": "常芳",
+    "skills": [
+     "数据收集统计",
+     "战略制定",
+     "计划调整",
+     "销售续费",
+     "转介绍",
+     "教学反馈",
+     "市场信息分析",
+     "产品动态追踪",
+     "文档管理",
+     "信息管理",
+     "工程规范制定",
+     "项目计划制定",
+     "施工进度管控",
+     "工程验收",
+     "厂商管理",
+     "供应商评估",
+     "绩效考核",
+     "工程研发支持",
+     "标准制定"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-常芳",
+    "city": "",
+    "skill_requirements": [
+     "工程验收",
+     "标准制定"
+    ],
+    "description": "岗位职责：\n1. 负责1.制定国际监理规范与标准，监督、指导实施工期计划及工期的管控，确保工程装修按时、保质保量完成；2.建立并完善国际工程施工规范技术标准，指导工程监理监督各施工厂商按规范施工执行；3.制定国际工程验收标准并落实执行，指导、核查店面中期及竣工验收，确保工程验收工作有序开展；4.主导施工厂商的管理，通过施工厂商评估等方式有效管理厂商资源，保证施工质量；5.根据子公\n\n任职要求：\n- 熟练掌握：工程验收、标准制定\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "HOLD",
+    "score": 60,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e33-43f0-7373-8c44-4286cd0a05e7",
+    "name": "常芳",
+    "skills": [
+     "数据收集统计",
+     "战略制定",
+     "计划调整",
+     "销售续费",
+     "转介绍",
+     "教学反馈",
+     "市场信息分析",
+     "产品动态追踪",
+     "文档管理",
+     "信息管理",
+     "工程规范制定",
+     "项目计划制定",
+     "施工进度管控",
+     "工程验收",
+     "厂商管理",
+     "供应商评估",
+     "绩效考核",
+     "工程研发支持",
+     "标准制定"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 18,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e33-cafc-7e01-b2d7-8d55dbfe4d6f",
+    "name": "姚河",
+    "skills": [
+     "原理图设计",
+     "电路仿真",
+     "器件选型",
+     "BOM制作",
+     "物料承认",
+     "技术文档编写",
+     "PCS硬件研发",
+     "主回路设计",
+     "控制电路设计",
+     "驱动电路设计",
+     "辅助电路设计",
+     "PCB图设计",
+     "样机调试",
+     "整机测试",
+     "单板测试",
+     "系统可靠性评估",
+     "系统稳定性评估",
+     "售前方案制定",
+     "系统技术对接",
+     "智能楼宇销售"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-姚河",
+    "city": "",
+    "skill_requirements": [
+     "原理图设计",
+     "电路仿真",
+     "器件选型",
+     "BOM制作",
+     "物料承认"
+    ],
+    "description": "岗位职责：\n1. 负责1、负责储能/光伏逆变器产品原理图设计、电路仿真，器件选型与设计等；2、负责BOM制作，物料承认，相关技术文档输出及积累；3、负责技术支持和转产协调；4、负责PCS硬件研发及调试，包括主回路设计，控制电路、驱动电路及其它辅助电路原理图及PCB图的设计、器件选型及样机调试；5、负责项目的整机测试、单板测试及相关问题解决，对系统的可靠性、稳定性进行评估。\n\n任职要求：\n- 熟练掌握：原理图设计、电路仿真、器件选型、BOM制作、物料承认\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 30,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e33-cafc-7e01-b2d7-8d55dbfe4d6f",
+    "name": "姚河",
+    "skills": [
+     "原理图设计",
+     "电路仿真",
+     "器件选型",
+     "BOM制作",
+     "物料承认",
+     "技术文档编写",
+     "PCS硬件研发",
+     "主回路设计",
+     "控制电路设计",
+     "驱动电路设计",
+     "辅助电路设计",
+     "PCB图设计",
+     "样机调试",
+     "整机测试",
+     "单板测试",
+     "系统可靠性评估",
+     "系统稳定性评估",
+     "售前方案制定",
+     "系统技术对接",
+     "智能楼宇销售"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 11,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e33-febf-7f93-a331-8e57c6a1e874",
+    "name": "席榕",
+    "skills": [
+     "单元测试"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-席榕",
+    "city": "",
+    "skill_requirements": [
+     "单元测试"
+    ],
+    "description": "岗位职责：\n1. 负责1、根据设计需求完成软件模块设计，并撰写模块设计文档。2、根据模块设计文档完成编码。3、完成模块单元测试和集成测试并交测试报告。4、分析/解决软件bug。\n\n任职要求：\n- 熟练掌握：单元测试\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 40,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e33-febf-7f93-a331-8e57c6a1e874",
+    "name": "席榕",
+    "skills": [
+     "单元测试"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 6,
+    "evidence_ok": false,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e35-38c2-7bf1-acc7-d77872cec42a",
+    "name": "郝芳雪",
+    "skills": [
+     "Python",
+     "Java",
+     "React",
+     "Docker",
+     "Kubernetes",
+     "AWS",
+     "MySQL",
+     "Redis",
+     "Git",
+     "Linux"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-郝芳雪",
+    "city": "",
+    "skill_requirements": [],
+    "description": "岗位职责：\n1. 负责1.负责门店管理工作，达成公司下达的销售指标；2.负责专柜商品及相关物料的订货、补货、上货、退货、维护、调配、换货等工作；3.负责门店销售业绩跟进以及排班等报表制作；5.负责客户管理和维护，以及反馈顾客建议，落实顾客回访制度和会员制度；6.负责团队建设，管理，激励团队出更高的业绩，并培养有潜力的后备人才；7.完成公司、上级交办的其他工作和配合门店同事的相关工\n\n任职要求：\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 56,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e35-38c2-7bf1-acc7-d77872cec42a",
+    "name": "郝芳雪",
+    "skills": [
+     "Python",
+     "Java",
+     "React",
+     "Docker",
+     "Kubernetes",
+     "AWS",
+     "MySQL",
+     "Redis",
+     "Git",
+     "Linux"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 20,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e30-ab55-71c1-903a-a93f829245be",
+    "name": "成雁真",
+    "skills": [
+     "品牌运营",
+     "内容营销",
+     "新媒体运营",
+     "电商运营",
+     "IP运营",
+     "市场调研",
+     "竞品分析",
+     "营销策划",
+     "文案撰写",
+     "KV设计",
+     "包装设计",
+     "销售管理",
+     "客户管理",
+     "渠道管理",
+     "异业合作",
+     "数据分析",
+     "舆情监测",
+     "项目策划",
+     "品牌评估",
+     "KOL评估"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-成雁真",
+    "city": "",
+    "skill_requirements": [
+     "竞品分析",
+     "包装设计",
+     "品牌评估",
+     "KOL评估"
+    ],
+    "description": "岗位职责：\n1. 负责1、负责品牌线上+线下的营运规划，通过市场和行业消费趋势研究、竞品分析等，挖掘不同系列的产品卖点，结合目标消费群画像，制定新媒体品牌推广策略；2、根据品牌核心价值及定位、产品卖点、用户需求场景以及行业热点，负责内容的策划、产品故事线梳理，提炼创意与素材并形成Epic/Story文档，协助电商打造爆款，推动线下同类产品销售；3、搭建营销数据库，并制定品牌评估系\n\n任职要求：\n- 熟练掌握：竞品分析、包装设计、品牌评估、KOL评估\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 46,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e30-ab55-71c1-903a-a93f829245be",
+    "name": "成雁真",
+    "skills": [
+     "品牌运营",
+     "内容营销",
+     "新媒体运营",
+     "电商运营",
+     "IP运营",
+     "市场调研",
+     "竞品分析",
+     "营销策划",
+     "文案撰写",
+     "KV设计",
+     "包装设计",
+     "销售管理",
+     "客户管理",
+     "渠道管理",
+     "异业合作",
+     "数据分析",
+     "舆情监测",
+     "项目策划",
+     "品牌评估",
+     "KOL评估"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-范超发",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "招聘ppt方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 13,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e34-2ea4-7482-a079-9d749007132e",
+    "name": "朱飞",
+    "skills": [
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-朱飞",
+    "city": "",
+    "skill_requirements": [
+     "数据分析"
+    ],
+    "description": "岗位职责：\n1. 负责1、操作SEM广告投放，制定和执行广告投放方案；2、查看检测数据，提供搜索引擎各投放渠道广告数据；3、根据SEM数据分析及优化方案，对账户进行优化操作，达成制定的各项KPI；4、SEM推广数据整理，分析，报告撰写。\n\n任职要求：\n- 熟练掌握：数据分析\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 37,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e34-2ea4-7482-a079-9d749007132e",
+    "name": "朱飞",
+    "skills": [
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-范超发",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "招聘ppt方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 12,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e34-4e47-7f53-a14e-b96b14cb90cd",
+    "name": "危敬有",
+    "skills": [
+     "订单数据",
+     "业务对接",
+     "投标文件",
+     "报价",
+     "议价",
+     "市场开发",
+     "客户关系",
+     "销售",
+     "市场信息",
+     "产品推广",
+     "饲喂程序设计",
+     "市场策划",
+     "部门采购",
+     "后勤管理",
+     "办公环境管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-危敬有",
+    "city": "",
+    "skill_requirements": [
+     "订单数据",
+     "业务对接",
+     "投标文件",
+     "报价",
+     "议价"
+    ],
+    "description": "岗位职责：\n1. 负责1、负责订单数据的统计分析；2、负责项目的业务对接工作；3、负责投标文件的编制、跟踪投标环节，对报价、议价、发布结果及中标信息及时确认。\n\n任职要求：\n- 熟练掌握：订单数据、业务对接、投标文件、报价、议价\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "ADVANCE",
+    "score": 83,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e34-4e47-7f53-a14e-b96b14cb90cd",
+    "name": "危敬有",
+    "skills": [
+     "订单数据",
+     "业务对接",
+     "投标文件",
+     "报价",
+     "议价",
+     "市场开发",
+     "客户关系",
+     "销售",
+     "市场信息",
+     "产品推广",
+     "饲喂程序设计",
+     "市场策划",
+     "部门采购",
+     "后勤管理",
+     "办公环境管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 24,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e33-d812-7a70-a9ee-200c471e790f",
+    "name": "孟保",
+    "skills": [
+     "接口测试"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-孟保",
+    "city": "",
+    "skill_requirements": [
+     "接口测试"
+    ],
+    "description": "岗位职责：\n1. 负责1、与一流的开发团队协同工作，根据需求对游戏进行功能、性能、兼容、接口测试并且反馈游戏可玩性、易玩性；2、能独立执行项目测试，设计测试方案、测试用例等相关文档，能够准确定位测试重点；3、协助客户端、server技术人员定位并解决复杂的技术问题；4、根据测试结果编写测试报告并向上级汇报。\n\n任职要求：\n- 熟练掌握：接口测试\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 30,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e33-d812-7a70-a9ee-200c471e790f",
+    "name": "孟保",
+    "skills": [
+     "接口测试"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 13,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e34-fafd-74a2-b4ec-b4395ad905cc",
+    "name": "傅志",
+    "skills": [
+     "项目管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-傅志",
+    "city": "",
+    "skill_requirements": [
+     "项目管理"
+    ],
+    "description": "岗位职责：\n1. 负责1.监督日常人力资源工作任务；2.负责人力资源规划、招聘、绩效管理、薪资福利等；3.负责培训和员工发展规划；4.为管理层提供人力资源实际工作的指导并发展他们的人员管理技巧及知识；5.同管理层人员合作分析问题及需求已达到组织的有效性，并提供解决方法以及这些解决方法实行的项目管理；6.定期与基层员工进行沟通，协助部门和物业及时发现潜在人事问题并协助处理相关事宜；\n\n任职要求：\n- 熟练掌握：项目管理\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 48,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e34-fafd-74a2-b4ec-b4395ad905cc",
+    "name": "傅志",
+    "skills": [
+     "项目管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 12,
+    "evidence_ok": false,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e32-8a62-7920-9e81-fd4b4f9ddcb0",
+    "name": "苗昭蕊",
+    "skills": [
+     "项目管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-苗昭蕊",
+    "city": "",
+    "skill_requirements": [
+     "项目管理"
+    ],
+    "description": "岗位职责：\n1. 负责1、协助项目工程管理人员做好工程维修预结算，报送至甲方；2、负责各个工程项目施工图纸的领取、整理、发放、归档；3、了解国家及各过程所在地的过程验收资料规范，编制验收资料；4、其他项目管理人员指派的工作任务。\n\n任职要求：\n- 熟练掌握：项目管理\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 52,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e32-8a62-7920-9e81-fd4b4f9ddcb0",
+    "name": "苗昭蕊",
+    "skills": [
+     "项目管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 9,
+    "evidence_ok": false,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e33-e55e-7413-a98c-7076560b2b17",
+    "name": "钱娜",
+    "skills": [
+     "固定资产管理",
+     "采购与出入库管理",
+     "会务组织",
+     "考勤统计",
+     "报销审核",
+     "安全管理制度",
+     "设备管理",
+     "安全管理",
+     "隐患整改",
+     "OA平台",
+     "台账建立",
+     "合同谈判",
+     "活动策划与执行",
+     "市场推广",
+     "客户关系维护"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-钱娜",
+    "city": "",
+    "skill_requirements": [
+     "安全管理",
+     "OA平台"
+    ],
+    "description": "岗位职责：\n1. 负责1、积极宣贯公司的安全制度与安全标准，推行标准化、工具化、定型化、视频化和规范化的管理；2、参与制定公司的大型设备的使用与管理制度；3、对司属项目部的大型机械设备进行监督管理，对存在的隐患提出整改建议；4、对检查出的设备隐患及时书写时时报，并在公司内部OA平台上进行发布；5、收集集团各项目部大型机械设备的租赁公司、安装公司、维保公司的信息，建立台账，并予以评\n\n任职要求：\n- 熟练掌握：安全管理、OA平台\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 43,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e33-e55e-7413-a98c-7076560b2b17",
+    "name": "钱娜",
+    "skills": [
+     "固定资产管理",
+     "采购与出入库管理",
+     "会务组织",
+     "考勤统计",
+     "报销审核",
+     "安全管理制度",
+     "设备管理",
+     "安全管理",
+     "隐患整改",
+     "OA平台",
+     "台账建立",
+     "合同谈判",
+     "活动策划与执行",
+     "市场推广",
+     "客户关系维护"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 15,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e33-be45-7403-bbbb-6bca4b8af313",
+    "name": "赵彪行",
+    "skills": [
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-赵彪行",
+    "city": "",
+    "skill_requirements": [
+     "数据分析"
+    ],
+    "description": "岗位职责：\n1. 负责1、维护与管理客户的日常信息；2、对客户进行差异核对；3、定期维护并随时更新系统内销售数据，协助完成销售分析报告，就销量达成状况进行数据分析；4、日常运作流程的更新与完善。\n\n任职要求：\n- 熟练掌握：数据分析\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "HOLD",
+    "score": 68,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e33-be45-7403-bbbb-6bca4b8af313",
+    "name": "赵彪行",
+    "skills": [
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-范超发",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "招聘ppt方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 16,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e34-44cc-72f0-a72e-89c95934073e",
+    "name": "雷竹园",
+    "skills": [
+     "自媒体运营",
+     "微信营销",
+     "网络销售",
+     "QQ营销",
+     "电话销售",
+     "客户关系维护",
+     "新产品推广",
+     "销售款回收",
+     "农业自动化设备推广",
+     "数据整理",
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-雷竹园",
+    "city": "",
+    "skill_requirements": [
+     "数据整理"
+    ],
+    "description": "岗位职责：\n1. 负责1、负责港汇恒隆广场酒店式公寓清洁管理工作，指导、规范清洁外包公司各项操作；2、检查、培训、督导外包公司人员的仪容仪表和执行操作情况；3、巡检辖区清洁、安全、绿化及设施状况，跟进整改；4、监督外包公司的财产与物资保管情况；5、相关数据整理、汇总与分析；6、上级交办的其他工作。\n\n任职要求：\n- 熟练掌握：数据整理\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 53,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e34-44cc-72f0-a72e-89c95934073e",
+    "name": "雷竹园",
+    "skills": [
+     "自媒体运营",
+     "微信营销",
+     "网络销售",
+     "QQ营销",
+     "电话销售",
+     "客户关系维护",
+     "新产品推广",
+     "销售款回收",
+     "农业自动化设备推广",
+     "数据整理",
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-范超发",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "招聘ppt方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 24,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e33-0623-7962-aa08-53c24d632597",
+    "name": "路心清",
+    "skills": [
+     "售后维修",
+     "服务支持",
+     "安装调试",
+     "故障排除",
+     "产品演示",
+     "电话支持",
+     "现场服务",
+     "技术培训"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-路心清",
+    "city": "",
+    "skill_requirements": [
+     "售后维修",
+     "服务支持",
+     "故障排除",
+     "产品演示",
+     "技术培训"
+    ],
+    "description": "岗位职责：\n1. 负责1.负责公司感控设备的售后维修、服务支持；2.负责在现场为用户进行产品的安装、调试、故障排除和产品演示；3.通过电话、现场等方式协助用户或代理商解决公司产品应用和维修问题；4.根据业务需求，为用户提供产品应用方面的技术培训。5.完成上司交给的其他工作。\n\n任职要求：\n- 熟练掌握：售后维修、服务支持、故障排除、产品演示、技术培训\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "HOLD",
+    "score": 75,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e33-0623-7962-aa08-53c24d632597",
+    "name": "路心清",
+    "skills": [
+     "售后维修",
+     "服务支持",
+     "安装调试",
+     "故障排除",
+     "产品演示",
+     "电话支持",
+     "现场服务",
+     "技术培训"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 12,
+    "evidence_ok": false,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e33-d183-74b1-a5f7-4c3421e40209",
+    "name": "潘泽",
+    "skills": [
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-潘泽",
+    "city": "",
+    "skill_requirements": [
+     "数据分析"
+    ],
+    "description": "岗位职责：\n1. 负责1、编制生产计划，安排生产任务单的下达，并跟进生产计划的执行情况；2、协调处理生产异常情况，确保生产任务按时完成，产品按期出货；3、负责对管辖下的供应商产品生产进度、质量异常、货期管理、库存管理及货款结算等工作进行综合管理；4、每月需对有效的生产数据作出整理及统计，做出每月的数据分析报告，以便发现问题并对问题点进行分析及改善。5、根据实际生产需要，不定期检查\n\n任职要求：\n- 熟练掌握：数据分析\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 40,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e33-d183-74b1-a5f7-4c3421e40209",
+    "name": "潘泽",
+    "skills": [
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-范超发",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "招聘ppt方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 19,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e35-9383-7c53-a5ab-696e7c2e0284",
+    "name": "江芳霄",
+    "skills": [
+     "会计",
+     "销售",
+     "客户关系管理",
+     "销售合约",
+     "业绩指标管理",
+     "电话销售",
+     "在线报装",
+     "设计管理",
+     "项目协调管理",
+     "流程执行检查",
+     "工程签证",
+     "项目验收"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-江芳霄",
+    "city": "",
+    "skill_requirements": [
+     "设计管理",
+     "流程执行检查",
+     "工程签证",
+     "项目验收"
+    ],
+    "description": "岗位职责：\n1. 负责1.负责园区建设的设计管理、审图与优化；2.负责项目过程协调管理与流程执行检查；3.组织项目实施与项目竣工验收参与工程签证、项目验收。\n\n任职要求：\n- 熟练掌握：设计管理、流程执行检查、工程签证、项目验收\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 57,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e35-9383-7c53-a5ab-696e7c2e0284",
+    "name": "江芳霄",
+    "skills": [
+     "会计",
+     "销售",
+     "客户关系管理",
+     "销售合约",
+     "业绩指标管理",
+     "电话销售",
+     "在线报装",
+     "设计管理",
+     "项目协调管理",
+     "流程执行检查",
+     "工程签证",
+     "项目验收"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 5,
+    "evidence_ok": false,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e34-4ae6-7700-b453-e412788698bd",
+    "name": "彭婉晶",
+    "skills": [
+     "现金支票管理",
+     "发票开具与登记",
+     "财务报销结算",
+     "银行对账",
+     "资金流动报表编制",
+     "报税",
+     "工资发放",
+     "银行账户管理",
+     "转账支票管理",
+     "网站搭建",
+     "网站维护",
+     "网站功能升级",
+     "网站改版",
+     "网站优化",
+     "网站二次开发",
+     "数据库设计",
+     "数据库维护",
+     "页面代码优化",
+     "网站页面设计",
+     "代码开发"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-彭婉晶",
+    "city": "",
+    "skill_requirements": [
+     "报税"
+    ],
+    "description": "岗位职责：\n1. 负责1、负责现金支票的收入保管、签发支付工作；2、公司发票的开具、登记建档；3、严格按照公司的财务制度报销结算公司各项费用；4、及时与银行定期对账；5、根据公司领导的需要，编制各种资金流动报表；6、配合会计人员做好每月的报税和工资的发放工作；7、管理银行账户、转账支票与发票；8、完成其他由上级主管指派及自行发展的工作。\n\n任职要求：\n- 熟练掌握：报税\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "ADVANCE",
+    "score": 81,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e34-4ae6-7700-b453-e412788698bd",
+    "name": "彭婉晶",
+    "skills": [
+     "现金支票管理",
+     "发票开具与登记",
+     "财务报销结算",
+     "银行对账",
+     "资金流动报表编制",
+     "报税",
+     "工资发放",
+     "银行账户管理",
+     "转账支票管理",
+     "网站搭建",
+     "网站维护",
+     "网站功能升级",
+     "网站改版",
+     "网站优化",
+     "网站二次开发",
+     "数据库设计",
+     "数据库维护",
+     "页面代码优化",
+     "网站页面设计",
+     "代码开发"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 13,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e33-acff-7d82-a165-2441c5939892",
+    "name": "孙莲莲",
+    "skills": [
+     "ppt"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-孙莲莲",
+    "city": "",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "岗位职责：\n1. 负责1.负责公司宣传册、产品宣传单页、产品宣传册、海报、产品图片以及微信文章配图等的制作和设计2.负责公司相关活动专题的策划与负责活动专题页面的设计3.可以在上级的指导下完成公司网站、微信公众号等其他新媒体平台的文案策划、软文撰写、排版等工作4.负责公司内外PPT、礼品等市场工具的宣传、组织工作。5.负责公司展厅、展品，外部展厅、样品的布置及管理工作6.完成上级\n\n任职要求：\n- 熟练掌握：ppt\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 43,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e33-acff-7d82-a165-2441c5939892",
+    "name": "孙莲莲",
+    "skills": [
+     "ppt"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 18,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e32-fc6a-7060-8ff9-6906893e41ad",
+    "name": "窦友",
+    "skills": [
+     "企业管理软件",
+     "商务谈判",
+     "合同管理",
+     "客户服务",
+     "市场开发",
+     "数据分析",
+     "渠道分析",
+     "产品推广",
+     "设备维修",
+     "设施维护",
+     "液压升降台操作",
+     "电焊",
+     "气焊",
+     "氩弧焊",
+     "工程装修管理",
+     "班组管理",
+     "培训与考核",
+     "应急管理",
+     "行政管理",
+     "采购管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-窦友",
+    "city": "",
+    "skill_requirements": [
+     "设备维修",
+     "电焊",
+     "气焊",
+     "氩弧焊"
+    ],
+    "description": "岗位职责：\n1. 负责1、负责安排班组技工的日常工作，并落实万象城公区的维修、保养实施计划2、负责指导班组技工遵守岗位责任，严格执行维修操作规程，保证设备的正常运行；接到派工单时，尽快到位检修，使设施、设备恢复正常，并做好记录汇报上级领导3、负责检查和监督班组技工按要求及时填写设备维修记录表，规范日常维修管理4、带领班组执行万象城公共区域内外立面、地面、门、窗等设施维修、油漆翻新\n\n任职要求：\n- 熟练掌握：设备维修、电焊、气焊、氩弧焊\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "ADVANCE",
+    "score": 86,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e32-fc6a-7060-8ff9-6906893e41ad",
+    "name": "窦友",
+    "skills": [
+     "企业管理软件",
+     "商务谈判",
+     "合同管理",
+     "客户服务",
+     "市场开发",
+     "数据分析",
+     "渠道分析",
+     "产品推广",
+     "设备维修",
+     "设施维护",
+     "液压升降台操作",
+     "电焊",
+     "气焊",
+     "氩弧焊",
+     "工程装修管理",
+     "班组管理",
+     "培训与考核",
+     "应急管理",
+     "行政管理",
+     "采购管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-范超发",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "招聘ppt方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 15,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e34-7b91-7f32-b95a-7f7235bf9b23",
+    "name": "宋有",
+    "skills": [
+     "销售计划",
+     "行业资源",
+     "客户关系维护",
+     "市场推广",
+     "成本控制",
+     "商务谈判",
+     "订单处理",
+     "合同签订",
+     "物流管理",
+     "货款催收",
+     "财务管理",
+     "企业文化建设",
+     "媒体宣传",
+     "广告设计",
+     "活动策划",
+     "员工培训",
+     "前厅管理",
+     "投诉处理",
+     "会计凭证",
+     "银行柜面业务"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-宋有",
+    "city": "",
+    "skill_requirements": [
+     "会计凭证",
+     "银行柜面业务"
+    ],
+    "description": "岗位职责：\n1. 负责1、报销单、费用单审核工作；2、会计凭证及其他文档的装订工作；3、日常银行柜面业务；4、领导安排的其他工作。\n\n任职要求：\n- 熟练掌握：会计凭证、银行柜面业务\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "ADVANCE",
+    "score": 85,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e34-7b91-7f32-b95a-7f7235bf9b23",
+    "name": "宋有",
+    "skills": [
+     "销售计划",
+     "行业资源",
+     "客户关系维护",
+     "市场推广",
+     "成本控制",
+     "商务谈判",
+     "订单处理",
+     "合同签订",
+     "物流管理",
+     "货款催收",
+     "财务管理",
+     "企业文化建设",
+     "媒体宣传",
+     "广告设计",
+     "活动策划",
+     "员工培训",
+     "前厅管理",
+     "投诉处理",
+     "会计凭证",
+     "银行柜面业务"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 8,
+    "evidence_ok": false,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e35-651e-7eb0-82c6-bdf8616412af",
+    "name": "贝行国",
+    "skills": [
+     "Scratch编程",
+     "微信运营",
+     "软文写作",
+     "自媒体运营",
+     "社交媒体文案",
+     "知乎运营",
+     "文案策划",
+     "品牌宣传",
+     "新媒体运营",
+     "采购管理",
+     "供应商管理",
+     "合同管理",
+     "商务采购",
+     "材料检验",
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-贝行国",
+    "city": "",
+    "skill_requirements": [
+     "Scratch编程",
+     "文案策划",
+     "新媒体运营"
+    ],
+    "description": "岗位职责：\n1. 负责1、负责公司官网及微信的内容发布，维护、管理、话题制造，提高影响力和粉丝数；每周输出2篇及以上软文2、负责各类自媒体平台的图文采编与运营推广，不断为粉丝策划与提供优质、有高度传播性的内容，提升客户体验和黏度。3、负责公司市场宣传资料、PR新闻稿、口碑等稿件撰写；与媒体（传统媒体及新媒体）建立和保持良好沟通，安排日常发稿和对大事件、活动的深度报道。4、掌握论坛\n\n任职要求：\n- 熟练掌握：Scratch编程、文案策划、新媒体运营\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 48,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e35-651e-7eb0-82c6-bdf8616412af",
+    "name": "贝行国",
+    "skills": [
+     "Scratch编程",
+     "微信运营",
+     "软文写作",
+     "自媒体运营",
+     "社交媒体文案",
+     "知乎运营",
+     "文案策划",
+     "品牌宣传",
+     "新媒体运营",
+     "采购管理",
+     "供应商管理",
+     "合同管理",
+     "商务采购",
+     "材料检验",
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-范超发",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "招聘ppt方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 20,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e35-19a7-7662-81c9-e82771d9e32d",
+    "name": "滕欢",
+    "skills": [
+     "员工关系管理体系",
+     "人事管理制度",
+     "人事档案管理",
+     "劳动法律法规",
+     "企业文化传播",
+     "招聘流程管理",
+     "薪酬管理",
+     "社保公积金管理",
+     "采购管理",
+     "市场调研",
+     "产品定位",
+     "竞品分析",
+     "消费者需求分析",
+     "产品上市管理",
+     "产品改良升级"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-滕欢",
+    "city": "",
+    "skill_requirements": [
+     "员工关系管理体系",
+     "人事管理制度"
+    ],
+    "description": "岗位职责：\n1. 负责1、协助人力资源部经理建立和完善公司的员工关系管理体系，各项人事管理制度的执行与更新；2、负责人力资源相关文件资料和数据的管理和更新；3、办理员工入职、离职、调任、升职等手续；4、管理人事档案，组织审核档案，清理与销毁工作；5、组织受理员工投诉和公司内部劳资纠纷，完善内部沟通渠道；协同人力资源部经理和法律顾问处理劳动争议；6、负责全面推动公司文化系统的建设工\n\n任职要求：\n- 熟练掌握：员工关系管理体系、人事管理制度\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 49,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e35-19a7-7662-81c9-e82771d9e32d",
+    "name": "滕欢",
+    "skills": [
+     "员工关系管理体系",
+     "人事管理制度",
+     "人事档案管理",
+     "劳动法律法规",
+     "企业文化传播",
+     "招聘流程管理",
+     "薪酬管理",
+     "社保公积金管理",
+     "采购管理",
+     "市场调研",
+     "产品定位",
+     "竞品分析",
+     "消费者需求分析",
+     "产品上市管理",
+     "产品改良升级"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 10,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e32-e327-7b60-b6c7-b43b4a336922",
+    "name": "葛卿倩",
+    "skills": [
+     "客户订单管理",
+     "采购管理",
+     "合同管理",
+     "客户服务",
+     "客户资料管理",
+     "货款回收",
+     "财务对接",
+     "业务台账登记",
+     "开票资料管理",
+     "微信群沟通",
+     "家长会组织",
+     "教学方案设计",
+     "教学进度管理",
+     "学员情况分析",
+     "教研活动参与"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-葛卿倩",
+    "city": "",
+    "skill_requirements": [
+     "合同管理",
+     "业务台账登记"
+    ],
+    "description": "岗位职责：\n1. 负责1.根据每笔交易，确认采购单价、吨数、品名及仓库等信息；2.制作交易单、采购合同及销售合同；3.确认付款金额，制作付款申请单；4.根据每笔合同的货款交付日期和金额，跟进客户货款的支付，必要时进行催收；5.客户货款到账后，通知财务付款，并确认账款，下发提单给客户，完成付款后，到供应商公司取提单；6.月底向财务部提供新增客户的开票资料，确认收件地址后讲发票邮寄给\n\n任职要求：\n- 熟练掌握：合同管理、业务台账登记\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "ADVANCE",
+    "score": 87,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e32-e327-7b60-b6c7-b43b4a336922",
+    "name": "葛卿倩",
+    "skills": [
+     "客户订单管理",
+     "采购管理",
+     "合同管理",
+     "客户服务",
+     "客户资料管理",
+     "货款回收",
+     "财务对接",
+     "业务台账登记",
+     "开票资料管理",
+     "微信群沟通",
+     "家长会组织",
+     "教学方案设计",
+     "教学进度管理",
+     "学员情况分析",
+     "教研活动参与"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 15,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e33-28c8-7551-981b-a08d5bbc825d",
+    "name": "方福",
+    "skills": [
+     "设备售后维修",
+     "产品安装调试",
+     "故障排除",
+     "产品演示",
+     "技术培训",
+     "平面设计",
+     "会员服务管理",
+     "客户关系管理",
+     "活动流程制定",
+     "培训策划",
+     "项目管理",
+     "活动执行",
+     "市场传播",
+     "行政办公",
+     "档案整理",
+     "固定资产管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-方福",
+    "city": "",
+    "skill_requirements": [
+     "故障排除",
+     "产品演示",
+     "技术培训"
+    ],
+    "description": "岗位职责：\n1. 负责1.负责公司感控设备的售后维修、服务支持；2.负责在现场为用户进行产品的安装、调试、故障排除和产品演示；3.通过电话、现场等方式协助用户或代理商解决公司产品应用和维修问题；4.根据业务需求，为用户提供产品应用方面的技术培训。5.完成上司交给的其他工作。\n\n任职要求：\n- 熟练掌握：故障排除、产品演示、技术培训\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "HOLD",
+    "score": 64,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e33-28c8-7551-981b-a08d5bbc825d",
+    "name": "方福",
+    "skills": [
+     "设备售后维修",
+     "产品安装调试",
+     "故障排除",
+     "产品演示",
+     "技术培训",
+     "平面设计",
+     "会员服务管理",
+     "客户关系管理",
+     "活动流程制定",
+     "培训策划",
+     "项目管理",
+     "活动执行",
+     "市场传播",
+     "行政办公",
+     "档案整理",
+     "固定资产管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 12,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e32-dce3-77d3-9221-b3d25e0426b7",
+    "name": "梁荣",
+    "skills": [
+     "ppt"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-梁荣",
+    "city": "",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "岗位职责：\n1. 负责负责公司形象展示宣传、产品图册设计、宣传册设计、ppt，产品海报，产品使用前后对比图等平面类设计工作；负责部门对外日常工作宣传及广告、产品、活动的平面设计；负责网站页面设计，产品设计，广告设计等对外的平面设计工作；\n\n任职要求：\n- 熟练掌握：ppt\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 53,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e32-dce3-77d3-9221-b3d25e0426b7",
+    "name": "梁荣",
+    "skills": [
+     "ppt"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 8,
+    "evidence_ok": false,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e34-70e3-75a1-8a8f-8f478aac8d89",
+    "name": "娄晓",
+    "skills": [
+     "Unity3D",
+     "Shader",
+     "硬件施工监管",
+     "设备调试",
+     "电子原理图设计",
+     "线路板图设计",
+     "产品装配图绘制",
+     "治具设计",
+     "夹具设计",
+     "机械原理",
+     "培训教案编写",
+     "销售技巧培训",
+     "市场营销",
+     "渠道开发",
+     "客户关系维护",
+     "库存管理",
+     "会员管理",
+     "GSP管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-娄晓",
+    "city": "",
+    "skill_requirements": [
+     "库存管理",
+     "会员管理",
+     "GSP管理"
+    ],
+    "description": "岗位职责：\n1. 负责1、严格按照GSP管理要求经营药品；2、对门店经营业绩负责；3、负责药品陈列、卖场管理、库存管理、会员管理、营销活动的落实等；4、按期对门店的营业员进行业务知识培训，新人带教等；5、完成上级领导安排的其他任务及总部下达的各项指令。\n\n任职要求：\n- 熟练掌握：库存管理、会员管理、GSP管理\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "HOLD",
+    "score": 79,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e34-70e3-75a1-8a8f-8f478aac8d89",
+    "name": "娄晓",
+    "skills": [
+     "Unity3D",
+     "Shader",
+     "硬件施工监管",
+     "设备调试",
+     "电子原理图设计",
+     "线路板图设计",
+     "产品装配图绘制",
+     "治具设计",
+     "夹具设计",
+     "机械原理",
+     "培训教案编写",
+     "销售技巧培训",
+     "市场营销",
+     "渠道开发",
+     "客户关系维护",
+     "库存管理",
+     "会员管理",
+     "GSP管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 9,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e34-e891-7fe0-a13b-7d1e7f80dc1d",
+    "name": "汪博安",
+    "skills": [
+     "UI设计",
+     "工业废水处理",
+     "污泥处理",
+     "小试试验",
+     "中试试验",
+     "废水处理",
+     "水资源回用",
+     "零排放",
+     "技术交流",
+     "技术方案",
+     "标书编制",
+     "工程调试",
+     "招聘",
+     "简历筛选",
+     "面试",
+     "招聘渠道管理",
+     "市场销售",
+     "团队管理",
+     "经销商管理",
+     "客户关系管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-汪博安",
+    "city": "",
+    "skill_requirements": [
+     "UI设计",
+     "污泥处理",
+     "中试试验",
+     "废水处理",
+     "零排放"
+    ],
+    "description": "岗位职责：\n1. 负责1、工业废水或污泥处理领域的新技术研发和推广；2、进行小试或中试试验，制订废水处理、回用及零排放的最优方案；3、对市场开发提供技术支持，包括技术交流、技术方案、标书编制、工程调试、技术整改等。\n\n任职要求：\n- 熟练掌握：UI设计、污泥处理、中试试验、废水处理、零排放\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 54,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e34-e891-7fe0-a13b-7d1e7f80dc1d",
+    "name": "汪博安",
+    "skills": [
+     "UI设计",
+     "工业废水处理",
+     "污泥处理",
+     "小试试验",
+     "中试试验",
+     "废水处理",
+     "水资源回用",
+     "零排放",
+     "技术交流",
+     "技术方案",
+     "标书编制",
+     "工程调试",
+     "招聘",
+     "简历筛选",
+     "面试",
+     "招聘渠道管理",
+     "市场销售",
+     "团队管理",
+     "经销商管理",
+     "客户关系管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 16,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e34-5f8a-7941-ae6a-3300716e64be",
+    "name": "康眉丽",
+    "skills": [
+     "国际工程监理规范制定",
+     "施工规范标准制定",
+     "工程验收标准制定",
+     "施工厂商管理",
+     "市场推广",
+     "合作谈判",
+     "活动策划与执行",
+     "终端直营管理",
+     "服务体系搭建",
+     "服务质量管控"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-康眉丽",
+    "city": "",
+    "skill_requirements": [
+     "服务体系搭建",
+     "服务质量管控"
+    ],
+    "description": "岗位职责：\n1. 负责1、负责区域内终端直营考核方案的制定和实行；2、负责区域内终端直营服务服务体系搭建、管理、培训；3、负责区域内终端直营送装全流程梳理，相关业务跟进管理，保障终端直营用户服务体验；4、负责区域内终端直营门店满意度管理，对接门店上样、售前机处理、导购服务政策培训等工作；5、负责区域内高端产品（包括但不限于COLMO、比佛利）服务质量管控；6、协同并配合厨热品类服\n\n任职要求：\n- 熟练掌握：服务体系搭建、服务质量管控\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 50,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e34-5f8a-7941-ae6a-3300716e64be",
+    "name": "康眉丽",
+    "skills": [
+     "国际工程监理规范制定",
+     "施工规范标准制定",
+     "工程验收标准制定",
+     "施工厂商管理",
+     "市场推广",
+     "合作谈判",
+     "活动策划与执行",
+     "终端直营管理",
+     "服务体系搭建",
+     "服务质量管控"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 22,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e33-18b5-73c3-bf2b-047472c2ef76",
+    "name": "吕可",
+    "skills": [
+     "go",
+     "项目管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-吕可",
+    "city": "",
+    "skill_requirements": [
+     "项目管理"
+    ],
+    "description": "岗位职责：\n1. 负责1.协助销售对驻场招聘项目可行性进行评估，并给予专业建议；2.基于公司业务策略，向公司战略客户招聘综合服务方案；3.完成年度业绩任务，优化项目执行流程，保证项目执行效果、客户满意度、招聘效果、风险控制等；4.管理招聘执行团队，对招聘专员进行人力资源相关项目管理培训，合理分配渠道资源，提高招聘效率；5.对于驻场员工的员工关系、入职跟踪、绩效考核评估等要全权负责\n\n任职要求：\n- 熟练掌握：项目管理\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 48,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e33-18b5-73c3-bf2b-047472c2ef76",
+    "name": "吕可",
+    "skills": [
+     "go",
+     "项目管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 15,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e35-aff7-7fe0-b5f7-5fc981bd60fb",
+    "name": "凤林",
+    "skills": [
+     "驾驶证",
+     "行政事务处理",
+     "库管理",
+     "收发货管理",
+     "采购管理",
+     "供应商管理",
+     "订单跟踪",
+     "数据统计报表",
+     "仓库管理",
+     "库存调配",
+     "沟通协调"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-凤林",
+    "city": "",
+    "skill_requirements": [
+     "驾驶证",
+     "行政事务处理",
+     "库管理",
+     "收发货管理"
+    ],
+    "description": "岗位职责：\n1. 负责1、中文系或有文字功底者优先2、负责公司日常具体行政事务处理；3、负责公司在库管理和收发货管理；4、完成领导交办的其他工作；5、有驾驶证；6、工作态度认真，仔细，责任感强。\n\n任职要求：\n- 熟练掌握：驾驶证、行政事务处理、库管理、收发货管理\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 58,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e35-aff7-7fe0-b5f7-5fc981bd60fb",
+    "name": "凤林",
+    "skills": [
+     "驾驶证",
+     "行政事务处理",
+     "库管理",
+     "收发货管理",
+     "采购管理",
+     "供应商管理",
+     "订单跟踪",
+     "数据统计报表",
+     "仓库管理",
+     "库存调配",
+     "沟通协调"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 21,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e32-bd5d-7841-9c74-fb8870be9ee8",
+    "name": "孔姬",
+    "skills": [
+     "电话系统",
+     "财务报表编制",
+     "数据分析",
+     "合同审核",
+     "采购管理",
+     "评标",
+     "招标",
+     "客户管理",
+     "CRM",
+     "销售计划制定",
+     "项目管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-孔姬",
+    "city": "",
+    "skill_requirements": [
+     "评标",
+     "招标"
+    ],
+    "description": "岗位职责：\n1. 负责1.接办并审核采购计划，并办理备件招标、核价委托；2.参与个人委托案的评标工作；3.研拟采购合约、订购单；4.查催交货；5.货品验收差异的交涉、索赔；6.购案档卷的整理归存；7.上级交办及其他事项。\n\n任职要求：\n- 熟练掌握：评标、招标\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "HOLD",
+    "score": 69,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e32-bd5d-7841-9c74-fb8870be9ee8",
+    "name": "孔姬",
+    "skills": [
+     "电话系统",
+     "财务报表编制",
+     "数据分析",
+     "合同审核",
+     "采购管理",
+     "评标",
+     "招标",
+     "客户管理",
+     "CRM",
+     "销售计划制定",
+     "项目管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-范超发",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "招聘ppt方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 12,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e34-5c40-7c82-a788-61156718ddc6",
+    "name": "倪珍寒",
+    "skills": [
+     "独立站后台",
+     "产品上下架",
+     "文案编辑",
+     "店铺运营",
+     "营销工具",
+     "活动策划",
+     "粉丝管理",
+     "数据分析",
+     "SEO",
+     "SEM",
+     "谷歌优化",
+     "线上线下运营",
+     "活动策划执行",
+     "运营体系搭建",
+     "市场调研",
+     "招投标",
+     "客户网络管理",
+     "策划报告撰写"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-倪珍寒",
+    "city": "",
+    "skill_requirements": [
+     "独立站后台",
+     "文案编辑",
+     "营销工具",
+     "粉丝管理",
+     "SEO"
+    ],
+    "description": "岗位职责：\n1. 负责1.熟练使用独立站后台，能独立完成网站产品的上下架，产品的文案编辑；2.负责店铺日常维护，定期更新独立站的各项动态，优化店铺及产品排名；3.熟悉使用营销工具，提出运营方案，提高流量，点击率，策划活动与粉丝互动，进行粉丝管理，吸纳粉丝，提升活跃度；4.制定各阶段的销售目标以及完成情况进行统计、分析、汇报和总结；5.利用SEO或SEM渠道进行网站优化，逐步提升网\n\n任职要求：\n- 熟练掌握：独立站后台、文案编辑、营销工具、粉丝管理、SEO\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 44,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e34-5c40-7c82-a788-61156718ddc6",
+    "name": "倪珍寒",
+    "skills": [
+     "独立站后台",
+     "产品上下架",
+     "文案编辑",
+     "店铺运营",
+     "营销工具",
+     "活动策划",
+     "粉丝管理",
+     "数据分析",
+     "SEO",
+     "SEM",
+     "谷歌优化",
+     "线上线下运营",
+     "活动策划执行",
+     "运营体系搭建",
+     "市场调研",
+     "招投标",
+     "客户网络管理",
+     "策划报告撰写"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-范超发",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "招聘ppt方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 4,
+    "evidence_ok": false,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e32-d8d8-77e0-828a-b8bb4b996520",
+    "name": "舒莉茜",
+    "skills": [
+     "微信",
+     "QQ",
+     "公众号",
+     "微博",
+     "头条号",
+     "淘宝旺旺",
+     "天猫系统",
+     "彩妆服务",
+     "彩妆销售",
+     "彩妆陈列管理",
+     "财务管理制度制定",
+     "资金管理",
+     "投融资支持",
+     "财务核算",
+     "税务申报",
+     "费用报销审核",
+     "应收账款统计",
+     "营销策略制定",
+     "市场渠道开拓",
+     "营销合同谈判"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-舒莉茜",
+    "city": "",
+    "skill_requirements": [
+     "微信",
+     "QQ",
+     "公众号",
+     "微博",
+     "头条号"
+    ],
+    "description": "岗位职责：\n1. 负责1、通过个人或关联的微信、QQ、公众号、微博、头条号等各自媒体宣传公司金融业务，获得基础客户；2、通过其他网络和渠道宣传推广公司金融业务，获得基础客户；3、指导团队在各网络平台推广公司的金融产品（房屋抵押贷款业务和关联学历教育培训业务）。二、\n\n任职要求：\n- 熟练掌握：微信、QQ、公众号、微博、头条号\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "HOLD",
+    "score": 68,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e32-d8d8-77e0-828a-b8bb4b996520",
+    "name": "舒莉茜",
+    "skills": [
+     "微信",
+     "QQ",
+     "公众号",
+     "微博",
+     "头条号",
+     "淘宝旺旺",
+     "天猫系统",
+     "彩妆服务",
+     "彩妆销售",
+     "彩妆陈列管理",
+     "财务管理制度制定",
+     "资金管理",
+     "投融资支持",
+     "财务核算",
+     "税务申报",
+     "费用报销审核",
+     "应收账款统计",
+     "营销策略制定",
+     "市场渠道开拓",
+     "营销合同谈判"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 13,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e32-dfa4-7552-a351-7b229ac68c1a",
+    "name": "舒锦",
+    "skills": [
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-舒锦",
+    "city": "",
+    "skill_requirements": [
+     "数据分析"
+    ],
+    "description": "岗位职责：\n1. 负责负责我司产品蔓迪在电商平台的运营工作。1、负责淘宝、京东、官方旗舰店等的店铺基础优化与活动运营2、努力推进公司产品排名,提高销量，根据实际情况调整运营策略，提升公司产品的整体用户数据3、定期提交店铺运营报告，完成相关数据分析，提出改进方案\n\n任职要求：\n- 熟练掌握：数据分析\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 33,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e32-dfa4-7552-a351-7b229ac68c1a",
+    "name": "舒锦",
+    "skills": [
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-范超发",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "招聘ppt方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 13,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e32-d0f7-7b31-91dc-81bb308b72aa",
+    "name": "毕健",
+    "skills": [
+     "市场调研",
+     "渠道管理",
+     "资源管理",
+     "招聘",
+     "面试",
+     "简历筛选",
+     "人才储备库",
+     "采购",
+     "预算分析",
+     "客户投诉处理",
+     "Excel"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-毕健",
+    "city": "",
+    "skill_requirements": [
+     "招聘",
+     "面试",
+     "简历筛选",
+     "人才储备库"
+    ],
+    "description": "岗位职责：\n1. 负责1．执行招聘发布、招聘岗位的简历筛选、面试通知、面试接待、面试评估等环节；2．组织相关部门人员完成复试工作，确保面试工作的及时开展及考核结果符合岗位要求；3．负责各类招聘数据的统计及分析；4．调查公司所需人才的外部人力资源存量及分布状况，并进行有效分析5．对招聘渠道实施规划、开发、维护、拓展，确保招聘渠道能有效满足公司的用人需求6．负责建立公司人才储备库，做\n\n任职要求：\n- 熟练掌握：招聘、面试、简历筛选、人才储备库\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "ADVANCE",
+    "score": 86,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e32-d0f7-7b31-91dc-81bb308b72aa",
+    "name": "毕健",
+    "skills": [
+     "市场调研",
+     "渠道管理",
+     "资源管理",
+     "招聘",
+     "面试",
+     "简历筛选",
+     "人才储备库",
+     "采购",
+     "预算分析",
+     "客户投诉处理",
+     "Excel"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-范超发",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "招聘ppt方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 6,
+    "evidence_ok": false,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e34-dc30-7cc3-aea6-c01fed849fc8",
+    "name": "熊岩飞",
+    "skills": [
+     "android",
+     "linux"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-熊岩飞",
+    "city": "",
+    "skill_requirements": [
+     "android",
+     "linux"
+    ],
+    "description": "岗位职责：\n1. 负责1、负责Linux/Android平台常见外设驱动，如4G、Camera、LCD、TP、BT、WIFI，以及各类传感器等模块；2、独立完成板级驱动开发与调试，支持基于linux操作系统的总线驱动、IC器件驱动等底层驱动开发；3、与硬件工程师一起跟踪、分析、评估和验证新器件以及同类替代器件；4、独立完成单板故障检测软件、维修软件功能设计及开发。\n\n任职要求：\n- 熟练掌握：android、linux\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "FAILED",
+    "action": null,
+    "score": null,
+    "evidence_ok": null,
+    "error": "LLM output validation failed: evidence paragraph_id not in retrieved set: 01a00e34-dc36-7942-bcb09f3518a5"
+   },
+   "consistent_loose": true,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e34-dc30-7cc3-aea6-c01fed849fc8",
+    "name": "熊岩飞",
+    "skills": [
+     "android",
+     "linux"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "FAILED",
+    "action": null,
+    "score": null,
+    "evidence_ok": null,
+    "error": "LLM output validation failed: evidence paragraph_id not in retrieved set: 01a00e34-dc36-7942-bca253af21e7"
+   },
+   "consistent_loose": true,
+   "consistent_strict": false
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e32-f967-7d51-a8fa-216eebfdb673",
+    "name": "谢欢",
+    "skills": [
+     "ppt"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-谢欢",
+    "city": "",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "岗位职责：\n1. 负责1.负责公司宣传册、产品宣传单页、产品宣传册、海报、产品图片以及微信文章配图等的制作和设计2.负责公司相关活动专题的策划与负责活动专题页面的设计3.可以在上级的指导下完成公司网站、微信公众号等其他新媒体平台的文案策划、软文撰写、排版等工作4.负责公司内外PPT、礼品等市场工具的宣传、组织工作。5.负责公司展厅、展品，外部展厅、样品的布置及管理工作6.完成上级\n\n任职要求：\n- 熟练掌握：ppt\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 38,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e32-f967-7d51-a8fa-216eebfdb673",
+    "name": "谢欢",
+    "skills": [
+     "ppt"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 22,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e34-0a82-7280-9922-503749321edb",
+    "name": "阮哲茂",
+    "skills": [
+     "声学开发",
+     "声学结构设计",
+     "2D",
+     "3D",
+     "DFM",
+     "规格书",
+     "可行性分析",
+     "样品阶段工艺方案",
+     "多媒体产品性能优化",
+     "试产跟进",
+     "异常解决",
+     "物料认证",
+     "产品项目策划",
+     "资料归档"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-阮哲茂",
+    "city": "",
+    "skill_requirements": [
+     "声学开发",
+     "声学结构设计",
+     "2D",
+     "3D",
+     "DFM"
+    ],
+    "description": "岗位职责：\n1. 负责1、负责对多媒体喇叭、音箱声学开发、方案推广；2、负责多媒体项目的声学可行性方案分析、开发方案策划；3、负责多媒体新产品项目的声学结构设计、方案实施；4、负责多媒体新产品的DFM、2D、3D、规格书、可行性分析报价、样品阶段工艺方案的制定；5、负责媒体新产品开发各阶阶段资料提交、归档；6、负责多媒体产品性能优化，试产跟进，异常解决；7、负责物料认证。\n\n任职要求：\n- 熟练掌握：声学开发、声学结构设计、2D、3D、DFM\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 44,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e34-0a82-7280-9922-503749321edb",
+    "name": "阮哲茂",
+    "skills": [
+     "声学开发",
+     "声学结构设计",
+     "2D",
+     "3D",
+     "DFM",
+     "规格书",
+     "可行性分析",
+     "样品阶段工艺方案",
+     "多媒体产品性能优化",
+     "试产跟进",
+     "异常解决",
+     "物料认证",
+     "产品项目策划",
+     "资料归档"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 15,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e32-09a7-7170-a710-b329d28ddcda",
+    "name": "江冰纨",
+    "skills": [
+     "IT运维",
+     "GPS监控系统",
+     "考勤系统",
+     "绩效核算",
+     "薪资核算",
+     "合同台账管理",
+     "内控体系",
+     "流程设计",
+     "标书制作",
+     "UI设计",
+     "网页设计",
+     "平面设计",
+     "网络推广",
+     "广告制作",
+     "客户关系维护",
+     "渠道开发",
+     "销售内勤",
+     "经营计划管理",
+     "会议管理",
+     "数据合规审查"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-江冰纨",
+    "city": "",
+    "skill_requirements": [
+     "UI设计",
+     "网络推广",
+     "广告制作"
+    ],
+    "description": "岗位职责：\n1. 负责1、负责网站产品专题、风格设计、网页，专题设计以及美术创意制作，公司对外宣传活动的设计；2、负责协助网站建设和网络推广过程中所需要的各种图片和网络广告制作工作3、负责公司产品的整体UI设计4、协助市场部负责人完成相关的设计工作5、负责公司广告宣传物资、产品资料、产品展示、产品界面等相关设计制作6、负责协助项目进行产品界面设计7、参与公司活动项目的创意设计、平\n\n任职要求：\n- 熟练掌握：UI设计、网络推广、广告制作\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "HOLD",
+    "score": 65,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e32-09a7-7170-a710-b329d28ddcda",
+    "name": "江冰纨",
+    "skills": [
+     "IT运维",
+     "GPS监控系统",
+     "考勤系统",
+     "绩效核算",
+     "薪资核算",
+     "合同台账管理",
+     "内控体系",
+     "流程设计",
+     "标书制作",
+     "UI设计",
+     "网页设计",
+     "平面设计",
+     "网络推广",
+     "广告制作",
+     "客户关系维护",
+     "渠道开发",
+     "销售内勤",
+     "经营计划管理",
+     "会议管理",
+     "数据合规审查"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 35,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e32-a41b-7750-b077-bcafad7c12b2",
+    "name": "计琳妹",
+    "skills": [
+     "华为公有云",
+     "销售指标管理",
+     "市场开拓",
+     "客户关系维护",
+     "商务谈判",
+     "合同谈判",
+     "项目回款",
+     "竞争对手分析",
+     "订单处理",
+     "发货安排",
+     "订单数据统计",
+     "物流对接",
+     "客户投诉处理",
+     "企业文化建设",
+     "媒体宣传",
+     "广告宣传",
+     "演出策划",
+     "企业形象塑造",
+     "内部刊物制作",
+     "产品设计"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-计琳妹",
+    "city": "",
+    "skill_requirements": [
+     "企业文化建设",
+     "媒体宣传",
+     "广告宣传",
+     "演出策划",
+     "内部刊物制作"
+    ],
+    "description": "岗位职责：\n1. 负责1、负责企业文化建设工作，具体负责文化建设中的媒体宣传，广告宣传，演出策划及具体演出任务，塑造企业形象以及企业文化活动方案的制定与组织实施；2、组织各项员工活动，促进企业文化的传播，组织专题宣传活动，支持集团业务和管理方面的创新与变革；3、与子公司保持密切联系，不断更新本地的企业文化宣传内容，参与企业文化方面的培训工作；4、负责企业内部刊物制作，参与创意和设\n\n任职要求：\n- 熟练掌握：企业文化建设、媒体宣传、广告宣传、演出策划、内部刊物制作\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 48,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e32-a41b-7750-b077-bcafad7c12b2",
+    "name": "计琳妹",
+    "skills": [
+     "华为公有云",
+     "销售指标管理",
+     "市场开拓",
+     "客户关系维护",
+     "商务谈判",
+     "合同谈判",
+     "项目回款",
+     "竞争对手分析",
+     "订单处理",
+     "发货安排",
+     "订单数据统计",
+     "物流对接",
+     "客户投诉处理",
+     "企业文化建设",
+     "媒体宣传",
+     "广告宣传",
+     "演出策划",
+     "企业形象塑造",
+     "内部刊物制作",
+     "产品设计"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 13,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e32-515b-7de2-9cb7-f56f4e8d6739",
+    "name": "明先",
+    "skills": [
+     "销售",
+     "客户联络",
+     "客户拜访",
+     "签约",
+     "交货",
+     "收款",
+     "客户信息管理",
+     "客户资料库"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-明先",
+    "city": "",
+    "skill_requirements": [
+     "销售",
+     "客户联络",
+     "签约",
+     "交货",
+     "收款"
+    ],
+    "description": "岗位职责：\n1. 负责1、接受并负责完成自己区域（东南亚或中东）的销售目标；2、完成负责区域客户联络，沟通、拜访、签约、交货、收款；3、完成负责区域的客户信息整理汇总，建立客户资料库；\n\n任职要求：\n- 熟练掌握：销售、客户联络、签约、交货、收款\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 53,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e32-515b-7de2-9cb7-f56f4e8d6739",
+    "name": "明先",
+    "skills": [
+     "销售",
+     "客户联络",
+     "客户拜访",
+     "签约",
+     "交货",
+     "收款",
+     "客户信息管理",
+     "客户资料库"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 10,
+    "evidence_ok": false,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e32-e9d8-7df3-9450-ad6571cb8c9f",
+    "name": "贝珊勤",
+    "skills": [
+     "招聘计划制订",
+     "招聘渠道维护",
+     "简历筛选",
+     "招聘统计分析",
+     "校园招聘统筹",
+     "行政管理",
+     "设备设施维护",
+     "设施巡检",
+     "物业管理",
+     "水电维修",
+     "市场推广",
+     "品牌宣传",
+     "客户沟通",
+     "英语",
+     "文字表达"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-贝珊勤",
+    "city": "",
+    "skill_requirements": [
+     "招聘计划制订",
+     "招聘渠道维护",
+     "简历筛选",
+     "校园招聘统筹"
+    ],
+    "description": "岗位职责：\n1. 负责1、根据现有人员编制及业务发展需求，协调、统计招聘需求；2、招聘计划制订及实施；3、招聘渠道维护，简历筛选；4、招聘工作的相关统计、汇总与分析；5、全国校园招聘统筹；6、完善行政工作；6、领导交代的其它事项。\n\n任职要求：\n- 熟练掌握：招聘计划制订、招聘渠道维护、简历筛选、校园招聘统筹\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "HOLD",
+    "score": 63,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e32-e9d8-7df3-9450-ad6571cb8c9f",
+    "name": "贝珊勤",
+    "skills": [
+     "招聘计划制订",
+     "招聘渠道维护",
+     "简历筛选",
+     "招聘统计分析",
+     "校园招聘统筹",
+     "行政管理",
+     "设备设施维护",
+     "设施巡检",
+     "物业管理",
+     "水电维修",
+     "市场推广",
+     "品牌宣传",
+     "客户沟通",
+     "英语",
+     "文字表达"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 20,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e34-ff8e-7ed3-b88d-6393e17a2653",
+    "name": "苗爱叶",
+    "skills": [
+     "sql",
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-苗爱叶",
+    "city": "",
+    "skill_requirements": [
+     "sql"
+    ],
+    "description": "岗位职责：\n1. 负责1、负责集团鼎捷软件TIPTOPERP系统的二次开发、实施、维护；2、负责业务需求的深入理解，制定解决方案及方案的撰写并付诸开发实施;3、负责责任ERP模块的操作手册编写和流程梳理工作；4、熟练使用4GL开发语言，GeneroStudio，CrystalReport，Oracle或PL/SQL等工具，进行二次开发；5、熟悉关系型数据库平台，如SQLSERVE\n\n任职要求：\n- 熟练掌握：sql\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "HOLD",
+    "score": 74,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e34-ff8e-7ed3-b88d-6393e17a2653",
+    "name": "苗爱叶",
+    "skills": [
+     "sql",
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-范超发",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "招聘ppt方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 19,
+    "evidence_ok": false,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e35-554f-78c3-af87-c256a3586179",
+    "name": "贝力榕",
+    "skills": [
+     "市场开发",
+     "销售策略",
+     "客户管理",
+     "营销活动",
+     "销售指标管理",
+     "客户关系维护",
+     "硬件电路设计",
+     "模拟电路设计",
+     "数字电路设计",
+     "器件选型",
+     "器件评估",
+     "器件测试",
+     "电路系统调试",
+     "硬件测试",
+     "硬件维护",
+     "联合调试"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-贝力榕",
+    "city": "",
+    "skill_requirements": [
+     "硬件电路设计",
+     "数字电路设计",
+     "器件选型",
+     "电路系统调试",
+     "联合调试"
+    ],
+    "description": "岗位职责：\n1. 负责1.产品的硬件电路设计（模拟电路与数字电路设计）；2.器件选型，所选器件的评估与测试；3.电路系统调试,产品硬件的测试和维护；4.与软件部门进行产品的联合调试与投产，确保产品按期按质完成。\n\n任职要求：\n- 熟练掌握：硬件电路设计、数字电路设计、器件选型、电路系统调试、联合调试\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 42,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e35-554f-78c3-af87-c256a3586179",
+    "name": "贝力榕",
+    "skills": [
+     "市场开发",
+     "销售策略",
+     "客户管理",
+     "营销活动",
+     "销售指标管理",
+     "客户关系维护",
+     "硬件电路设计",
+     "模拟电路设计",
+     "数字电路设计",
+     "器件选型",
+     "器件评估",
+     "器件测试",
+     "电路系统调试",
+     "硬件测试",
+     "硬件维护",
+     "联合调试"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 6,
+    "evidence_ok": false,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e32-33bc-7ac0-ab01-3addc9477bf5",
+    "name": "廉倩巧",
+    "skills": [
+     "客户关系维护",
+     "医学信息传达",
+     "市场分析",
+     "销售计划制定",
+     "项目销售",
+     "客户开发",
+     "大客户销售",
+     "销售策略",
+     "市场开发",
+     "产品推广"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-廉倩巧",
+    "city": "",
+    "skill_requirements": [
+     "大客户销售"
+    ],
+    "description": "岗位职责：\n1. 负责1、了解导演意图，辅助制片人为按期完成纪录片拍摄、制作提供条件；2、协调影片当地拍摄所需交通、拍摄地等部分资源；3、负责解决拍摄过程中出现的各种困难，协调各部门之间的工作关系；\n\n任职要求：\n- 熟练掌握：大客户销售\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 44,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e32-33bc-7ac0-ab01-3addc9477bf5",
+    "name": "廉倩巧",
+    "skills": [
+     "客户关系维护",
+     "医学信息传达",
+     "市场分析",
+     "销售计划制定",
+     "项目销售",
+     "客户开发",
+     "大客户销售",
+     "销售策略",
+     "市场开发",
+     "产品推广"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 8,
+    "evidence_ok": false,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e35-0714-7252-95d5-2ecc1d2bfaaa",
+    "name": "马功风",
+    "skills": [
+     "信息安全建设",
+     "风险测评",
+     "渗透测试",
+     "漏洞扫描",
+     "安全巡检",
+     "应急响应",
+     "风险综合评价",
+     "流程制度制定",
+     "安全审计",
+     "合规治理",
+     "自动化安全风险监控",
+     "网络设备管理",
+     "系统管理",
+     "数据库管理",
+     "账号权限管理",
+     "AI",
+     "PS",
+     "图片编辑",
+     "页面设计",
+     "抠图"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-马功风",
+    "city": "",
+    "skill_requirements": [
+     "信息安全建设",
+     "风险测评",
+     "渗透测试",
+     "漏洞扫描",
+     "安全巡检"
+    ],
+    "description": "岗位职责：\n1. 负责1、根据客户或业务部门需求，结合现状，完成安全管理的完整解决方案；2、在客户信息安全建设独立项目中，根据客户需求和国家相应法规行规，提供完整的项目设计、计划、实施、验收等各相关方案并组织成功落地实施和验收；3、在项目运维中，根据客户要求组织提供风险测评、渗透测试、漏洞扫描、安全巡检、培训演练等安全咨询服务支持工作；4、负责公司网络信息安全管理体系建设及不断优\n\n任职要求：\n- 熟练掌握：信息安全建设、风险测评、渗透测试、漏洞扫描、安全巡检\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "HOLD",
+    "score": 64,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e35-0714-7252-95d5-2ecc1d2bfaaa",
+    "name": "马功风",
+    "skills": [
+     "信息安全建设",
+     "风险测评",
+     "渗透测试",
+     "漏洞扫描",
+     "安全巡检",
+     "应急响应",
+     "风险综合评价",
+     "流程制度制定",
+     "安全审计",
+     "合规治理",
+     "自动化安全风险监控",
+     "网络设备管理",
+     "系统管理",
+     "数据库管理",
+     "账号权限管理",
+     "AI",
+     "PS",
+     "图片编辑",
+     "页面设计",
+     "抠图"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 22,
+    "evidence_ok": false,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e35-d318-7b90-a017-72df200aebe6",
+    "name": "皮怡婉",
+    "skills": [
+     "excel",
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-皮怡婉",
+    "city": "",
+    "skill_requirements": [
+     "数据分析"
+    ],
+    "description": "岗位职责：\n1. 负责负责我司产品蔓迪在电商平台的运营工作。1、负责淘宝、京东、官方旗舰店等的店铺基础优化与活动运营2、努力推进公司产品排名,提高销量，根据实际情况调整运营策略，提升公司产品的整体用户数据3、定期提交店铺运营报告，完成相关数据分析，提出改进方案\n\n任职要求：\n- 熟练掌握：数据分析\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 53,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e35-d318-7b90-a017-72df200aebe6",
+    "name": "皮怡婉",
+    "skills": [
+     "excel",
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-范超发",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "招聘ppt方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 10,
+    "evidence_ok": false,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e35-a3f2-7032-a972-772d53da269e",
+    "name": "于仪",
+    "skills": [
+     "市场推广",
+     "销售计划制定",
+     "客户开发",
+     "团队建设",
+     "网络运维",
+     "故障处理",
+     "设备维护",
+     "氨压缩机操作",
+     "制冷设备管理",
+     "安全操作",
+     "沟通协调能力",
+     "团队协作",
+     "服务创新",
+     "销售管理",
+     "市场销售"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-于仪",
+    "city": "",
+    "skill_requirements": [
+     "沟通协调能力",
+     "服务创新"
+    ],
+    "description": "岗位职责：\n1. 负责1、有汽车维修行业经验；2、能独立完成美容相关工作（打蜡、抛光、上釉、镀膜、镀晶）；3、有装潢施工经验者优先考虑（贴膜、改装等）；4、有较强的沟通协调能力，有良好的纪律性、团队协助作以及服务创新精神。\n\n任职要求：\n- 熟练掌握：沟通协调能力、服务创新\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 24,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e35-a3f2-7032-a972-772d53da269e",
+    "name": "于仪",
+    "skills": [
+     "市场推广",
+     "销售计划制定",
+     "客户开发",
+     "团队建设",
+     "网络运维",
+     "故障处理",
+     "设备维护",
+     "氨压缩机操作",
+     "制冷设备管理",
+     "安全操作",
+     "沟通协调能力",
+     "团队协作",
+     "服务创新",
+     "销售管理",
+     "市场销售"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 16,
+    "evidence_ok": false,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e35-2fbe-74e3-af1b-238144c62c28",
+    "name": "娄聪羽",
+    "skills": [
+     "网络营销",
+     "质量管理",
+     "5S管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-娄聪羽",
+    "city": "",
+    "skill_requirements": [
+     "网络营销"
+    ],
+    "description": "岗位职责：\n1. 负责1、负责蔬菜、容器苗、花卉等栽培体系的研究工作；2、根据项目立项书撰写实验方案；3、负责实验的开展、数据记录、实验结果分析与反馈；4、完成上级交代的其他工作。\n\n任职要求：\n- 熟练掌握：网络营销\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "HOLD",
+    "score": 67,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e35-2fbe-74e3-af1b-238144c62c28",
+    "name": "娄聪羽",
+    "skills": [
+     "网络营销",
+     "质量管理",
+     "5S管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 15,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e32-c860-73b0-87a1-0d5700400e45",
+    "name": "皮苑",
+    "skills": [
+     "java"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-皮苑",
+    "city": "",
+    "skill_requirements": [
+     "java"
+    ],
+    "description": "岗位职责：\n1. 负责1、招投标信息的收集，投标文件的制作及标书中涉及到的相应工作;2、负责投标文件的编制、整体投标文件的排版、打印、复印、装订等工作，并按规定如期完成标书制作;3、协助市场部门做好项目的投标准备工作，会同业务部与客户进行商务谈判，确定项目工期、报价等相关事宜;4、处理投标过程中的定额单价、总价计算问题并及时汇报上级领导，确保报价准确、合理、具竞争性;5、负责与项\n\n任职要求：\n- 熟练掌握：java\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 47,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e32-c860-73b0-87a1-0d5700400e45",
+    "name": "皮苑",
+    "skills": [
+     "java"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 30,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e32-a70f-7d80-a3a4-6242d8e41b84",
+    "name": "姜哲涛",
+    "skills": [
+     "原理图设计",
+     "PCB开发",
+     "硬件调试",
+     "产品原型搭建",
+     "产品调试",
+     "固件开发"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-姜哲涛",
+    "city": "",
+    "skill_requirements": [
+     "PCB开发",
+     "产品原型搭建",
+     "产品调试",
+     "固件开发"
+    ],
+    "description": "岗位职责：\n1. 负责1、负责机器人各种控制板、传感或驱动电路的器件选型，原理图、PCB开发；2、针对调试中出现的各种硬件问题提出相应的解决方案并快速验证实现；3、产品原型搭建，产品调试及测试，固件开发，文档整理.\n\n任职要求：\n- 熟练掌握：PCB开发、产品原型搭建、产品调试、固件开发\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 58,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e32-a70f-7d80-a3a4-6242d8e41b84",
+    "name": "姜哲涛",
+    "skills": [
+     "原理图设计",
+     "PCB开发",
+     "硬件调试",
+     "产品原型搭建",
+     "产品调试",
+     "固件开发"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 9,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e35-0481-73a3-92aa-bab8a752cfea",
+    "name": "祁东",
+    "skills": [
+     "战略规划",
+     "运营管理",
+     "团队管理",
+     "课程研发",
+     "师资管理体系搭建",
+     "销售体系搭建",
+     "业绩管理",
+     "地质勘查项目设计",
+     "野外施工",
+     "流程管控",
+     "安全管理",
+     "数据采集",
+     "数据整理",
+     "数据处理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-祁东",
+    "city": "",
+    "skill_requirements": [
+     "野外施工",
+     "数据采集",
+     "数据整理",
+     "数据处理"
+    ],
+    "description": "岗位职责：\n1. 负责1、负责地质勘查项目的设计、野外施工、资料整理；2、负责项目进度、人员、操作流程的管控，为操作人员提供技术指导；3、负责项目的安全生产工作；4、负责勘探质量监督、数据采集、数据整理，协助相关人员进行数据处理、成果报告编制工作；5、收集客户反馈，协助研发部门做好产品改进工作。\n\n任职要求：\n- 熟练掌握：野外施工、数据采集、数据整理、数据处理\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 48,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e35-0481-73a3-92aa-bab8a752cfea",
+    "name": "祁东",
+    "skills": [
+     "战略规划",
+     "运营管理",
+     "团队管理",
+     "课程研发",
+     "师资管理体系搭建",
+     "销售体系搭建",
+     "业绩管理",
+     "地质勘查项目设计",
+     "野外施工",
+     "流程管控",
+     "安全管理",
+     "数据采集",
+     "数据整理",
+     "数据处理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 30,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e34-b2d8-72f3-bb5a-f2a3a9112454",
+    "name": "谈伯义",
+    "skills": [
+     "汽车销售",
+     "客户维护",
+     "电话沟通",
+     "销售指标",
+     "汽车故障诊断",
+     "事故车估价",
+     "维修方案制定",
+     "用户投诉处理",
+     "用户档案建立",
+     "维修任务委托书",
+     "汽车维修合同",
+     "维修进度督促",
+     "救援需求调度",
+     "车辆交付检验",
+     "结算清单解释",
+     "质量担保条例",
+     "客户预约",
+     "投诉记录",
+     "网络跟进",
+     "客户关系管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-谈伯义",
+    "city": "",
+    "skill_requirements": [
+     "质量担保条例",
+     "投诉记录"
+    ],
+    "description": "岗位职责：\n1. 参与核心业务系统/项目的研发与交付；\n2. 与团队协作完成需求分析、方案设计与上线；\n3. 持续优化性能与稳定性。\n\n任职要求：\n- 熟练掌握：质量担保条例、投诉记录\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "HOLD",
+    "score": 60,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e34-b2d8-72f3-bb5a-f2a3a9112454",
+    "name": "谈伯义",
+    "skills": [
+     "汽车销售",
+     "客户维护",
+     "电话沟通",
+     "销售指标",
+     "汽车故障诊断",
+     "事故车估价",
+     "维修方案制定",
+     "用户投诉处理",
+     "用户档案建立",
+     "维修任务委托书",
+     "汽车维修合同",
+     "维修进度督促",
+     "救援需求调度",
+     "车辆交付检验",
+     "结算清单解释",
+     "质量担保条例",
+     "客户预约",
+     "投诉记录",
+     "网络跟进",
+     "客户关系管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 35,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e33-9eca-7a40-9ffd-56b02681fb12",
+    "name": "计凡",
+    "skills": [
+     "阿里巴巴1688",
+     "渠道开发",
+     "渠道管理",
+     "客户维护",
+     "电话销售",
+     "车险销售",
+     "客户咨询",
+     "满意度回访",
+     "供应商开发",
+     "采购渠道优化",
+     "成本控制",
+     "合同谈判",
+     "供应商管理",
+     "配方优化",
+     "新产品开发",
+     "推广策划",
+     "门店信息化系统",
+     "进销存数据管理",
+     "库存管理",
+     "终端培训"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-计凡",
+    "city": "",
+    "skill_requirements": [
+     "供应商开发",
+     "采购渠道优化",
+     "成本控制",
+     "合同谈判",
+     "供应商管理"
+    ],
+    "description": "岗位职责：\n1. 负责供应商开发，采购渠道优化，成本控制；满足生产销售研发需求方面的物料采购，合同谈判、签订及跟进；采购物料的验收以及不良品返厂及售后沟通处理；外协供应商管理，合作调研、沟通及谈判。\n\n任职要求：\n- 熟练掌握：供应商开发、采购渠道优化、成本控制、合同谈判、供应商管理\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 42,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e33-9eca-7a40-9ffd-56b02681fb12",
+    "name": "计凡",
+    "skills": [
+     "阿里巴巴1688",
+     "渠道开发",
+     "渠道管理",
+     "客户维护",
+     "电话销售",
+     "车险销售",
+     "客户咨询",
+     "满意度回访",
+     "供应商开发",
+     "采购渠道优化",
+     "成本控制",
+     "合同谈判",
+     "供应商管理",
+     "配方优化",
+     "新产品开发",
+     "推广策划",
+     "门店信息化系统",
+     "进销存数据管理",
+     "库存管理",
+     "终端培训"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 47,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e35-a76e-7621-8b1b-f78bb2cd68b7",
+    "name": "何环婉",
+    "skills": [
+     "电话沟通",
+     "客户服务",
+     "会议室管理",
+     "访客接待",
+     "行政采购",
+     "供应商管理",
+     "费用分摊表制作",
+     "门店管理",
+     "销售指标管理",
+     "订货",
+     "补货",
+     "上货",
+     "退货",
+     "库存调配",
+     "报表制作",
+     "客户管理",
+     "团队管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-何环婉",
+    "city": "",
+    "skill_requirements": [
+     "门店管理",
+     "订货",
+     "补货",
+     "上货",
+     "退货"
+    ],
+    "description": "岗位职责：\n1. 负责1.负责门店管理工作，达成公司下达的销售指标；2.负责专柜商品及相关物料的订货、补货、上货、退货、维护、调配、换货等工作；3.负责门店销售业绩跟进以及排班等报表制作；5.负责客户管理和维护，以及反馈顾客建议，落实顾客回访制度和会员制度；6.负责团队建设，管理，激励团队出更高的业绩，并培养有潜力的后备人才；7.完成公司、上级交办的其他工作和配合门店同事的相关工\n\n任职要求：\n- 熟练掌握：门店管理、订货、补货、上货、退货\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 48,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e35-a76e-7621-8b1b-f78bb2cd68b7",
+    "name": "何环婉",
+    "skills": [
+     "电话沟通",
+     "客户服务",
+     "会议室管理",
+     "访客接待",
+     "行政采购",
+     "供应商管理",
+     "费用分摊表制作",
+     "门店管理",
+     "销售指标管理",
+     "订货",
+     "补货",
+     "上货",
+     "退货",
+     "库存调配",
+     "报表制作",
+     "客户管理",
+     "团队管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 17,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e35-808c-77c3-9192-0318ff755ec9",
+    "name": "穆荣青",
+    "skills": [
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-穆荣青",
+    "city": "",
+    "skill_requirements": [
+     "数据分析"
+    ],
+    "description": "岗位职责：\n1. 负责负责我司产品蔓迪在电商平台的运营工作。1、负责淘宝、京东、官方旗舰店等的店铺基础优化与活动运营2、努力推进公司产品排名,提高销量，根据实际情况调整运营策略，提升公司产品的整体用户数据3、定期提交店铺运营报告，完成相关数据分析，提出改进方案\n\n任职要求：\n- 熟练掌握：数据分析\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 27,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e35-808c-77c3-9192-0318ff755ec9",
+    "name": "穆荣青",
+    "skills": [
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-范超发",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "招聘ppt方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 8,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e35-84db-7550-98f7-59970c573be0",
+    "name": "许有亨",
+    "skills": [
+     "java"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-许有亨",
+    "city": "",
+    "skill_requirements": [
+     "java"
+    ],
+    "description": "岗位职责：\n1. 负责1、协助制定市场活动计划，组织落实市场活动；2、负责展会活动策划与相关活动支持，市场推广资料制定与管理；3、负责对外平台的开发管理与维护（网站、微信、广告）；4、领导安排的其他工作。\n\n任职要求：\n- 熟练掌握：java\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "HOLD",
+    "score": 63,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e35-84db-7550-98f7-59970c573be0",
+    "name": "许有亨",
+    "skills": [
+     "java"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 14,
+    "evidence_ok": false,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e33-4926-7d12-a89c-9e45a8d012b1",
+    "name": "花健达",
+    "skills": [
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-花健达",
+    "city": "",
+    "skill_requirements": [
+     "数据分析"
+    ],
+    "description": "岗位职责：\n1. 负责1.负责公司贷款产品的营业数据分析及损益分析；2.负责新产品的市场调研及开发；3.负责跟韩国总部汇报的会议资料准备及报告；4.领导安排的其他事情.\n\n任职要求：\n- 熟练掌握：数据分析\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "HOLD",
+    "score": 72,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e33-4926-7d12-a89c-9e45a8d012b1",
+    "name": "花健达",
+    "skills": [
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-范超发",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "招聘ppt方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 26,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e32-65a3-7f22-81bd-651364f0bc61",
+    "name": "柏学",
+    "skills": [
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-柏学",
+    "city": "",
+    "skill_requirements": [
+     "数据分析"
+    ],
+    "description": "岗位职责：\n1. 负责1.负责公司贷款产品的营业数据分析及损益分析；2.负责新产品的市场调研及开发；3.负责跟韩国总部汇报的会议资料准备及报告；4.领导安排的其他事情.\n\n任职要求：\n- 熟练掌握：数据分析\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 39,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e32-65a3-7f22-81bd-651364f0bc61",
+    "name": "柏学",
+    "skills": [
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-范超发",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "招聘ppt方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 31,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e35-1d00-7b22-8d53-36143401aac8",
+    "name": "王咏馨",
+    "skills": [
+     "Python",
+     "数据分析",
+     "项目管理",
+     "客户关系管理",
+     "行政事务管理",
+     "招聘",
+     "培训",
+     "绩效管理",
+     "薪酬管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-王咏馨",
+    "city": "",
+    "skill_requirements": [
+     "招聘",
+     "培训"
+    ],
+    "description": "岗位职责：\n1. 负责全面统筹规划公司人力资源开发及战略管理，拟定人力资源规划方案，并监督各项计划的实施，制定和完善公司的人力资源管理制度向管理层提供有关人力资源战略、组织发展等方面的建议，提升企业整体管理水平对业务的理解能力较好，快速的结合业务发展需要给出合理而有效的组织结构、人才配置等各项人力资源方案搭建和梳理人力资源管理体系（包含招聘、培训、绩效、薪酬及员工发展等体系的全面\n\n任职要求：\n- 熟练掌握：招聘、培训\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 53,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e35-1d00-7b22-8d53-36143401aac8",
+    "name": "王咏馨",
+    "skills": [
+     "Python",
+     "数据分析",
+     "项目管理",
+     "客户关系管理",
+     "行政事务管理",
+     "招聘",
+     "培训",
+     "绩效管理",
+     "薪酬管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-范超发",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "招聘ppt方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 10,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e33-b422-7971-9de1-06f991c07d3b",
+    "name": "褚康",
+    "skills": [
+     "总经理助理",
+     "会务安排",
+     "差旅安排",
+     "报表撰写",
+     "资料整理",
+     "报告分析",
+     "横向沟通",
+     "客户关系维护",
+     "客户拓展",
+     "客户服务",
+     "整合营销",
+     "市场推广",
+     "营销",
+     "广告方案",
+     "沟通协调"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-褚康",
+    "city": "",
+    "skill_requirements": [
+     "客户拓展",
+     "整合营销",
+     "市场推广",
+     "营销",
+     "广告方案"
+    ],
+    "description": "岗位职责：\n1. 负责1、熟悉市场推广营销模式，有全行业或单行业品牌客户资源（快销、美妆等相关产品等），具有优秀的客户拓展与服务能力；2、负责公司市场服务能力的整合营销，完成业绩指标；3、协调、维护客户关系，保持长期稳定的合作关系；4、善于客户渗透，能够挖掘客户的潜在需求，结合行业经验和公司产品满足客户需求，实现公司销售目标；5、在广告方案卖进、执行和后期回顾、回款等各个环节与客\n\n任职要求：\n- 熟练掌握：客户拓展、整合营销、市场推广、营销、广告方案\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 59,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e33-b422-7971-9de1-06f991c07d3b",
+    "name": "褚康",
+    "skills": [
+     "总经理助理",
+     "会务安排",
+     "差旅安排",
+     "报表撰写",
+     "资料整理",
+     "报告分析",
+     "横向沟通",
+     "客户关系维护",
+     "客户拓展",
+     "客户服务",
+     "整合营销",
+     "市场推广",
+     "营销",
+     "广告方案",
+     "沟通协调"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 17,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e32-b23e-7d10-8f78-43acd66750e0",
+    "name": "伍有志",
+    "skills": [
+     "项目管理",
+     "活动策划",
+     "商务谈判",
+     "合同管理",
+     "市场调研",
+     "数据分析",
+     "财务核算",
+     "税务申报",
+     "品牌管理",
+     "市场推广",
+     "财务管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-伍有志",
+    "city": "",
+    "skill_requirements": [
+     "财务核算",
+     "税务申报",
+     "财务管理"
+    ],
+    "description": "岗位职责：\n1. 负责1、负责公司各项财务管理制度的制定经总经理批准后跟踪实施；2、负责公司资金运作、管理及对外投融资业务的财务支持及项目跟进；3、负责公司日常财务核算及税务申报等工作；4、依据报销及付款管理规定审核费用报销及付款申请；5、负责统计应收账款并协助业务部门及时催收；6、负责定期向总经理汇报公司财务状况并提出合理化建议；7、负责对外审计、工商、银行等相关协调工作；8、\n\n任职要求：\n- 熟练掌握：财务核算、税务申报、财务管理\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "HOLD",
+    "score": 68,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e32-b23e-7d10-8f78-43acd66750e0",
+    "name": "伍有志",
+    "skills": [
+     "项目管理",
+     "活动策划",
+     "商务谈判",
+     "合同管理",
+     "市场调研",
+     "数据分析",
+     "财务核算",
+     "税务申报",
+     "品牌管理",
+     "市场推广",
+     "财务管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-范超发",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "招聘ppt方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 13,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e33-c68c-76c0-b2cc-cfb4909b27a1",
+    "name": "周韵",
+    "skills": [
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-周韵",
+    "city": "",
+    "skill_requirements": [
+     "数据分析"
+    ],
+    "description": "岗位职责：\n1. 负责1、负责集团与各区域团队在OTA平台上的密切协作，制定并落实相应的营销策略；2、负责与OTA渠道的合作与日常运营，关注效果和数据变化，对推广效果与数据负责；3、负责线上价格监控和维护，维护网络的价格渠道和销售渠道，保证网络销售有序运行；4、负责线上订单及客情维护，如订单录入、排名提升、网评与客诉等问题的日常处理与优化；5、行业竞品分析及调研，并输出可行性的建\n\n任职要求：\n- 熟练掌握：数据分析\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "HOLD",
+    "score": 76,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e33-c68c-76c0-b2cc-cfb4909b27a1",
+    "name": "周韵",
+    "skills": [
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-范超发",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "招聘ppt方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 18,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e33-0374-7da3-919f-f445d13799ae",
+    "name": "方宁诚",
+    "skills": [
+     "用友进销存系统",
+     "总账处理",
+     "凭证整理",
+     "招聘",
+     "面试",
+     "采购",
+     "考勤管理",
+     "市场调研",
+     "营销",
+     "客户服务",
+     "活动策划"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-方宁诚",
+    "city": "",
+    "skill_requirements": [
+     "用友进销存系统",
+     "凭证整理"
+    ],
+    "description": "岗位职责：\n1. 负责1、负责公司几个项目涉及收入类的相关业务审核工作；2、负责处理公司用友进销存系统订单及总账等相关账务处理；3、负责每月凭证整理及装订；4、完成领导交代的临时性工作；\n\n任职要求：\n- 熟练掌握：用友进销存系统、凭证整理\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 46,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e33-0374-7da3-919f-f445d13799ae",
+    "name": "方宁诚",
+    "skills": [
+     "用友进销存系统",
+     "总账处理",
+     "凭证整理",
+     "招聘",
+     "面试",
+     "采购",
+     "考勤管理",
+     "市场调研",
+     "营销",
+     "客户服务",
+     "活动策划"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 28,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e32-1f40-73a1-a05d-28805aa6a418",
+    "name": "褚裕",
+    "skills": [
+     "java"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-褚裕",
+    "city": "",
+    "skill_requirements": [
+     "java"
+    ],
+    "description": "岗位职责：\n1. 负责1、及时收集各级政府资质、资金政策信息，评估可行性；2、组织申报项目，包括搜集、咨询、撰写、报送、答辩和验收等环节工作；3、跟踪项目评审过程，维护现有资质；4、其他需要配合政府各职能部门的工作。\n\n任职要求：\n- 熟练掌握：java\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 41,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e32-1f40-73a1-a05d-28805aa6a418",
+    "name": "褚裕",
+    "skills": [
+     "java"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 32,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e35-0f33-7eb0-bd39-3d674c1d36f2",
+    "name": "顾贵",
+    "skills": [
+     "档案管理",
+     "反洗钱",
+     "内部审计",
+     "风险管理",
+     "培训计划",
+     "投诉处理",
+     "数据上报"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-顾贵",
+    "city": "",
+    "skill_requirements": [
+     "档案管理",
+     "反洗钱",
+     "内部审计",
+     "风险管理",
+     "培训计划"
+    ],
+    "description": "岗位职责：\n1. 负责1、执行总公司制定的档案管理制度，负责追踪各业务档案的归档、保管、配合档案调取、清查和托管等工作；2、落实部门内反洗钱、内部审计等其他风险管理工作；3、负责部门文件、文档和各项制度的收发、拟定、更新及管理；4、负责各渠道的投诉案件受理、转办、组织相关部门积极处理；5、制定部门年度培训计划并组织、召开各类培训、会议并总结相关报告；6、按照反洗钱规章制度在一柜通\n\n任职要求：\n- 熟练掌握：档案管理、反洗钱、内部审计、风险管理、培训计划\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 57,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e35-0f33-7eb0-bd39-3d674c1d36f2",
+    "name": "顾贵",
+    "skills": [
+     "档案管理",
+     "反洗钱",
+     "内部审计",
+     "风险管理",
+     "培训计划",
+     "投诉处理",
+     "数据上报"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 16,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e34-3237-7813-b75a-f8ef03bd49f8",
+    "name": "元学中",
+    "skills": [
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-元学中",
+    "city": "",
+    "skill_requirements": [
+     "数据分析"
+    ],
+    "description": "岗位职责：\n1. 负责1、参与旅游平台的系统开发和维护2、根据产品需求和任务分配开发相应的系统模块3、深入理解业务需求，参与方案讨论、技术调研，解决开发中的技术难题4、关注技术细节，不断进行技术迭代和架构优化，提升产品性能和稳定性5、负责大数据平台的数据分析和清洗工作\n\n任职要求：\n- 熟练掌握：数据分析\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 52,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e34-3237-7813-b75a-f8ef03bd49f8",
+    "name": "元学中",
+    "skills": [
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-范超发",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "招聘ppt方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 16,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e35-6900-7e60-afea-a4e1916e3289",
+    "name": "任枫琼",
+    "skills": [
+     "装配工艺",
+     "装配图",
+     "5S管理",
+     "设备保养",
+     "工具保养",
+     "标准件",
+     "专用工具"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-任枫琼",
+    "city": "",
+    "skill_requirements": [
+     "装配工艺",
+     "装配图",
+     "5S管理",
+     "标准件",
+     "专用工具"
+    ],
+    "description": "岗位职责：\n1. 负责1、按设计人员提供的“装配图”的产品名称、型号、规格、专用工具，标准件等，做好装配前准备；2、严格按照“装配工艺”，进行产品的装配，及时向设计人员反馈装配中的问题,对影响质量,进度的重大问题及时向车间负责人汇报，装配好后通知相关人员进行装配认可,确保装配质量；3、负责现场5S管理，确保装配场地整洁、有序，对工装进行定期清洁工作,保证安全生产；4、负责做好设备\n\n任职要求：\n- 熟练掌握：装配工艺、装配图、5S管理、标准件、专用工具\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 47,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e35-6900-7e60-afea-a4e1916e3289",
+    "name": "任枫琼",
+    "skills": [
+     "装配工艺",
+     "装配图",
+     "5S管理",
+     "设备保养",
+     "工具保养",
+     "标准件",
+     "专用工具"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "FAILED",
+    "action": null,
+    "score": null,
+    "evidence_ok": null,
+    "error": "LLM output validation failed: evidence paragraph_id not in retrieved set: 01a00e35-6905-74d2-9ae7cb3d2221"
+   },
+   "consistent_loose": true,
+   "consistent_strict": false
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e34-21e5-7092-9f94-51dcda1137c1",
+    "name": "狄雅宁",
+    "skills": [
+     "设备系统管理平台",
+     "Excel",
+     "数据库",
+     "财务软件",
+     "ERP系统",
+     "库存管理系统",
+     "办公软件",
+     "数据分析",
+     "设备管理",
+     "资产管理",
+     "财务报表编制",
+     "成本核算",
+     "预算管理",
+     "供应商管理",
+     "采购管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-狄雅宁",
+    "city": "",
+    "skill_requirements": [
+     "设备系统管理平台",
+     "设备管理"
+    ],
+    "description": "岗位职责：\n1. 负责1.负责设备系统管理平台的信息管理；2.负责牧场级《设备管理制度》的起草及修订；3.负责建立牧场所有基础设施、房屋建筑、车辆机具、机器设备等台账并及时更新后报送上级单位，保证账物相符；4.负责报批牧场设备闲置、调拨、报废等业务流程；5.负责定期向上级单位报送牧场《闲置资产统计表》；6.负责按月向上级单位报批牧场《设备维修/服务申请》；7.负责向供应商下达牧场\n\n任职要求：\n- 熟练掌握：设备系统管理平台、设备管理\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "HOLD",
+    "score": 67,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e34-21e5-7092-9f94-51dcda1137c1",
+    "name": "狄雅宁",
+    "skills": [
+     "设备系统管理平台",
+     "Excel",
+     "数据库",
+     "财务软件",
+     "ERP系统",
+     "库存管理系统",
+     "办公软件",
+     "数据分析",
+     "设备管理",
+     "资产管理",
+     "财务报表编制",
+     "成本核算",
+     "预算管理",
+     "供应商管理",
+     "采购管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-范超发",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "招聘ppt方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 12,
+    "evidence_ok": false,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e30-aba0-7ee3-abe9-e9e7e351d894",
+    "name": "史伟龙",
+    "skills": [
+     "项目管理",
+     "客户投诉处理",
+     "突发事件处理",
+     "设备管理",
+     "VIP接待",
+     "设计管理",
+     "审图",
+     "流程管理",
+     "工程签证",
+     "项目验收",
+     "人力资源管理",
+     "考勤管理",
+     "行政管理",
+     "工资核算",
+     "财务审计",
+     "社保管理",
+     "公积金管理",
+     "Scratch",
+     "青少年编程",
+     "课程管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-史伟龙",
+    "city": "",
+    "skill_requirements": [
+     "设计管理",
+     "审图",
+     "工程签证",
+     "项目验收"
+    ],
+    "description": "岗位职责：\n1. 负责1.负责园区建设的设计管理、审图与优化；2.负责项目过程协调管理与流程执行检查；3.组织项目实施与项目竣工验收参与工程签证、项目验收。\n\n任职要求：\n- 熟练掌握：设计管理、审图、工程签证、项目验收\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "ADVANCE",
+    "score": 81,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e30-aba0-7ee3-abe9-e9e7e351d894",
+    "name": "史伟龙",
+    "skills": [
+     "项目管理",
+     "客户投诉处理",
+     "突发事件处理",
+     "设备管理",
+     "VIP接待",
+     "设计管理",
+     "审图",
+     "流程管理",
+     "工程签证",
+     "项目验收",
+     "人力资源管理",
+     "考勤管理",
+     "行政管理",
+     "工资核算",
+     "财务审计",
+     "社保管理",
+     "公积金管理",
+     "Scratch",
+     "青少年编程",
+     "课程管理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 21,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e34-78ac-7ed3-9d02-088cc1ec0d25",
+    "name": "薛姣宜",
+    "skills": [
+     "市场营销",
+     "渠道拓展",
+     "活动策划",
+     "客户关系维护",
+     "数据分析",
+     "多媒体运营",
+     "推广规则",
+     "资源协调",
+     "项目跟踪",
+     "视频制作"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-薛姣宜",
+    "city": "",
+    "skill_requirements": [
+     "多媒体运营",
+     "推广规则"
+    ],
+    "description": "岗位职责：\n1. 负责1、拓展多媒体运营渠道，分析各类投放渠道，根据行业情况确定投放渠道2、熟悉各类平台的更新和推广规则，根据服务行业的行业规则和公司产品的推广对象，确定投放平台和投放频率3、整合公司广告资源，投放渠道，区域合伙人、站长等资源，拓展业务推广渠道及合作空间4、不断物色符合行业特点的典型代表及典型案例作为宣传视频的素材5、负责与清洁行业、家政服务行业等相关行业协会、联\n\n任职要求：\n- 熟练掌握：多媒体运营、推广规则\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 59,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e34-78ac-7ed3-9d02-088cc1ec0d25",
+    "name": "薛姣宜",
+    "skills": [
+     "市场营销",
+     "渠道拓展",
+     "活动策划",
+     "客户关系维护",
+     "数据分析",
+     "多媒体运营",
+     "推广规则",
+     "资源协调",
+     "项目跟踪",
+     "视频制作"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-范超发",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "招聘ppt方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 14,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e33-7773-7041-be7e-90610240fbaa",
+    "name": "贝弘",
+    "skills": [
+     "AI",
+     "PS",
+     "图片编辑软件",
+     "手绘制图",
+     "电商平台页面设计",
+     "商品详情页设计",
+     "新媒体运营",
+     "宣传资料设计",
+     "美术功底",
+     "设计能力",
+     "审美能力",
+     "产品拍摄",
+     "抠图处理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-贝弘",
+    "city": "",
+    "skill_requirements": [
+     "AI",
+     "PS",
+     "图片编辑软件",
+     "手绘制图",
+     "商品详情页设计"
+    ],
+    "description": "岗位职责：\n1. 负责熟练使用AI,PS等图片编辑软件,会使用PS进行手绘制图工作。2.负责电商平台整体页面设计、商品详情页设计和美化，及相关新媒体运营配合和宣传资料的设计；3、有较强的美术功底和设计能力优先，有较强的审美能力。4、负责新产品的拍摄和抠图处理。5、对设计专注执着、充满激情、勇于创新，执行力强，有良好的沟通能力。\n\n任职要求：\n- 熟练掌握：AI、PS、图片编辑软件、手绘制图、商品详情页设计\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "HOLD",
+    "score": 65,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e33-7773-7041-be7e-90610240fbaa",
+    "name": "贝弘",
+    "skills": [
+     "AI",
+     "PS",
+     "图片编辑软件",
+     "手绘制图",
+     "电商平台页面设计",
+     "商品详情页设计",
+     "新媒体运营",
+     "宣传资料设计",
+     "美术功底",
+     "设计能力",
+     "审美能力",
+     "产品拍摄",
+     "抠图处理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 16,
+    "evidence_ok": false,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e33-ebf4-7cf3-8f4b-9f850b458db8",
+    "name": "明飘",
+    "skills": [
+     "数据维护",
+     "数据分析",
+     "报表制作",
+     "文档管理",
+     "项目档案建立",
+     "客户信息统计",
+     "沟通能力",
+     "协调管理",
+     "国际市场销售",
+     "市场推广",
+     "客户开发",
+     "展会参与",
+     "订单管理",
+     "进出口管理",
+     "渠道经营",
+     "营销企划",
+     "营销系统设计",
+     "预算控制",
+     "费用管理",
+     "Microsoft Office"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-明飘",
+    "city": "",
+    "skill_requirements": [
+     "渠道经营",
+     "营销企划",
+     "预算控制",
+     "费用管理"
+    ],
+    "description": "岗位职责：\n1. 负责根据分公司渠道经营目标，分解计划任务并推动目标达成；拟定月度营销企划案及相关业务竞赛方案，推动营销系统运作；做好分公司渠道预算控制和费用管理；1.做好分公司营销业务中长期发展规划，并制定配套政策；2.策划分公司阶段性营销工作安排，并做好方案设计和资源匹配；3.做好分公司营销渠道的预算控制和费用管理，定期完成渠道费用盘点报告；4.加强本室员工工作指导和培养，开\n\n任职要求：\n- 熟练掌握：渠道经营、营销企划、预算控制、费用管理\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 45,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e33-ebf4-7cf3-8f4b-9f850b458db8",
+    "name": "明飘",
+    "skills": [
+     "数据维护",
+     "数据分析",
+     "报表制作",
+     "文档管理",
+     "项目档案建立",
+     "客户信息统计",
+     "沟通能力",
+     "协调管理",
+     "国际市场销售",
+     "市场推广",
+     "客户开发",
+     "展会参与",
+     "订单管理",
+     "进出口管理",
+     "渠道经营",
+     "营销企划",
+     "营销系统设计",
+     "预算控制",
+     "费用管理",
+     "Microsoft Office"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-范超发",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "招聘ppt方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 15,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e30-ab2f-7b92-bd0d-6b77c7b12e64",
+    "name": "纪欢",
+    "skills": [
+     "ppt"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-纪欢",
+    "city": "",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "岗位职责：\n1. 负责负责公司形象展示宣传、产品图册设计、宣传册设计、ppt，产品海报，产品使用前后对比图等平面类设计工作；负责部门对外日常工作宣传及广告、产品、活动的平面设计；负责网站页面设计，产品设计，广告设计等对外的平面设计工作；\n\n任职要求：\n- 熟练掌握：ppt\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 18,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e30-ab2f-7b92-bd0d-6b77c7b12e64",
+    "name": "纪欢",
+    "skills": [
+     "ppt"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 34,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e32-ed58-7863-b15d-01bf86e0c1fd",
+    "name": "毕辰",
+    "skills": [
+     "PRD编写",
+     "需求分析",
+     "竞品分析",
+     "直播运营",
+     "新媒体运营",
+     "产品设计",
+     "6S管理",
+     "项目管理",
+     "客户关系管理",
+     "营销方案策划"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-毕辰",
+    "city": "",
+    "skill_requirements": [
+     "需求分析",
+     "竞品分析",
+     "新媒体运营",
+     "产品设计"
+    ],
+    "description": "岗位职责：\n1. 负责1.负责业务平台以及相关产品的需求分析、整理、转化。2.负责业务平台以及相关的产品PRD、项目方案编写。3.进行行业相关的竞品分析、数据监测。4.配合运营部门进行产品的下一步规划。5.指导、协助技术开发同事完成产品的高度还原落地，如期发布。6、具备IT咨询经验者优先；8、具备微信、微博等新媒体运营经验者优先。9、具备产品设计、管理、运营经验者优先。\n\n任职要求：\n- 熟练掌握：需求分析、竞品分析、新媒体运营、产品设计\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 34,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e32-ed58-7863-b15d-01bf86e0c1fd",
+    "name": "毕辰",
+    "skills": [
+     "PRD编写",
+     "需求分析",
+     "竞品分析",
+     "直播运营",
+     "新媒体运营",
+     "产品设计",
+     "6S管理",
+     "项目管理",
+     "客户关系管理",
+     "营销方案策划"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 31,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e34-df8e-7972-b0f9-426d1f43d741",
+    "name": "昌娜",
+    "skills": [
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-昌娜",
+    "city": "",
+    "skill_requirements": [
+     "数据分析"
+    ],
+    "description": "岗位职责：\n1. 负责1、负责编制月度合并管理报表，分析实际数据与预算的差异，协助财务经理完成月度经营分析报告，为管理层提供财务建议和决策支持；2、负责核对编制月度利润简报，分析实际收入与预测偏差原因，跟踪收入执行情况，识别潜在风险，分析原因并及时预警；3、协助编制公司预算，并组织实施；监督预算的执行结果，及时统计决算数据，根据财务分析数据提出合理化建议，完成预算的执行情况分析；\n\n任职要求：\n- 熟练掌握：数据分析\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 55,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e34-df8e-7972-b0f9-426d1f43d741",
+    "name": "昌娜",
+    "skills": [
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-范超发",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "招聘ppt方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 27,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e33-afbc-7513-97f3-2f599db23557",
+    "name": "奚时壮",
+    "skills": [
+     "弱电工程师",
+     "项目现场实施",
+     "需求调研",
+     "系统搭建",
+     "客户培训",
+     "技术验收",
+     "故障诊断排除",
+     "项目管理",
+     "MS Office",
+     "售前支持",
+     "方案编写",
+     "产品演示",
+     "投标文件编制"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-奚时壮",
+    "city": "",
+    "skill_requirements": [
+     "弱电工程师",
+     "需求调研",
+     "系统搭建",
+     "客户培训",
+     "技术验收"
+    ],
+    "description": "岗位职责：\n1. 负责1、负责政府软件项目的现场实施、沟通及处理工作；2、负责制定项目实施计划，负责前期客户需求调研、系统搭建、项目实施、组织客户培训、项目技术验收等工作；3、组织建立实施文档体系工作；4、管理工作内产品的售后技术支持，对客户系统出现的各类故障进行诊断排除；5、主要培养方向为项目负责人和项目经理；\n\n任职要求：\n- 熟练掌握：弱电工程师、需求调研、系统搭建、客户培训、技术验收\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "HOLD",
+    "score": 78,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e33-afbc-7513-97f3-2f599db23557",
+    "name": "奚时壮",
+    "skills": [
+     "弱电工程师",
+     "项目现场实施",
+     "需求调研",
+     "系统搭建",
+     "客户培训",
+     "技术验收",
+     "故障诊断排除",
+     "项目管理",
+     "MS Office",
+     "售前支持",
+     "方案编写",
+     "产品演示",
+     "投标文件编制"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 15,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e35-cf84-7170-8f11-a3d3a90e3024",
+    "name": "岑岩",
+    "skills": [
+     "go"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-岑岩",
+    "city": "",
+    "skill_requirements": [
+     "go"
+    ],
+    "description": "岗位职责：\n1. 负责1.负责游戏界面设计，制作，更新工作；2.负责游戏界面设计和图标设计；3.负责其他部分绘制工作；4.负责游戏中LOGO，字体，宣传相关内容的制作与更新；\n\n任职要求：\n- 熟练掌握：go\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 43,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e35-cf84-7170-8f11-a3d3a90e3024",
+    "name": "岑岩",
+    "skills": [
+     "go"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 10,
+    "evidence_ok": false,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e33-21a4-79f0-a366-1966b429ae27",
+    "name": "贾芬梦",
+    "skills": [
+     "人力资源管理",
+     "战略规划",
+     "组织架构设计",
+     "招聘管理",
+     "绩效管理",
+     "薪酬福利",
+     "员工关系",
+     "培训管理",
+     "人才梯队建设",
+     "公共关系协调",
+     "项目协调",
+     "档案归档管理",
+     "业务流程优化",
+     "制度建设"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-贾芬梦",
+    "city": "",
+    "skill_requirements": [
+     "人力资源管理",
+     "战略规划",
+     "绩效管理",
+     "薪酬福利",
+     "员工关系"
+    ],
+    "description": "岗位职责：\n1. 负责1、高层管理职位，协助决策层制定公司发展战略，负责其功能领域内短期及长期的公司决策和战略，对公司中长期目标的达成提出关键性建议2、负责教学教研线全面的人事管理工作，参与教学教研会议，了解学校、培训机构架构及团队发展、业务开展情况，从HR角度给出支持及建议，优化组织及流程；3、搭建适应公司发展需要的人力资源管理体系（包括招聘配置、绩效管理、薪酬福利、员工关系等\n\n任职要求：\n- 熟练掌握：人力资源管理、战略规划、绩效管理、薪酬福利、员工关系\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 46,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e33-21a4-79f0-a366-1966b429ae27",
+    "name": "贾芬梦",
+    "skills": [
+     "人力资源管理",
+     "战略规划",
+     "组织架构设计",
+     "招聘管理",
+     "绩效管理",
+     "薪酬福利",
+     "员工关系",
+     "培训管理",
+     "人才梯队建设",
+     "公共关系协调",
+     "项目协调",
+     "档案归档管理",
+     "业务流程优化",
+     "制度建设"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 18,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e35-9f6d-7753-9789-97dad553cf8c",
+    "name": "窦瑞",
+    "skills": [
+     "全盘账务处理",
+     "会计报表编制",
+     "财务分析",
+     "税务筹划",
+     "税务申报",
+     "全面预算管理",
+     "记账凭证编制",
+     "费用核算",
+     "成本管理",
+     "成本预测",
+     "发票开具",
+     "应收应付账款管理",
+     "会计档案处理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-窦瑞",
+    "city": "",
+    "skill_requirements": [
+     "费用核算",
+     "成本管理",
+     "成本预测",
+     "发票开具"
+    ],
+    "description": "岗位职责：\n1. 负责1、监管公司应收、应付账款；2、负责公司费用核算、成本管理，进行成本预测、控制、分析；3、收集适用本公司的税收政策，并及时应用到会计工作中；4、各项税务事项办理、熟悉各项税种申报，发票开具；5、负责各部门费用预算组织、编制工作;6、准确无误编制会计凭证；7、负责凭证的装订及保管，整理会计记录资料，管理会计档案;8、完成上级交办的其他财务工作任务。\n\n任职要求：\n- 熟练掌握：费用核算、成本管理、成本预测、发票开具\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "ADVANCE",
+    "score": 81,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e35-9f6d-7753-9789-97dad553cf8c",
+    "name": "窦瑞",
+    "skills": [
+     "全盘账务处理",
+     "会计报表编制",
+     "财务分析",
+     "税务筹划",
+     "税务申报",
+     "全面预算管理",
+     "记账凭证编制",
+     "费用核算",
+     "成本管理",
+     "成本预测",
+     "发票开具",
+     "应收应付账款管理",
+     "会计档案处理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 7,
+    "evidence_ok": false,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e33-aa90-7ae1-8d2b-b98cd9737f06",
+    "name": "姜会",
+    "skills": [
+     "IFRS17",
+     "国际会计准则",
+     "精算模型",
+     "再保评估模型",
+     "计量平台",
+     "精算系统",
+     "数据提取",
+     "数据传输",
+     "模型设计",
+     "雷达算法分析",
+     "雷达数据处理",
+     "雷达产品设计",
+     "市场调研",
+     "市场开发",
+     "渠道管理",
+     "销售计划",
+     "代理商管理",
+     "市场推广",
+     "临床拜访",
+     "技术方案制定"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-姜会",
+    "city": "",
+    "skill_requirements": [
+     "IFRS17",
+     "国际会计准则",
+     "精算模型",
+     "再保评估模型",
+     "计量平台"
+    ],
+    "description": "岗位职责：\n1. 负责1.开展IFRS17国际会计准则政策的研究、做好技术方案的制定和审阅；2.评估精算模型功能的现状，分析与IFRS17准则要求的差异，完善IFRS17精算模型，搭建IFRS17准则下再保评估模型；3.负责IFRS17计量平台功能设计，为计量平台开发和测试提供全面支持；4.负责精算系统升级改造，制定数据提取和传输方案；5.负责IFRS17模型设计书的审阅，起草和\n\n任职要求：\n- 熟练掌握：IFRS17、国际会计准则、精算模型、再保评估模型、计量平台\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 49,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e33-aa90-7ae1-8d2b-b98cd9737f06",
+    "name": "姜会",
+    "skills": [
+     "IFRS17",
+     "国际会计准则",
+     "精算模型",
+     "再保评估模型",
+     "计量平台",
+     "精算系统",
+     "数据提取",
+     "数据传输",
+     "模型设计",
+     "雷达算法分析",
+     "雷达数据处理",
+     "雷达产品设计",
+     "市场调研",
+     "市场开发",
+     "渠道管理",
+     "销售计划",
+     "代理商管理",
+     "市场推广",
+     "临床拜访",
+     "技术方案制定"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 9,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e35-5b8a-70f0-b7f3-8554ce244096",
+    "name": "萧炎敬",
+    "skills": [
+     "财务数据分析",
+     "资金计划编制",
+     "资金分析报告",
+     "财务管理",
+     "负债监控",
+     "转贷计划",
+     "工业废水处理",
+     "污泥处理",
+     "废水处理方案",
+     "水资源回用",
+     "零排放技术",
+     "小试中试试验",
+     "技术方案编制",
+     "标书编制",
+     "工程调试",
+     "技术整改",
+     "机电产品设计",
+     "机械线路连接",
+     "治具设计",
+     "夹具设计"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-萧炎敬",
+    "city": "",
+    "skill_requirements": [
+     "污泥处理",
+     "标书编制",
+     "工程调试",
+     "技术整改"
+    ],
+    "description": "岗位职责：\n1. 负责1、工业废水或污泥处理领域的新技术研发和推广；2、进行小试或中试试验，制订废水处理、回用及零排放的最优方案；3、对市场开发提供技术支持，包括技术交流、技术方案、标书编制、工程调试、技术整改等。\n\n任职要求：\n- 熟练掌握：污泥处理、标书编制、工程调试、技术整改\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 54,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e35-5b8a-70f0-b7f3-8554ce244096",
+    "name": "萧炎敬",
+    "skills": [
+     "财务数据分析",
+     "资金计划编制",
+     "资金分析报告",
+     "财务管理",
+     "负债监控",
+     "转贷计划",
+     "工业废水处理",
+     "污泥处理",
+     "废水处理方案",
+     "水资源回用",
+     "零排放技术",
+     "小试中试试验",
+     "技术方案编制",
+     "标书编制",
+     "工程调试",
+     "技术整改",
+     "机电产品设计",
+     "机械线路连接",
+     "治具设计",
+     "夹具设计"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 26,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e32-af43-74b2-9032-6932890f497e",
+    "name": "常娜",
+    "skills": [
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-常娜",
+    "city": "",
+    "skill_requirements": [
+     "数据分析"
+    ],
+    "description": "岗位职责：\n1. 负责1、负责编制月度合并管理报表，分析实际数据与预算的差异，协助财务经理完成月度经营分析报告，为管理层提供财务建议和决策支持；2、负责核对编制月度利润简报，分析实际收入与预测偏差原因，跟踪收入执行情况，识别潜在风险，分析原因并及时预警；3、协助编制公司预算，并组织实施；监督预算的执行结果，及时统计决算数据，根据财务分析数据提出合理化建议，完成预算的执行情况分析；\n\n任职要求：\n- 熟练掌握：数据分析\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "HOLD",
+    "score": 62,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e32-af43-74b2-9032-6932890f497e",
+    "name": "常娜",
+    "skills": [
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-范超发",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "招聘ppt方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 23,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e34-d865-7b03-bd6a-e4fd2fd26130",
+    "name": "计刚承",
+    "skills": [
+     "原理图设计",
+     "电路仿真",
+     "器件选型",
+     "BOM制作",
+     "物料承认",
+     "技术文档输出",
+     "技术支持",
+     "转产协调",
+     "PCS硬件研发",
+     "主回路设计",
+     "控制电路设计",
+     "驱动电路设计",
+     "辅助电路设计",
+     "PCB图设计",
+     "样机调试",
+     "整机测试",
+     "单板测试",
+     "系统可靠性评估",
+     "系统稳定性评估"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-计刚承",
+    "city": "",
+    "skill_requirements": [
+     "原理图设计",
+     "电路仿真",
+     "器件选型",
+     "BOM制作",
+     "物料承认"
+    ],
+    "description": "岗位职责：\n1. 负责1、负责储能/光伏逆变器产品原理图设计、电路仿真，器件选型与设计等；2、负责BOM制作，物料承认，相关技术文档输出及积累；3、负责技术支持和转产协调；4、负责PCS硬件研发及调试，包括主回路设计，控制电路、驱动电路及其它辅助电路原理图及PCB图的设计、器件选型及样机调试；5、负责项目的整机测试、单板测试及相关问题解决，对系统的可靠性、稳定性进行评估。\n\n任职要求：\n- 熟练掌握：原理图设计、电路仿真、器件选型、BOM制作、物料承认\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 50,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e34-d865-7b03-bd6a-e4fd2fd26130",
+    "name": "计刚承",
+    "skills": [
+     "原理图设计",
+     "电路仿真",
+     "器件选型",
+     "BOM制作",
+     "物料承认",
+     "技术文档输出",
+     "技术支持",
+     "转产协调",
+     "PCS硬件研发",
+     "主回路设计",
+     "控制电路设计",
+     "驱动电路设计",
+     "辅助电路设计",
+     "PCB图设计",
+     "样机调试",
+     "整机测试",
+     "单板测试",
+     "系统可靠性评估",
+     "系统稳定性评估"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 12,
+    "evidence_ok": false,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e33-2cda-7a13-8a1c-483e03641eb7",
+    "name": "皮才",
+    "skills": [
+     "ppt"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-皮才",
+    "city": "",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "岗位职责：\n1. 负责1.负责批签发数据库的更新和整理并定期进行行业分析；2.跟踪处于临床研究中的疫苗产品的状态；3.维护更新国内疫苗产品的产品信息，包括但不限于包装、说明书、DA、PPT、软文等；4.搜集行业内的分析报告；5.辅助策略分析专员收集国外疫苗产品信息。\n\n任职要求：\n- 熟练掌握：ppt\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 38,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e33-2cda-7a13-8a1c-483e03641eb7",
+    "name": "皮才",
+    "skills": [
+     "ppt"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 26,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e35-6c1f-75c3-92b5-7ab39b807757",
+    "name": "戚琴",
+    "skills": [
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-戚琴",
+    "city": "",
+    "skill_requirements": [
+     "数据分析"
+    ],
+    "description": "岗位职责：\n1. 负责1、操作SEM广告投放，制定和执行广告投放方案；2、查看检测数据，提供搜索引擎各投放渠道广告数据；3、根据SEM数据分析及优化方案，对账户进行优化操作，达成制定的各项KPI；4、SEM推广数据整理，分析，报告撰写。\n\n任职要求：\n- 熟练掌握：数据分析\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 26,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e35-6c1f-75c3-92b5-7ab39b807757",
+    "name": "戚琴",
+    "skills": [
+     "数据分析"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "博士"
+   },
+   "job": {
+    "name": "职位-范超发",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "招聘ppt方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 13,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e34-0555-71b3-b2ef-1994d8ba35ab",
+    "name": "沈奇鹏",
+    "skills": [
+     "产品设计",
+     "需求分析",
+     "竞品分析",
+     "5G边缘计算",
+     "5G MEC",
+     "产品生命周期管理",
+     "版本规划",
+     "数据分析",
+     "用户反馈处理",
+     "技术文档撰写",
+     "专利撰写",
+     "网络运营",
+     "项目协调",
+     "跨部门沟通",
+     "客户沟通",
+     "解决方案设计",
+     "产品培训",
+     "电商平台运营",
+     "视觉设计",
+     "图片后期处理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-沈奇鹏",
+    "city": "",
+    "skill_requirements": [
+     "竞品分析",
+     "5G边缘计算",
+     "版本规划",
+     "网络运营",
+     "产品培训"
+    ],
+    "description": "岗位职责：\n1. 负责1、负责5G边缘计算相关产品的产品规划、需求调研与分析、竞品分析、行业分析，确定产品定位及策略方案，以及运营计划；2、负责5GMEC相关产品的生命周期管理，包括需求搜集、版本规划、设计研发、客户落地、持续运营、迭代改进产品等，达成业务目标；3、领导并驱动研发、测试、技术交付等多个部门，跟进产品开发进度，推动产品按计划上线；4、产品文档资料撰写和维护，与研发、\n\n任职要求：\n- 熟练掌握：竞品分析、5G边缘计算、版本规划、网络运营、产品培训\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "HOLD",
+    "score": 71,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e34-0555-71b3-b2ef-1994d8ba35ab",
+    "name": "沈奇鹏",
+    "skills": [
+     "产品设计",
+     "需求分析",
+     "竞品分析",
+     "5G边缘计算",
+     "5G MEC",
+     "产品生命周期管理",
+     "版本规划",
+     "数据分析",
+     "用户反馈处理",
+     "技术文档撰写",
+     "专利撰写",
+     "网络运营",
+     "项目协调",
+     "跨部门沟通",
+     "客户沟通",
+     "解决方案设计",
+     "产品培训",
+     "电商平台运营",
+     "视觉设计",
+     "图片后期处理"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-范超发",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "ppt"
+    ],
+    "description": "招聘ppt方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 15,
+    "evidence_ok": false,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e34-7f68-7520-bc5c-e988269dc6d1",
+    "name": "熊浩雄",
+    "skills": [
+     "linux",
+     "ppt"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-熊浩雄",
+    "city": "",
+    "skill_requirements": [
+     "linux"
+    ],
+    "description": "岗位职责：\n1. 负责1，参与项目的需求分析，系统设计，编写接口文档，数据库设计文档2，参与项目小组的各项核心会议讨论，主动分配自己的每日任务，合理安排工作3，根据需求实现业务功能的开发，测试，运维4，有兴趣主动研究新的后端工具，提高自身工作效率5，配置linux服务器，部署，运维后台服务\n\n任职要求：\n- 熟练掌握：linux\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 45,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e34-7f68-7520-bc5c-e988269dc6d1",
+    "name": "熊浩雄",
+    "skills": [
+     "linux",
+     "ppt"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "本科"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 22,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e34-cbc1-7ba3-8548-a21ee4da253b",
+    "name": "禹璐欣",
+    "skills": [
+     "接口测试"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-禹璐欣",
+    "city": "",
+    "skill_requirements": [
+     "接口测试"
+    ],
+    "description": "岗位职责：\n1. 负责1、与一流的开发团队协同工作，根据需求对游戏进行功能、性能、兼容、接口测试并且反馈游戏可玩性、易玩性；2、能独立执行项目测试，设计测试方案、测试用例等相关文档，能够准确定位测试重点；3、协助客户端、server技术人员定位并解决复杂的技术问题；4、根据测试结果编写测试报告并向上级汇报。\n\n任职要求：\n- 熟练掌握：接口测试\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 53,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": false,
+   "consistent_strict": false
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e34-cbc1-7ba3-8548-a21ee4da253b",
+    "name": "禹璐欣",
+    "skills": [
+     "接口测试"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": ""
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 18,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "positive",
+   "candidate": {
+    "id": "01a00e34-e2bc-7572-9496-589780482e18",
+    "name": "史梅",
+    "skills": [
+     "渠道开发",
+     "销售计划执行",
+     "代理商维护",
+     "代理商培训",
+     "市场推广",
+     "售前咨询",
+     "商务谈判",
+     "合同谈判",
+     "需求分析",
+     "产品演示",
+     "市场反馈收集",
+     "微信公众号运营",
+     "软文撰写",
+     "自媒体运营",
+     "媒体沟通",
+     "新闻稿撰写",
+     "社交平台文案编写",
+     "论坛贴吧维护",
+     "文案策划",
+     "新媒体运营"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-史梅",
+    "city": "",
+    "skill_requirements": [
+     "社交平台文案编写",
+     "文案策划",
+     "新媒体运营"
+    ],
+    "description": "岗位职责：\n1. 负责1、负责公司官网及微信的内容发布，维护、管理、话题制造，提高影响力和粉丝数；每周输出2篇及以上软文2、负责各类自媒体平台的图文采编与运营推广，不断为粉丝策划与提供优质、有高度传播性的内容，提升客户体验和黏度。3、负责公司市场宣传资料、PR新闻稿、口碑等稿件撰写；与媒体（传统媒体及新媒体）建立和保持良好沟通，安排日常发稿和对大事件、活动的深度报道。4、掌握论坛\n\n任职要求：\n- 熟练掌握：社交平台文案编写、文案策划、新媒体运营\n- 良好的团队协作与沟通能力"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "ADVANCE",
+    "score": 86,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  },
+  {
+   "kind": "negative",
+   "candidate": {
+    "id": "01a00e34-e2bc-7572-9496-589780482e18",
+    "name": "史梅",
+    "skills": [
+     "渠道开发",
+     "销售计划执行",
+     "代理商维护",
+     "代理商培训",
+     "市场推广",
+     "售前咨询",
+     "商务谈判",
+     "合同谈判",
+     "需求分析",
+     "产品演示",
+     "市场反馈收集",
+     "微信公众号运营",
+     "软文撰写",
+     "自媒体运营",
+     "媒体沟通",
+     "新闻稿撰写",
+     "社交平台文案编写",
+     "论坛贴吧维护",
+     "文案策划",
+     "新媒体运营"
+    ],
+    "current_city": "",
+    "years_experience": null,
+    "highest_degree": "硕士"
+   },
+   "job": {
+    "name": "职位-庞炎",
+    "city": "未匹配城市",
+    "skill_requirements": [
+     "excel",
+     "数据分析"
+    ],
+    "description": "招聘excel、数据分析方向人才。"
+   },
+   "result": {
+    "status": "SUCCEEDED",
+    "action": "DECLINE",
+    "score": 17,
+    "evidence_ok": true,
+    "error": ""
+   },
+   "consistent_loose": true,
+   "consistent_strict": true
+  }
+ ]
+}

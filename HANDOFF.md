@@ -81,6 +81,12 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
   已在真实开发库执行验证（7 存量指派 → 7 Application + 7 IMPORTED 事件 + 3 Job 补 Pipeline + 6 子对象回填，0 丢失）；
   关键点：本 schema 外键均为 DEFERRABLE INITIALLY DEFERRED，回填后须 SET CONSTRAINTS ALL IMMEDIATE 清空待处理触发事件，否则同事务 DROP CONSTRAINT 报 pending trigger events；
   另修复内核既有测试缺陷（application/tests.py 默认文件夹夹具 create→get_or_create）。
+- D1 优化轮（screening-v2，2026-08-17）已完成并提交：评测构造升级（正样本职位由候选人单一代表角色渲染完整 JD，职责/技能同源 + 无技能重合回退首段职责）、
+  Screening 提示词重标定（relevance/confidence 按实质语义支撑映射，禁因格式疑点压数值）、4 次退避重试 + JSON 修复一轮（FAILED 13%→1.5%）、
+  HOLD 分带默认 60→48（screening-v2 操作点，可覆盖；48-59 疑似匹配改 HOLD 人工复核）、eval 陈旧运行恢复；
+  同 seed 7 全量 200 例真实重测：宽松一致率 82.5%（正 65% / 负 100%，达成 ≥80%），严格一致率 55%（ADVANCE 12 例）；
+  诊断：残留误拒为 flash-lite 数值标定（清晰匹配评 0-47 分，评论文本却明说一致），彻底解决需更强模型档位（当前账号仅有 flash-lite）；
+  报告 docs/SCREENING-EVAL-2026-08-17b.md + JSON、全量 486 tests OK。
 - 下一步：按评测建议①③升级评测构造/对比更强模型重测，叠加 ≥80 例人工标注集交叉验证后冻结阈值；
   试点观测（采纳率/处理时长）数据支撑后由 ADMIN 显式开启免审分带（保留审计与人工回滚）。
 
