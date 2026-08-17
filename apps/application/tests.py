@@ -141,7 +141,7 @@ class SearchDatasetStepNormalizeTests(TestCase):
 
 class WorkflowApplicationRejectionTests(TestCase):
     def setUp(self):
-        ApplicationFolder.objects.create(id="default", name="root", workspace_id="default")
+        ApplicationFolder.objects.get_or_create(id="default", defaults={"name": "root", "workspace_id": "default"})
         self.app = Application.objects.create(
             id=uuid.uuid7(),
             name="legacy-workflow-app",
@@ -226,9 +226,9 @@ class ApplicationCreateValidationTests(TestCase):
 
 class ApplicationInsertMappingTests(TestCase):
     def setUp(self):
-        ApplicationFolder.objects.create(id="default", name="root", workspace_id="default")
+        ApplicationFolder.objects.get_or_create(id="default", defaults={"name": "root", "workspace_id": "default"})
         from knowledge.models import KnowledgeFolder
-        KnowledgeFolder.objects.create(id="default", name="root", workspace_id="default")
+        KnowledgeFolder.objects.get_or_create(id="default", defaults={"name": "root", "workspace_id": "default"})
 
     def test_insert_simple_creates_application_and_access_token(self):
         from application.models import ApplicationAccessToken
