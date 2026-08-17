@@ -93,6 +93,7 @@
                                     <el-dropdown-menu>
                                       <el-dropdown-item command="ai">AI 评估</el-dropdown-item>
                                       <el-dropdown-item v-if="!application.agent || application.agent.status !== 'PENDING'" command="ai-run">运行 AI 评估</el-dropdown-item>
+                                      <el-dropdown-item v-if="isActiveApplication(application)" command="draft">生成沟通草稿</el-dropdown-item>
                                       <el-dropdown-item v-if="isActiveApplication(application)" command="reject" divided>淘汰</el-dropdown-item>
                                       <el-dropdown-item v-if="isActiveApplication(application)" command="withdraw">候选人退出</el-dropdown-item>
                                       <el-dropdown-item v-if="isActiveApplication(application)" command="close">关闭申请</el-dropdown-item>
@@ -140,9 +141,10 @@
         <el-table-column label="负责人" width="110">
           <template #default="{ row }">{{ memberName(row.owner_id) || '-' }}</template>
         </el-table-column>
-        <el-table-column label="操作" width="200" fixed="right">
+        <el-table-column label="操作" width="300" fixed="right">
           <template #default="{ row }">
             <el-button v-if="isHrAdmin" link type="primary" @click="openJobDialog(row)">编辑</el-button>
+            <el-button v-if="isHrOperator && row.status === 'OPEN'" link type="primary" :loading="sourcingRunning === row.id" @click="startSourcing(row)">AI 找人才</el-button>
             <el-button v-if="isHrAdmin" link type="warning" :disabled="row.status !== 'ON_HOLD' && row.status !== 'CLOSED'" @click="reopenJob(row)">恢复</el-button>
             <el-button v-if="isHrAdmin" link type="danger" :disabled="row.status === 'CLOSED'" @click="openCloseDialog(row)">关闭</el-button>
           </template>
@@ -258,6 +260,100 @@
         />
       </template>
       <el-empty v-else description="暂无 JD 草稿，可在职位编辑中点击「AI 起草 JD」生成" />
+    </el-drawer>
+
+
+    <el-drawer v-model="sourcingDrawerVisible" title="AI 人才库激活清单" size="620px">
+      <div v-if="sourcingLoading" v-loading="true" class="p-16" style="min-height: 200px" />
+      <template v-else-if="sourcingProposal">
+        <div class="flex-between mb-16">
+          <el-tag :type="proposalStatusTagType(sourcingProposal.status)" size="small">
+            {{ proposalStatusLabel(sourcingProposal.status) }}
+          </el-tag>
+          <span class="color-secondary">内部清单，仅用于激活联系，不外发</span>
+        </div>
+        <el-alert v-if="sourcingProposal.payload.summary" :title="sourcingProposal.payload.summary" type="info" :closable="false" class="mb-16" />
+        <div v-for="(candidate, idx) in sourcingProposal.payload.candidates || []" :key="candidate.candidate_id" class="ai-block mb-16">
+          <div class="flex-between">
+            <span class="ai-title">{{ idx + 1 }}. {{ candidate.name || '-' }}</span>
+            <span class="color-secondary text-12">{{ candidate.current_city || '-' }} · {{ candidate.years_experience != null ? candidate.years_experience + ' 年' : '年限未知' }} · {{ candidate.highest_degree || '-' }}</span>
+          </div>
+          <div class="mt-8">
+            <el-tag v-for="skill in candidate.skills || []" :key="skill" class="mr-8" size="small">{{ skill }}</el-tag>
+          </div>
+          <div class="mt-8">匹配理由：{{ candidate.match_reason || '-' }}</div>
+          <div v-if="candidate.risk" class="mt-8 color-secondary">风险：{{ candidate.risk }}</div>
+          <ul v-if="candidate.evidence?.length" class="ai-list mt-8">
+            <li v-for="(ev, eIdx) in candidate.evidence" :key="eIdx">
+              <span class="color-secondary">证据（相关度 {{ ev.relevance }}）：</span>{{ ev.excerpt }}
+            </li>
+          </ul>
+        </div>
+        <div class="text-right mt-16">
+          <el-button v-if="sourcingProposal.status === 'PENDING' && isHrOperator" :loading="sourcingSaving" @click="dismissSourcingProposal">忽略清单</el-button>
+          <el-button @click="sourcingDrawerVisible = false">关闭</el-button>
+        </div>
+      </template>
+      <el-empty v-else description="暂无激活清单，可在职位行点击「AI 找人才」生成" />
+    </el-drawer>
+
+    <el-dialog v-model="draftDialogVisible" title="生成沟通草稿" width="520px">
+      <el-form label-width="88px">
+        <el-form-item label="场景" required>
+          <el-select v-model="draftForm.scenario" style="width: 100%">
+            <el-option label="婉拒/淘汰通知" value="REJECT" />
+            <el-option label="进度通知" value="PROGRESS" />
+            <el-option label="答疑" value="FAQ" />
+            <el-option label="其他" value="OTHER" />
+          </el-select>
+        </el-form-item>
+        <el-form-item v-if="draftForm.scenario === 'FAQ'" label="候选人问题">
+          <el-input v-model="draftForm.context_note" type="textarea" :rows="3" maxlength="1000" placeholder="候选人提出的问题或需要回应的背景" />
+        </el-form-item>
+        <el-form-item v-else label="补充背景">
+          <el-input v-model="draftForm.context_note" type="textarea" :rows="3" maxlength="1000" placeholder="可选：补充需要体现的背景信息" />
+        </el-form-item>
+      </el-form>
+      <template #footer>
+        <el-button @click="draftDialogVisible = false">取消</el-button>
+        <el-button type="primary" :loading="draftRunning" @click="confirmGenerateDraft">生成草稿</el-button>
+      </template>
+    </el-dialog>
+
+    <el-drawer v-model="draftDrawerVisible" title="沟通草稿（外发前请人工审核）" size="620px">
+      <div v-if="draftLoading" v-loading="true" class="p-16" style="min-height: 200px" />
+      <template v-else-if="draftProposal">
+        <div class="flex-between mb-16">
+          <el-tag :type="proposalStatusTagType(draftProposal.status)" size="small">
+            {{ proposalStatusLabel(draftProposal.status) }}
+          </el-tag>
+          <span class="color-secondary">{{ draftScenarioLabel(draftProposal.payload.scenario) }}</span>
+        </div>
+        <div class="ai-block">
+          <div class="ai-title">话术草稿</div>
+          <pre class="jd-pre">{{ draftProposal.payload.draft }}</pre>
+        </div>
+        <div v-if="draftProposal.payload.key_points?.length" class="ai-block mt-16">
+          <div class="ai-title">要点</div>
+          <ul class="ai-list"><li v-for="(item, idx) in draftProposal.payload.key_points" :key="idx">{{ item }}</li></ul>
+        </div>
+        <div v-if="draftProposal.payload.tone" class="ai-block mt-16">
+          <div class="ai-title">语气与边界</div>
+          {{ draftProposal.payload.tone }}
+        </div>
+        <div v-if="draftProposal.payload.sources?.length" class="ai-block mt-16">
+          <div class="ai-title">依据来源</div>
+          <ul class="ai-list">
+            <li v-for="(source, idx) in draftProposal.payload.sources" :key="idx">{{ source.ref }}<span v-if="source.note" class="color-secondary"> — {{ source.note }}</span></li>
+          </ul>
+        </div>
+        <div class="text-right mt-16">
+          <el-button :loading="draftSaving" @click="copyDraft">复制草稿</el-button>
+          <el-button v-if="draftProposal.status === 'PENDING' && isHrOperator" :loading="draftSaving" @click="dismissDraftProposal">忽略</el-button>
+          <el-button @click="draftDrawerVisible = false">关闭</el-button>
+        </div>
+      </template>
+      <el-empty v-else description="暂无草稿" />
     </el-drawer>
 
     <el-dialog v-model="interviewDrawerVisible" title="面试记录" width="640px">
@@ -552,9 +648,11 @@ import {
 } from '@/views/hr/constants'
 import type {
   AgentProposal,
+  CommunicationDraftProposal,
   Interview,
   JDProposal,
   Job,
+  SourcingProposal,
   JobApplication,
   JobClosePreview,
   JobCloseReason,
@@ -879,6 +977,158 @@ function dismissJdDraft() {
     .catch(() => {})
 }
 
+const sourcingDrawerVisible = ref(false)
+const sourcingLoading = ref(false)
+const sourcingRunning = ref('')
+const sourcingSaving = ref(false)
+const sourcingProposal = ref<SourcingProposal | null>(null)
+const sourcingJob = ref<Job | null>(null)
+
+function loadSourcingProposals(job: Job) {
+  sourcingLoading.value = true
+  HrApi.getJobSourcingProposals(job.id)
+    .then((response) => {
+      const proposals = response.data || []
+      sourcingProposal.value = proposals.find((p) => p.status === 'PENDING') || proposals[0] || null
+      sourcingDrawerVisible.value = true
+    })
+    .catch(() => {})
+    .finally(() => {
+      sourcingLoading.value = false
+    })
+}
+
+function startSourcing(job: Job) {
+  MsgConfirm(
+    'AI 人才库激活',
+    '将检索人才库中未投递该职位的候选人，按硬条件核对与语义匹配生成内部激活清单（只出清单，不自动联系候选人）。',
+  )
+    .then(() => {
+      sourcingRunning.value = job.id
+      HrApi.runSourcingAgent(job.id)
+        .then((response) => {
+          if (response.data?.status === 'SKIPPED' || response.data?.status === 'FAILED') {
+            MsgConfirm('AI 暂不可用', (response.data?.error as string) || '生成未成功，请稍后重试。', {
+              showCancelButton: false, confirmButtonText: '知道了',
+            }).catch(() => {})
+          } else {
+            MsgSuccess('激活清单已生成')
+            sourcingJob.value = job
+            loadSourcingProposals(job)
+          }
+        })
+        .catch(() => {})
+        .finally(() => {
+          sourcingRunning.value = ''
+        })
+    })
+    .catch(() => {})
+}
+
+function dismissSourcingProposal() {
+  if (!sourcingProposal.value) return
+  MsgConfirm('忽略清单', '确定忽略这份激活清单？')
+    .then(() => {
+      if (!sourcingProposal.value) return
+      sourcingSaving.value = true
+      HrApi.dismissProposal(sourcingProposal.value.id, { decision_note: 'HR 忽略激活清单' })
+        .then(() => {
+          MsgSuccess('已忽略')
+          if (sourcingJob.value) loadSourcingProposals(sourcingJob.value)
+        })
+        .catch(() => {})
+        .finally(() => {
+          sourcingSaving.value = false
+        })
+    })
+    .catch(() => {})
+}
+
+const draftDialogVisible = ref(false)
+const draftDrawerVisible = ref(false)
+const draftLoading = ref(false)
+const draftRunning = ref(false)
+const draftSaving = ref(false)
+const draftProposal = ref<CommunicationDraftProposal | null>(null)
+const draftTarget = ref<{ application_id: string; candidate_name: string; job: Job } | null>(null)
+const draftForm = reactive({ scenario: 'PROGRESS' as string, context_note: '' })
+
+function draftScenarioLabel(scenario: string) {
+  const labels: Record<string, string> = { REJECT: '婉拒/淘汰', PROGRESS: '进度通知', FAQ: '答疑', OTHER: '其他' }
+  return labels[scenario] || scenario
+}
+
+function openDraftDialog(job: Job, application: JobApplication) {
+  draftTarget.value = { application_id: application.application_id, candidate_name: application.candidate_name, job }
+  draftForm.scenario = 'PROGRESS'
+  draftForm.context_note = ''
+  draftDialogVisible.value = true
+}
+
+function loadDraftProposals(applicationId: string) {
+  draftLoading.value = true
+  HrApi.getCommunicationDrafts(applicationId)
+    .then((response) => {
+      const proposals = response.data || []
+      draftProposal.value = proposals.find((p) => p.status === 'PENDING') || proposals[0] || null
+      draftDrawerVisible.value = true
+    })
+    .catch(() => {})
+    .finally(() => {
+      draftLoading.value = false
+    })
+}
+
+function confirmGenerateDraft() {
+  if (!draftTarget.value) return
+  draftRunning.value = true
+  HrApi.runCommunicationDraft(draftTarget.value.application_id, {
+    scenario: draftForm.scenario,
+    context_note: draftForm.context_note.trim(),
+  })
+    .then((response) => {
+      draftDialogVisible.value = false
+      if (response.data?.status === 'SKIPPED' || response.data?.status === 'FAILED') {
+        MsgConfirm('AI 暂不可用', (response.data?.error as string) || '生成未成功，请稍后重试。', {
+          showCancelButton: false, confirmButtonText: '知道了',
+        }).catch(() => {})
+      } else {
+        MsgSuccess('草稿已生成（外发前请人工审核）')
+        loadDraftProposals(draftTarget.value!.application_id)
+      }
+    })
+    .catch(() => {})
+    .finally(() => {
+      draftRunning.value = false
+    })
+}
+
+function copyDraft() {
+  if (!draftProposal.value?.payload.draft) return
+  navigator.clipboard.writeText(draftProposal.value.payload.draft)
+    .then(() => MsgSuccess('草稿已复制'))
+    .catch(() => MsgError('复制失败，请手动选择复制'))
+}
+
+function dismissDraftProposal() {
+  if (!draftProposal.value) return
+  MsgConfirm('忽略草稿', '确定忽略这份沟通草稿？')
+    .then(() => {
+      if (!draftProposal.value || !draftTarget.value) return
+      draftSaving.value = true
+      HrApi.dismissProposal(draftProposal.value.id, { decision_note: 'HR 忽略沟通草稿' })
+        .then(() => {
+          MsgSuccess('已忽略')
+          loadDraftProposals(draftTarget.value!.application_id)
+        })
+        .catch(() => {})
+        .finally(() => {
+          draftSaving.value = false
+        })
+    })
+    .catch(() => {})
+}
+
 function extractSkillsFromDescription() {
   const description = jobForm.description.trim()
   if (!description) return
@@ -1028,6 +1278,7 @@ function isOfferStage(application: JobApplication): boolean {
 function onCardCommand(cmd: string, job: Job, application: JobApplication) {
   if (cmd === 'ai') openAiDrawer(job, application)
   else if (cmd === 'ai-run') openAiDrawer(job, application)
+  else if (cmd === 'draft') openDraftDialog(job, application)
   else if (cmd === 'reject') openStatusChangeDialog(application, 'reject', job)
   else if (cmd === 'withdraw') openStatusChangeDialog(application, 'withdraw', job)
   else if (cmd === 'close') openStatusChangeDialog(application, 'close', job)

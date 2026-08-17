@@ -79,24 +79,82 @@
         </el-card>
       </el-col>
     </el-row>
+
+    <el-card v-if="isHrOperator" style="--el-card-padding: 0" class="mt-16">
+      <template #header>
+        <div class="flex-between">
+          <span>Agent 采纳率（反馈闭环）</span>
+          <span class="color-secondary text-12">按 Agent × 分数带统计提案决策，用于阈值标定与试点观测</span>
+        </div>
+      </template>
+      <el-table :data="agentStats?.by_agent || []" empty-text="暂无 Agent 运行数据" size="small">
+        <el-table-column label="Agent" width="170">
+          <template #default="{ row }">{{ agentTypeLabel(row.agent_type) }}</template>
+        </el-table-column>
+        <el-table-column label="运行" width="160">
+          <template #default="{ row }">
+            {{ row.runs }}<span class="color-secondary">（成功 {{ row.succeeded }} · 失败 {{ row.failed }} · 跳过 {{ row.skipped }}）</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="提案" width="160">
+          <template #default="{ row }">
+            {{ row.proposal_total }}<span class="color-secondary">（待决 {{ row.proposal_total - row.decided }} · 已决 {{ row.decided }}）</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="采纳率" width="110">
+          <template #default="{ row }">
+            <el-tag v-if="row.accept_rate != null" :type="row.accept_rate >= 0.5 ? 'success' : 'warning'" size="small">
+              {{ (row.accept_rate * 100).toFixed(0) }}%
+            </el-tag>
+            <span v-else class="color-secondary">-</span>
+          </template>
+        </el-table-column>
+        <el-table-column label="分数带采纳（ADVANCE/DECLINE/HOLD）" min-width="220">
+          <template #default="{ row }">
+            <span v-if="!Object.keys(row.score_bands || {}).length" class="color-secondary">-</span>
+            <el-tag v-for="(band, key) in row.score_bands || {}" :key="key" class="mr-8" size="small" effect="plain">
+              {{ bandLabel(String(key)) }}：{{ band.accept_rate != null ? (band.accept_rate * 100).toFixed(0) + '%' : '-' }}（{{ band.count }}）
+            </el-tag>
+          </template>
+        </el-table-column>
+      </el-table>
+    </el-card>
   </div>
 </template>
 
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import HrApi from '@/api/hr/recruitment'
-import type { MyInterview } from '@/api/type/hr'
+import type { AgentStats, MyInterview } from '@/api/type/hr'
 import useStore from '@/stores'
 import { MsgError } from '@/utils/message'
 
 const router = useRouter()
 const { user } = useStore()
+const isHrOperator = computed(() => user.getHrRole() === 'OPERATOR' || user.getHrRole() === 'ADMIN')
 
 const loading = ref(false)
 const candidateTotal = ref(0)
 const jobTotal = ref(0)
 const interviews = ref<MyInterview[]>([])
+const agentStats = ref<AgentStats | null>(null)
+
+function agentTypeLabel(agentType: string) {
+  const labels: Record<string, string> = {
+    SCREENING: '初筛评估',
+    JD_DRAFT: 'JD 起草',
+    INTERVIEW_COPILOT: '面试助手',
+    SOURCING: '人才库激活',
+    COMMUNICATION_DRAFT: '沟通草稿',
+  }
+  return labels[agentType] || agentType
+}
+
+function bandLabel(band: string) {
+  const labels: Record<string, string> = { '0-59': '0-59', '60-79': '60-79', '80-100': '80-100', 'no-score': '无分' }
+  return labels[band] || band
+}
 
 function loadDashboard() {
   loading.value = true
@@ -105,11 +163,13 @@ function loadDashboard() {
     HrApi.getCandidates({ current_page: 1, page_size: 1 }, { owner_id: myId, status: 'ACTIVE' }),
     HrApi.getJobs({ current_page: 1, page_size: 1 }, { owner_id: myId, status: '' }),
     HrApi.getMyInterviews(),
+    isHrOperator.value ? HrApi.getAgentStats() : Promise.resolve({ data: { by_agent: [] } as AgentStats }),
   ])
-    .then(([candidateRes, jobRes, interviewRes]) => {
+    .then(([candidateRes, jobRes, interviewRes, statsRes]) => {
       candidateTotal.value = candidateRes.data.total || 0
       jobTotal.value = jobRes.data.total || 0
       interviews.value = interviewRes.data || []
+      agentStats.value = (statsRes as { data: AgentStats }).data || null
     })
     .catch(() => MsgError('工作台数据加载失败'))
     .finally(() => {

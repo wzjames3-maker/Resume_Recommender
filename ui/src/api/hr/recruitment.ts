@@ -1,6 +1,7 @@
 import type { Result } from '@/request/Result'
 import { exportFile, exportFilePost, del, get, post, put } from '@/request'
 import type {
+  AgentStats,
   AiConditions,
   AgentProposal,
   Application,
@@ -8,9 +9,11 @@ import type {
   Assignment,
   Candidate,
   CandidateDetail,
+  CommunicationDraftProposal,
   CopilotProposal,
   DuplicateCheckCandidate,
   JDProposal,
+  SourcingProposal,
   HrAccessMember,
   HrAccessSetItem,
   HrAuditAction,
@@ -165,6 +168,20 @@ const getJobProposals = (jobId: string) =>
 
 const getInterviewProposals = (interviewId: string) =>
   get(`${prefix.value}/interviews/${interviewId}/proposals`) as Promise<Result<CopilotProposal[]>>
+
+const getJobSourcingProposals = (jobId: string) =>
+  get(`${prefix.value}/jobs/${jobId}/proposals`) as Promise<Result<SourcingProposal[]>>
+
+const runSourcingAgent = (jobId: string) =>
+  post(`${prefix.value}/agents/SOURCING/run`, { job_id: jobId }) as Promise<Result<Record<string, unknown>>>
+
+const runCommunicationDraft = (applicationId: string, data: Record<string, unknown>) =>
+  post(`${prefix.value}/agents/COMMUNICATION_DRAFT/run`, { application_id: applicationId, ...data }) as Promise<Result<Record<string, unknown>>>
+
+const getCommunicationDrafts = (applicationId: string) =>
+  get(`${prefix.value}/applications/${applicationId}/proposals`) as Promise<Result<CommunicationDraftProposal[]>>
+
+const getAgentStats = () => get(`${prefix.value}/agents/stats`) as Promise<Result<AgentStats>>
 
 const createAssignment = (jobId: string, candidateId: string, note = '', extra: Partial<Assignment> = {}) =>
   post(`${prefix.value}/jobs/${jobId}/assignments`, {
@@ -325,19 +342,24 @@ export default {
   createOfferByApplication,
   getApplicationEvents,
   getApplicationProposals,
+  getAgentStats,
   getApplications,
+  getCommunicationDrafts,
   getInterviewsByApplication,
   getInterviewProposals,
   getJobClosePreview,
   getJobProposals,
+  getJobSourcingProposals,
   getJobStages,
   getOffersByApplication,
   dismissProposal,
   moveApplicationStage,
   restoreApplication,
+  runCommunicationDraft,
   runInterviewCopilot,
   runJdDraftAgent,
   runScreeningAgent,
+  runSourcingAgent,
   terminalApplication,
   createAssignment,
   createCandidate,

@@ -344,6 +344,64 @@ export type CopilotPayload = CopilotPreparePayload | CopilotFeedbackPayload
 
 export type CopilotProposal = AgentProposal & { payload: CopilotPayload }
 
+export interface SourcingCandidate {
+  candidate_id: string
+  name: string
+  current_city: string | null
+  highest_degree: string | null
+  years_experience: number | null
+  skills: string[]
+  match_reason: string
+  risk: string
+  evidence: { paragraph_id: string | null; excerpt: string; relevance: number }[]
+  document_id: string | null
+}
+
+export interface SourcingProposalPayload {
+  scope: { job_id: string; job_name: string }
+  candidates: SourcingCandidate[]
+  summary: string
+}
+
+export type SourcingProposal = AgentProposal & { payload: SourcingProposalPayload }
+
+export type CommunicationScenario = 'REJECT' | 'PROGRESS' | 'FAQ' | 'OTHER'
+
+export interface CommunicationDraftPayload {
+  scenario: CommunicationScenario
+  stage_key?: string
+  draft: string
+  key_points: string[]
+  tone: string
+  sources: JDDraftSource[]
+}
+
+export type CommunicationDraftProposal = AgentProposal & { payload: CommunicationDraftPayload }
+
+export interface AgentStatsBand {
+  count: number
+  decided: number
+  accept_rate: number | null
+}
+
+export interface AgentStatsItem {
+  agent_type: string
+  runs: number
+  succeeded: number
+  failed: number
+  skipped: number
+  proposals: Record<string, Record<string, number>>
+  proposal_total: number
+  decided: number
+  accepted: number
+  accept_rate: number | null
+  score_bands: Record<string, AgentStatsBand>
+}
+
+export interface AgentStats {
+  by_agent: AgentStatsItem[]
+}
+
 export interface JobCloseApplication {
   application_id: string
   candidate_name: string
