@@ -4623,7 +4623,7 @@ class ScreeningRunnerTests(TestCase):
         run = HrAgentRun.objects.get(id=output["run_id"])
         self.assertEqual(run.agent_type, "SCREENING")
         self.assertEqual(run.trigger_type, "EVENT")
-        self.assertEqual(run.prompt_version, "screening-v1")
+        self.assertEqual(run.prompt_version, "screening-v2")
         self.assertGreater(run.duration_ms, 0)
         self.assertTrue(run.output_json["decision"]["hard_met"])
         self.assertEqual(run.output_json["decision"]["suggested_action"], "ADVANCE")
@@ -4701,6 +4701,47 @@ class ScreeningRunnerTests(TestCase):
             output = run_screening_agent(self.application["id"], trigger_type="EVENT", user_id=self.user_id)
         self.assertEqual(output["status"], "FAILED")
         self.assertIn("LLM", output["error"])
+
+
+class ScreeningJsonRepairTests(TestCase):
+    """runner 结构化输出修复：_repair_json 提取首个平衡块，_invoke_llm 自动修补（报告建议②）。"""
+
+    def test_repair_json_extracts_balanced_block_from_noise(self):
+        import json
+
+        from hr.agents.runner import _repair_json
+
+        noisy = '好的，评估结果如下：\n```json\n{"dimensions": [{"name": "技能匹配", "evidence": [{"paragraph_id": "p1", "excerpt": "负责 xx", "relevance": 0.9}]}]}\n```\n结束'
+        repaired = _repair_json(noisy)
+        self.assertIsNotNone(repaired)
+        self.assertEqual(json.loads(repaired)["dimensions"][0]["name"], "技能匹配")
+
+    def test_repair_json_drops_prefix_and_trailing_junk(self):
+        import json
+
+        from hr.agents.runner import _repair_json
+
+        repaired = _repair_json('前缀说明 {"a": [1, 2]} 后缀说明')
+        self.assertEqual(repaired, '{"a": [1, 2]}')
+        self.assertEqual(json.loads(repaired)["a"], [1, 2])
+
+    def test_repair_json_returns_none_without_brace(self):
+        from hr.agents.runner import _repair_json
+
+        self.assertIsNone(_repair_json("没有对象"))
+
+    def test_invoke_llm_applies_repair_automatically(self):
+        from types import SimpleNamespace
+
+        from hr.agents.runner import _invoke_llm
+
+        fake = SimpleNamespace(
+            invoke=lambda prompt: SimpleNamespace(
+                content='围绕结果：\n{"dimensions": [{"name": "技能匹配", "verdict": "符合", "evidence": [], "confidence": 0.8}]}'
+            ),
+        )
+        data = _invoke_llm(fake, "prompt")
+        self.assertEqual(data["dimensions"][0]["name"], "技能匹配")
 
 
 class AgentProposalTests(TestCase):
@@ -5982,14 +6023,18 @@ class EvalScreeningCommandTests(TestCase):
         from hr.management.commands.eval_screening import Command
 
         command = Command()
-        candidate_a = {"id": "a", "name": "A", "skills": ["python", "django"], "current_city": "上海",
+        candidate_a = {"id": "00000000-0000-4000-8000-00000000000a", "name": "A",
+                       "skills": ["python", "django"], "current_city": "上海",
                        "years_experience": 5, "highest_degree": "本科"}
-        candidate_b = {"id": "b", "name": "B", "skills": ["java", "spring"], "current_city": "北京",
+        candidate_b = {"id": "00000000-0000-4000-8000-00000000000b", "name": "B",
+                       "skills": ["java", "spring"], "current_city": "北京",
                        "years_experience": 3, "highest_degree": "本科"}
         pool = [candidate_a, candidate_b]
-        positive = command._make_positive(candidate_a)
+        # 无此候选人的简历文档 → 完整 JD 构造回退通用职责，技能要求仍取候选人技能
+        positive = command._make_positive(self.workspace_id, candidate_a)
         self.assertEqual(positive["kind"], "positive")
         self.assertEqual(positive["job"]["skill_requirements"], ["python", "django"])
+        self.assertIn("岗位职责", positive["job"]["description"])
         negative = command._make_negative(candidate_a, pool)
         self.assertIsNotNone(negative)
         self.assertEqual(negative["kind"], "negative")

@@ -33,9 +33,11 @@ from hr.services.skill_normalize import normalize_skill
 from models_provider.tools import get_model_by_id, get_model_instance_by_model_workspace_id
 
 _SYSTEM_USER_ID = uuid.UUID(int=0)
-_PROMPT_VERSION = "screening-v1"
+_PROMPT_VERSION = "screening-v2"
 _AGENT_TYPE = "SCREENING"
 _MAX_SEARCHES = 3
+_LLM_RETRY_ATTEMPTS = 4
+_LLM_RETRY_BACKOFF = 1.0
 _EVENT_RELATION_TYPES = (RelationType.APPLY, RelationType.REFERRAL)
 
 _SCREENING_PROMPT = """你是招聘初筛助手，对候选人 X 与职位 Y 做人岗匹配评估。
@@ -65,6 +67,12 @@ _SCREENING_PROMPT = """你是招聘初筛助手，对候选人 X 与职位 Y 做
 5. 每个维度的结论必须引用至少一条证据；证据不足时 confidence 必须 < 0.5 并如实说明。
 6. **不得输出 score 或 suggested_action**（由系统派生）；不得编造简历中不存在的内容。
 7. 禁止以姓名、性别、年龄、婚育、民族、院校出身作为评价依据。
+8. relevance 与 confidence 反映「实质语义支撑强度」（0~1）：
+   - 0.7~1.0：该片段实质支撑维度结论（技能/职责/经验直接对应，即使表述用词不同）；
+   - 0.4~0.7：部分支撑；<0.4：弱相关或无关。
+   不得因为候选简历存在字段矛盾、时间线异常、模板化表述等「格式疑点」而压低相关性数值——
+   这类疑虑请写入 concerns，由人工复核，不影响 relevance/confidence 的语义评估。
+9. confidence 表示你对维度结论的确信程度；结论有被引用证据实质支撑时，不应因候选其它经历不相关而压低当前维度置信度。
 """
 
 
@@ -167,6 +175,35 @@ def _allowed_paragraph_ids(results):
     return ids
 
 
+def _repair_json(text):
+    """提取首个平衡的 {...} 块（含字符串转义）作为结构化输出的修复兜底；无则返回 None。"""
+    start = text.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    in_string = False
+    escaped = False
+    for index in range(start, len(text)):
+        ch = text[index]
+        if in_string:
+            if escaped:
+                escaped = False
+            elif ch == "\\":
+                escaped = True
+            elif ch == '"':
+                in_string = False
+            continue
+        if ch == '"':
+            in_string = True
+        elif ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                return text[start : index + 1]
+    return None
+
+
 def _invoke_llm(model, prompt):
     response = model.invoke(prompt)
     content = getattr(response, "content", None)
@@ -182,6 +219,13 @@ def _invoke_llm(model, prompt):
     try:
         return json.loads(content)
     except json.JSONDecodeError as exc:
+        # 一轮 JSON 修复：提取首个平衡块（flash-lite 长上下文稳定性的常见形态）
+        repaired = _repair_json(content)
+        if repaired is not None:
+            try:
+                return json.loads(repaired)
+            except json.JSONDecodeError:
+                pass
         raise ValueError("invalid JSON from LLM") from exc
 
 
@@ -341,12 +385,14 @@ def run_screening_agent(application_id, trigger_type=HrAgentTriggerType.EVENT, u
         )
         facts = None
         last_error = ""
-        for _attempt in range(2):
+        for _attempt in range(_LLM_RETRY_ATTEMPTS):
             try:
                 facts = _validate_facts(_invoke_llm(model, prompt), allowed_paragraph_ids=allowed_paragraph_ids)
                 break
-            except (ValueError, TypeError, KeyError) as exc:
+            except Exception as exc:  # noqa: BLE001 - 含 provider 临时错误（SenseNova 400/5xx）与校验失败，统一退避重试
                 last_error = str(exc)
+                if _attempt < _LLM_RETRY_ATTEMPTS - 1:
+                    time.sleep(_LLM_RETRY_BACKOFF * (2 ** _attempt))
         if facts is None:
             raise RuntimeError(f"LLM output validation failed: {last_error}")
 

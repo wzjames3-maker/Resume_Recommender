@@ -39,13 +39,19 @@ def _clamp_confidence(value):
 
 
 def derive_decision(payload, hard_met, bands=None, score_version="v1"):
-    """由评估事实派生建议动作；返回 decision dict（score_version 由调用方传入）。"""
+    """由评估事实派生建议动作；返回 decision dict（score_version 由调用方传入）。
+
+    v2 分带：hold 下限 60→48。D1 评测构造升级（完整 JD）后实测：flash-lite 对
+    真实匹配候选人的评分聚在 40-59（保守标定），60 下限会把“疑似匹配但模型不确定”的
+    候选人直接自动 DECLINE（正样本误拒主因）。48 下限把 48-59 的疑似匹配改为 HOLD 人工复核——
+    招聘场景优先防误拒、由人兜底；negative 硬条件不满足恒 DECLINE 不受影响（agent_score_bands
+    可覆盖，本处为默认操作点）。"""
     bands = bands or {}
     try:
         advance = int(bands.get("advance", 80))
-        hold = int(bands.get("hold", 60))
+        hold = int(bands.get("hold", 48))
     except (TypeError, ValueError):
-        advance, hold = 80, 60
+        advance, hold = 80, 48
 
     dimensions = payload.get("dimensions") or []
     warnings = []

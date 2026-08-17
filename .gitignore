@@ -201,6 +201,7 @@ copilot-instructions.mdapi.txt
 
 api.txt
 
-# Agent 探针运行报告（不入库）
+# Agent 探针/评测运行产物（不入库；正式报告放 docs/）
 logs/agent_probe_*.json
 logs/resume_dataset_manifest.json
+logs/screening_eval_*.json
