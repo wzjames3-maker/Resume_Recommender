@@ -6537,4 +6537,323 @@ class InterviewCopilotAcceptTests(TestCase):
         accepted = self._service().accept(proposal.id, {})
         self.assertEqual(accepted["status"], "ACCEPTED")
 
+class SourcingRunnerTests(TestCase):
+    """D3 Sourcing：沉睡候选人池（剔除已投递）+ 硬条件过滤 + LLM 优先级清单（DRAFT×JOB）"""
+
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.workspace_id = "workspace-sourcing"
+        self.recruitment = RecruitmentService(self.workspace_id, self.user_id, hr_role="ADMIN")
+        HrConfig.objects.update_or_create(
+            workspace_id=self.workspace_id,
+            defaults={"llm_model_id": "fake-llm", "agent_max_concurrent_runs": 2, "agent_run_rate_limit": 100},
+        )
+        job_data = self.recruitment.create_job({
+            "name": "Python Engineer", "department": "Eng", "city": "上海",
+            "skill_requirements": ["Python"], "description": "后端开发",
+        })
+        self.job = Job.objects.get(id=job_data["id"])
+        self.candidate_a = Candidate.objects.create(
+            name="Alice", workspace_id=self.workspace_id, skills=["python"],
+            current_city="上海", highest_degree="硕士", years_experience=5,
+        )
+        self.candidate_b = Candidate.objects.create(
+            name="Bob", workspace_id=self.workspace_id, skills=["python"],
+            current_city="上海", highest_degree="本科", years_experience=3,
+        )
+        self.candidate_c = Candidate.objects.create(
+            name="Carol", workspace_id=self.workspace_id, skills=["java"],
+            current_city="北京", highest_degree="本科", years_experience=2,
+        )
+        # Bob 已投递该职位（历史申请）→ 应从沉睡池剔除
+        ApplicationService(self.workspace_id, self.user_id, hr_role="ADMIN").create_application(
+            self.job.id, self.candidate_b.id, {}
+        )
+
+    def _item(self, candidate):
+        return {
+            "candidate": {"id": str(candidate.id), "name": candidate.name, "phone": "13812345678",
+                          "email": "a@b.com", "current_city": candidate.current_city,
+                          "highest_degree": candidate.highest_degree,
+                          "years_experience": candidate.years_experience, "skills": candidate.skills},
+            "resume": {"id": "r1"},
+            "paragraphs": [{"id": "p1", "title": "工作经历", "content": "Python 后端经验", "score": 0.8}],
+            "document_id": "d1",
+        }
+
+    def _fake_model(self, payload):
+        fake = Mock()
+        fake.invoke.return_value = SimpleNamespace(content=json.dumps(payload, ensure_ascii=False))
+        return fake
+
+    def test_success_flow_with_sleeping_pool(self):
+        from hr.agents.sourcing_runner import run_sourcing_agent
+        facts = {
+            "candidates": [
+                {"candidate_id": str(self.candidate_a.id), "match_reason": "五年 Python 后端经验",
+                 "risk": "", "evidence": [{"paragraph_id": "p1", "excerpt": "Python 后端经验", "relevance": 0.9}]},
+            ],
+            "summary": "池内 1 名沉睡候选人匹配",
+        }
+        with patch("hr.agents.sourcing_runner._load_llm", return_value=(self._fake_model(facts), "fake-llm")), \
+                patch("hr.agents.sourcing_runner.search_resumes", return_value={
+                    "items": [self._item(self.candidate_a), self._item(self.candidate_b), self._item(self.candidate_c)],
+                    "meta": {},
+                }):
+            output = run_sourcing_agent(str(self.job.id), user_id=self.user_id)
+        self.assertEqual(output["status"], "SUCCEEDED")
+        run = HrAgentRun.objects.get(id=output["run_id"])
+        self.assertEqual(run.agent_type, "SOURCING")
+        tool_names = [item["tool"] for item in run.tool_trace]
+        self.assertEqual(tool_names, ["get_job", "search_resumes", "structured_filter"])
+        proposal = HrAgentProposal.objects.get(id=output["proposal_id"])
+        self.assertEqual(proposal.target_type, "JOB")
+        self.assertEqual(proposal.action, "DRAFT")
+        candidates = proposal.payload_json["candidates"]
+        self.assertEqual([c["candidate_id"] for c in candidates], [str(self.candidate_a.id)])
+        self.assertEqual(candidates[0]["name"], "Alice")
+        self.assertNotIn("13812345678", json.dumps(proposal.payload_json, ensure_ascii=False))
+        self.assertNotIn("a@b.com", json.dumps(proposal.payload_json, ensure_ascii=False))
+
+    def test_llm_hallucinated_ids_filtered(self):
+        from hr.agents.sourcing_runner import run_sourcing_agent
+        facts = {
+            "candidates": [
+                {"candidate_id": str(self.candidate_a.id), "match_reason": "ok", "risk": "", "evidence": []},
+                {"candidate_id": str(uuid.uuid7()), "match_reason": "幻觉", "risk": "", "evidence": []},
+            ],
+            "summary": "s",
+        }
+        with patch("hr.agents.sourcing_runner._load_llm", return_value=(self._fake_model(facts), "fake-llm")), \
+                patch("hr.agents.sourcing_runner.search_resumes", return_value={
+                    "items": [self._item(self.candidate_a)], "meta": {},
+                }):
+            output = run_sourcing_agent(str(self.job.id), user_id=self.user_id)
+        self.assertEqual(output["status"], "SUCCEEDED")
+        proposal = HrAgentProposal.objects.get(id=output["proposal_id"])
+        self.assertEqual(len(proposal.payload_json["candidates"]), 1)
+
+    def test_empty_pool_marks_failed(self):
+        from hr.agents.sourcing_runner import run_sourcing_agent
+        with patch("hr.agents.sourcing_runner._load_llm", return_value=(self._fake_model({}), "fake-llm")), \
+                patch("hr.agents.sourcing_runner.search_resumes", return_value={"items": [], "meta": {}}):
+            output = run_sourcing_agent(str(self.job.id), user_id=self.user_id)
+        self.assertEqual(output["status"], "FAILED")
+        self.assertIn("no sleeping candidates", HrAgentRun.objects.get(id=output["run_id"]).error)
+
+    def test_non_open_job_skips(self):
+        from hr.agents.sourcing_runner import run_sourcing_agent
+        Job.objects.filter(id=self.job.id).update(status="ON_HOLD")
+        output = run_sourcing_agent(str(self.job.id), user_id=self.user_id)
+        self.assertEqual(output["status"], "SKIPPED")
+        self.assertIn("OPEN", output["error"])
+
+    def test_job_not_found_returns_none(self):
+        from hr.agents.sourcing_runner import run_sourcing_agent
+        self.assertIsNone(run_sourcing_agent(str(uuid.uuid7()), user_id=self.user_id))
+
+
+class CommunicationDraftTests(TestCase):
+    """D3 沟通草稿：scenario 分发 + 企业话术库检索 + DRAFT×APPLICATION；无 PII"""
+
+    def setUp(self):
+        self.user_id = uuid.uuid7()
+        self.workspace_id = "workspace-draft"
+        self.recruitment = RecruitmentService(self.workspace_id, self.user_id, hr_role="ADMIN")
+        HrConfig.objects.update_or_create(
+            workspace_id=self.workspace_id,
+            defaults={"llm_model_id": "fake-llm", "agent_max_concurrent_runs": 2, "agent_run_rate_limit": 100},
+        )
+        self.candidate = Candidate.objects.create(
+            name="Alice", workspace_id=self.workspace_id, skills=["python"],
+            current_city="上海", highest_degree="硕士", years_experience=5,
+        )
+        job_data = self.recruitment.create_job({"name": "Engineer", "headcount": 1, "skill_requirements": ["Python"]})
+        self.job = Job.objects.get(id=job_data["id"])
+        self.application = ApplicationService(self.workspace_id, self.user_id, hr_role="ADMIN").create_application(
+            self.job.id, self.candidate.id, {}
+        )
+
+    def _fake_model(self, payload):
+        fake = Mock()
+        fake.invoke.return_value = SimpleNamespace(content=json.dumps(payload, ensure_ascii=False))
+        return fake
+
+    def _draft_facts(self):
+        return {
+            "draft": "尊敬的 {{候选人}}：很遗憾通知您…",
+            "key_points": ["结果明确", "语气克制"],
+            "tone": "专业克制",
+            "sources": [{"kind": "knowledge", "ref": "政策库", "note": "口径"}],
+        }
+
+    def _patched_search_knowledge(self):
+        return patch("hr.agents.draft_runner.search_knowledge", return_value={
+            "items": [{"paragraph_id": "p1", "knowledge_id": "k1", "knowledge_name": "政策库",
+                       "document_id": "d1", "document_name": "话术规范", "title": "t",
+                       "content": "请联系 13812345678", "score": 0.9}],
+            "meta": {"knowledge_count": 1, "total": 1},
+        })
+
+    def test_success_flow_creates_draft_proposal(self):
+        from hr.agents.draft_runner import run_communication_draft
+        with patch("hr.agents.draft_runner._load_llm", return_value=(self._fake_model(self._draft_facts()), "fake-llm")), \
+                self._patched_search_knowledge():
+            output = run_communication_draft(
+                self.application["id"], data={"scenario": "REJECT"}, user_id=self.user_id, hr_role="ADMIN"
+            )
+        self.assertEqual(output["status"], "SUCCEEDED")
+        run = HrAgentRun.objects.get(id=output["run_id"])
+        self.assertEqual(run.agent_type, "COMMUNICATION_DRAFT")
+        tool_names = [item["tool"] for item in run.tool_trace]
+        self.assertEqual(tool_names, ["get_job", "get_candidate_overview", "search_knowledge"])
+        proposal = HrAgentProposal.objects.get(id=output["proposal_id"])
+        self.assertEqual(proposal.target_type, "APPLICATION")
+        self.assertEqual(proposal.action, "DRAFT")
+        self.assertEqual(proposal.payload_json["scenario"], "REJECT")
+        self.assertIn("候选人", proposal.payload_json["draft"])
+        # 知识库命中即使含联系方式也被投影掩码，不得进入 LLM 上下文与 payload
+        self.assertNotIn("13812345678", json.dumps(run.output_json, ensure_ascii=False))
+
+    def test_invalid_scenario_skips(self):
+        from hr.agents.draft_runner import run_communication_draft
+        output = run_communication_draft(
+            self.application["id"], data={"scenario": "NOPE"}, user_id=self.user_id, hr_role="ADMIN"
+        )
+        self.assertEqual(output["status"], "SKIPPED")
+        self.assertIn("scenario", output["error"])
+
+    def test_application_not_found_returns_none(self):
+        from hr.agents.draft_runner import run_communication_draft
+        self.assertIsNone(run_communication_draft(str(uuid.uuid7()), user_id=self.user_id, hr_role="ADMIN"))
+
+
+class AgentStatsTests(TestCase):
+    """D3 反馈闭环：按 agent_type 运行账本 + 提案决策采纳率 + 分数带"""
+
+    def setUp(self):
+        self.workspace_id = "workspace-stats"
+
+    def _run(self, agent_type, status="SUCCEEDED"):
+        return HrAgentRun.objects.create(
+            workspace_id=self.workspace_id, agent_type=agent_type, trigger_type="MANUAL",
+            ref_object_type="APPLICATION", ref_object_id=str(uuid.uuid7()), status=status,
+            prompt_version="v",
+        )
+
+    def _proposal(self, run, action, status, score=None):
+        payload = {"decision": {"score": score, "suggested_action": action}} if score is not None else {}
+        return HrAgentProposal.objects.create(
+            workspace_id=self.workspace_id, run=run, target_type="APPLICATION",
+            target_id=str(uuid.uuid7()), action=action, status=status, payload_json=payload,
+        )
+
+    def test_stats_aggregate_by_agent_and_band(self):
+        from hr.services.agent_stats import agent_feedback_stats
+        run1 = self._run("SCREENING")
+        run2 = self._run("SCREENING")
+        run3 = self._run("SCREENING", status="FAILED")
+        self._proposal(run1, "ADVANCE", "ACCEPTED", score=90)
+        self._proposal(run2, "ADVANCE", "DISMISSED", score=85)
+        self._proposal(run3, "HOLD", "PENDING", score=60)
+        jd_run = self._run("JD_DRAFT")
+        self._proposal(jd_run, "DRAFT", "ACCEPTED")
+        stats = agent_feedback_stats(self.workspace_id)
+        by_type = {item["agent_type"]: item for item in stats["by_agent"]}
+        screening = by_type["SCREENING"]
+        self.assertEqual(screening["runs"], 3)
+        self.assertEqual(screening["succeeded"], 2)
+        self.assertEqual(screening["failed"], 1)
+        self.assertEqual(screening["decided"], 2)
+        self.assertEqual(screening["accepted"], 1)
+        self.assertEqual(screening["accept_rate"], 0.5)
+        self.assertEqual(screening["score_bands"]["80-100"]["count"], 2)
+        self.assertEqual(screening["score_bands"]["80-100"]["accept_rate"], 0.5)
+        self.assertEqual(screening["proposals"]["ADVANCE"]["ACCEPTED"], 1)
+        jd = by_type["JD_DRAFT"]
+        self.assertEqual(jd["proposal_total"], 1)
+        self.assertEqual(jd["score_bands"], {})
+
+
+class AgentD3ApiTests(_HrApiBase):
+    """D3 路由：SOURCING / COMMUNICATION_DRAFT run 与 /agents/stats 权限"""
+
+    def setUp(self):
+        self.admin = self._user("hr-d3-admin", "HR D3 Admin")
+        self.operator = self._user("hr-d3-operator", "HR D3 Operator")
+        self.viewer = self._user("hr-d3-viewer", "HR D3 Viewer")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.admin.id, role="ADMIN")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.operator.id, role="OPERATOR")
+        HrAccess.objects.create(workspace_id="workspace-a", user_id=self.viewer.id, role="VIEWER")
+        HrConfig.objects.update_or_create(
+            workspace_id="workspace-a", defaults={"llm_model_id": "fake", "agent_max_concurrent_runs": 2}
+        )
+        self.recruitment = RecruitmentService("workspace-a", self.admin.id, hr_role="ADMIN")
+        job_data = self.recruitment.create_job(
+            {"name": "Engineer", "headcount": 1, "skill_requirements": ["Python"]}
+        )
+        self.job = Job.objects.get(id=job_data["id"])
+        self.candidate = Candidate.objects.create(name="Alice", workspace_id="workspace-a", skills=["python"])
+        self.application_id = ApplicationService("workspace-a", self.admin.id, hr_role="ADMIN").create_application(
+            self.job.id, self.candidate.id, {}
+        )["id"]
+
+    def test_sourcing_run_requires_operator(self):
+        response = self._client(self.viewer).post(
+            "/admin/api/workspace/workspace-a/hr/agents/SOURCING/run",
+            {"job_id": str(self.job.id)}, content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 403)
+
+    def test_sourcing_run_manual_succeeds(self):
+        facts = {"candidates": [{"candidate_id": str(self.candidate.id), "match_reason": "ok", "risk": ""}],
+                 "summary": "s"}
+        fake = Mock()
+        fake.invoke.return_value = SimpleNamespace(content=json.dumps(facts))
+        with patch("hr.agents.sourcing_runner._load_llm", return_value=(fake, "fake-llm")), \
+                patch("hr.agents.sourcing_runner.search_resumes", return_value={"items": [{
+                    "candidate": {"id": str(self.candidate.id), "name": "Alice", "current_city": "上海",
+                                  "highest_degree": "本科", "years_experience": 3, "skills": ["python"]},
+                    "resume": {"id": "r1"}, "paragraphs": [], "document_id": "d1",
+                }], "meta": {}}):
+            response = self._client(self.operator).post(
+                "/admin/api/workspace/workspace-a/hr/agents/SOURCING/run",
+                {"job_id": str(self.job.id)}, content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["data"]["status"], "SUCCEEDED")
+
+    def test_communication_draft_run_succeeds(self):
+        facts = {"draft": "尊敬的候选人：…", "key_points": [], "tone": "", "sources": []}
+        fake = Mock()
+        fake.invoke.return_value = SimpleNamespace(content=json.dumps(facts))
+        with patch("hr.agents.draft_runner._load_llm", return_value=(fake, "fake-llm")), \
+                patch("hr.agents.draft_runner.search_knowledge", return_value={"items": [], "meta": {}}):
+            response = self._client(self.operator).post(
+                "/admin/api/workspace/workspace-a/hr/agents/COMMUNICATION_DRAFT/run",
+                {"application_id": self.application_id, "scenario": "PROGRESS"}, content_type="application/json",
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["data"]["status"], "SUCCEEDED")
+
+    def test_agent_stats_requires_operator_and_returns_report(self):
+        response = self._client(self.viewer).get("/admin/api/workspace/workspace-a/hr/agents/stats")
+        self.assertEqual(response.status_code, 403)
+        response = self._client(self.operator).get("/admin/api/workspace/workspace-a/hr/agents/stats")
+        self.assertEqual(response.status_code, 200)
+        self.assertIn("by_agent", response.json()["data"])
+
+
+class AgentProbeCommandTests(TestCase):
+    """D3 探针命令门控：未设置 RUN_REAL_MODEL 时 SKIP 退出 0，不触网"""
+
+    def test_probe_skips_without_flag(self):
+        from django.core.management import call_command
+        from io import StringIO
+
+        output = StringIO()
+        call_command("hr_agent_probe", stdout=output)
+        self.assertIn("SKIP", output.getvalue())
+
+
 

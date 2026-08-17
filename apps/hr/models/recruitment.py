@@ -585,6 +585,8 @@ class HrAgentType(models.TextChoices):
     SCREENING = "SCREENING", "Screening"
     JD_DRAFT = "JD_DRAFT", "JD Draft"
     INTERVIEW_COPILOT = "INTERVIEW_COPILOT", "Interview Copilot"
+    SOURCING = "SOURCING", "Sourcing"
+    COMMUNICATION_DRAFT = "COMMUNICATION_DRAFT", "Communication Draft"
 
 
 class HrAgentTriggerType(models.TextChoices):

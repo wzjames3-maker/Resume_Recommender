@@ -68,6 +68,7 @@ urlpatterns = [
     path("workspace/<str:workspace_id>/hr/jobs/<str:job_id>/proposals", views.JobProposalListAPI.as_view()),
     path("workspace/<str:workspace_id>/hr/interviews/<str:interview_id>/proposals", views.InterviewProposalListAPI.as_view()),
     path("workspace/<str:workspace_id>/hr/agents/<str:agent_type>/run", views.AgentRunAPI.as_view()),
+    path("workspace/<str:workspace_id>/hr/agents/stats", views.AgentStatsAPI.as_view()),
     path("workspace/<str:workspace_id>/hr/proposals/<str:proposal_id>/accept", views.ProposalAcceptAPI.as_view()),
     path("workspace/<str:workspace_id>/hr/proposals/<str:proposal_id>/dismiss", views.ProposalDismissAPI.as_view()),
     path("workspace/<str:workspace_id>/hr/audit-logs", views.HrAuditLogAPI.as_view()),

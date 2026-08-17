@@ -113,6 +113,21 @@ def search_to_llm(search_result):
     }
 
 
+def _mask_pii(text):
+    """投影层防御性掩码：即使上游漏过，联系方式也不得进入 LLM 上下文。"""
+    import re
+
+    if not text:
+        return text
+    text = re.sub(r"(?<!\d)1[3-9]\d{9}(?!\d)", lambda m: m.group(0)[:3] + "****" + m.group(0)[-4:], text)
+    text = re.sub(
+        r"[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}",
+        lambda m: m.group(0)[:2] + "***@" + m.group(0).split("@")[1],
+        text,
+    )
+    return text
+
+
 def knowledge_to_llm(search_result, maximum=_SEARCH_EVIDENCE_LIMIT):
     """企业知识库检索投影：仅保留文档/段落标题与脱敏摘要，出入库路径一律剔除。"""
     items = []
@@ -124,7 +139,7 @@ def knowledge_to_llm(search_result, maximum=_SEARCH_EVIDENCE_LIMIT):
             "document_id": item.get("document_id"),
             "document_name": item.get("document_name"),
             "title": item.get("title", ""),
-            "content": str(item.get("content", ""))[:_MAX_EXCERPT_LENGTH],
+            "content": _mask_pii(str(item.get("content", ""))[:_MAX_EXCERPT_LENGTH]),
             "score": item.get("score"),
         })
     return {"items": items, "meta": (search_result or {}).get("meta") or {}}
