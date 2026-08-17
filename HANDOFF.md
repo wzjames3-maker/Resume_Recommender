@@ -59,7 +59,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
 ## 4. 下一步
 
 - R1（基础模型与命令服务）、R2（Job 两阶段关闭 STRICT/BULK）、R3（Interview/Offer/Handoff 挂 Application + Offer 接受联动 HIRED）、R4（前端动态 Pipeline 看板）、R5（API 权限/幂等/终态矩阵测试）已完成，HR 全量 419 tests 通过。
-- 新增：`POST/GET /hr/jobs/{job_id}/close(-preview)`、`/hr/applications/{id}/interviews|offers`；`search_resumes` 增加可选 `candidate_id/document_ids` 范围限定；`import_legacy_assignments` 管理命令（幂等迁移存量 CandidateAssignment）。
+- 新增：`POST/GET /hr/jobs/{job_id}/close(-preview)`、`/hr/applications/{id}/interviews|offers`；`search_resumes` 增加可选 `candidate_id/document_ids` 范围限定；存量 CandidateAssignment 迁移已内建为迁移 0025 的 RunPython 数据兜底（幂等锚点 ApplicationEvent(IMPORTED)），原 `import_legacy_assignments` 管理命令随重构移除。
 - D1 Screening Agent 已完成：`hr_agent_run` / `hr_agent_proposal` 模型与 0022 迁移、
   `apps/hr/agents/` 包（Runner 固定顺序工具编排 + PII 上下文投影 + 服务端评分派生建议动作 + Proposal 审批）、
   Application 创建时 APPLY/REFERRAL 自动触发（celery-once 防重）、并发/速率护栏、LLM 失败降级 run=FAILED 业务零影响；
@@ -76,6 +76,11 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
   报告 docs/screening-eval-2026-08-17.json 与 docs/SCREENING-EVAL-2026-08-17.md）；
   基线 200 例宽松一致率 72%（正 44% / 负 100%），未达 ≥80% 目标——诊断：泛技能职位构造 +
   flash-lite 保守评估（正样本误拒）、LLM 校验失败 13%；建议评测构造升级（完整 JD）与模型档位对比后再标定。
+- 重构回归与迁移兜底（2026-08-17）已完成：全量回归（后端 482 tests OK：hr/application/knowledge/models_provider/ops/common；前端 vue-tsc + vite build admin/chat 均过；migrate --check 真实默认库过）；
+  迁移 0025 加 RunPython 数据兜底（无 Pipeline 的 Job 建默认 JobStage、CandidateAssignment→Application 按状态映射、ApplicationEvent(IMPORTED) 幂等锚点、Interview/Offer/Handoff 的 assignment_id 回填、最后删表），
+  已在真实开发库执行验证（7 存量指派 → 7 Application + 7 IMPORTED 事件 + 3 Job 补 Pipeline + 6 子对象回填，0 丢失）；
+  关键点：本 schema 外键均为 DEFERRABLE INITIALLY DEFERRED，回填后须 SET CONSTRAINTS ALL IMMEDIATE 清空待处理触发事件，否则同事务 DROP CONSTRAINT 报 pending trigger events；
+  另修复内核既有测试缺陷（application/tests.py 默认文件夹夹具 create→get_or_create）。
 - 下一步：按评测建议①③升级评测构造/对比更强模型重测，叠加 ≥80 例人工标注集交叉验证后冻结阈值；
   试点观测（采纳率/处理时长）数据支撑后由 ADMIN 显式开启免审分带（保留审计与人工回滚）。
 
