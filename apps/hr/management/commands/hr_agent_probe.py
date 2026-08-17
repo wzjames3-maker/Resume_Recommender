@@ -17,10 +17,12 @@
 import json
 import os
 import time
-import uuid
 
+import uuid_utils.compat as uuid
 from django.core.management.base import BaseCommand
 from django.utils import timezone
+
+from common.utils.rsa_util import rsa_long_encrypt
 
 from hr.agents.runner import run_screening_agent
 from hr.models import Application, Candidate, HrAgentRun, HrConfig, Job
@@ -54,11 +56,11 @@ class Command(BaseCommand):
         return ok
 
     def _inject_credential(self, model_name, api_base, api_key):
-        """临时把环境变量凭据写入模型记录（与 installer/real_model_smoke.py 惯例一致）；返回模型对象。"""
+        """临时把环境变量凭据写入模型记录（RSA 加密存储，与 model_serializer 一致）；返回模型对象。"""
         model = Model.objects.filter(model_name=model_name).first()
         if model is None:
             return None
-        model.credential = {"api_base": api_base, "api_key": api_key}
+        model.credential = rsa_long_encrypt(json.dumps({"api_base": api_base, "api_key": api_key}))
         model.save(update_fields=["credential", "update_time"])
         return model
 
@@ -126,6 +128,11 @@ class Command(BaseCommand):
         )
         from hr.services.application_service import create_default_stages
         create_default_stages(workspace_id, job)
+        from hr.models import JobStage
+        applied_stage = JobStage.objects.filter(job=job, key="APPLIED").first()
+        if applied_stage:
+            application.current_stage = applied_stage
+            application.save(update_fields=["current_stage", "update_time"])
         try:
             output = run_screening_agent(str(application.id), trigger_type="MANUAL", user_id=None)
             run = HrAgentRun.objects.filter(id=output["run_id"]).first() if output else None
@@ -142,7 +149,7 @@ class Command(BaseCommand):
             Candidate.objects.filter(id=candidate.id).delete()
             Job.objects.filter(id=job.id).delete()
             write_audit_log(
-                workspace_id, None, "AGENT_RUN", "OTHER", "probe",
+                workspace_id, uuid.UUID(int=0), "AGENT_RUN", "OTHER", "probe",
                 detail="hr_agent_probe executed (real model probe)",
             )
 
