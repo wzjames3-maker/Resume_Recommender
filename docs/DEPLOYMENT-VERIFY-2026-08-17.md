@@ -15,13 +15,12 @@
 | 6 | 日志 PII 脱敏复核 | ✅ | maxkb/drf_exception/unexpected/celery 日志扫描：无真实手机/邮箱/口令（命中为任务耗时、CREATE TABLE 列名等假阳性）；产品层掩码另有测试覆盖（screening 输出 PII 掩码、数据集电话 3****4 掩码、残留 PII 拒入库） |
 | 7 | .env 权限 / DEBUG / 密钥不入日志 | ✅ | .env.example 600 权限；settings 默认 DEBUG=False；日志无真实口令/密钥 |
 | 8 | PG 连接加密（sslmode） | ✅（本轮补齐） | get_db_setting 新增 MAXKB_DB_SSLMODE 支持 → OPTIONS={'sslmode':'require'}；未设置时为空（无回归） |
-| 9 | 租户注销 / 数据返还 / 删除流程 | ❌→设计稿 | 内核与 HR 均无 workspace 级注销/导出实现；DEPLOYMENT.md 引用的规格不存在。本轮创建 specs/2026-08-15-hr-tenant-offboarding-design.md（可落地设计），**实现排期后续** |
+| 9 | 租户注销 / 数据返还 / 删除流程 | ✅（阶段 A/B2） | `workspace_offboard` 编排命令 + `WorkspaceOffboardingService`：覆盖 application/knowledge/model/permission/chat/HR 域，预览/脱敏返还包/确认/force/幂等 tombstone/事务回滚/对象存储回收；系统 API 与 HR 页面已接入，501 后端测试与前端构建通过 |
 | 10 | Celery worker 探针目录权限 | ✅/⚠️ | 无 /opt/maxkb-app 写权限时须设 MAXKB_WORKER_TMP（本轮验证用 /tmp/maxkb-worker-probe）；生产部署须确认 |
 
 ## 遗留缺口（上线前须完成）
 
-1. **租户注销/数据返还实现**（检查项 9）：设计稿已出（specs/2026-08-15-hr-tenant-offboarding-design.md），
-   需实现为管理命令 + 审计 + 幂等 + 存储文件清理，并过测试后即可勾选。
+1. **内核 Workspace 生命周期接入**：本精简内核没有独立 Workspace ORM/删除入口，已交付权威 `workspace_offboard` 命令、callback、系统 API 和 HR 前端页面；后续真实租户平台若有 Workspace 删除事件，应调用该 callback，再编排其它外部域。
 2. HTTPS 终止 / PG 服务端 TLS 证书：为部署编排期配置（gunicorn cert 或 nginx 终止；MAXKB_DB_SSLMODE=require 已可在本仓库配置）。
 3. 备份任务进 crontab、月度恢复演练：运维 SOP，非代码项。
 

@@ -63,6 +63,12 @@ const hrRouter = {
       component: () => import('@/views/hr/access/index.vue'),
     },
     {
+      path: '/hr/offboarding',
+      name: 'hr-offboarding',
+      meta: { title: '租户注销', activeMenu: '/hr', sameRoute: 'hr', permission: [RoleConst.WORKSPACE_MANAGE] },
+      component: () => import('@/views/hr/offboarding/index.vue'),
+    },
+    {
       path: '/hr/audit-logs',
       name: 'hr-audit-logs',
       meta: { title: '审计日志', activeMenu: '/hr', sameRoute: 'hr', permission: [HrRoleConst.ADMIN] },

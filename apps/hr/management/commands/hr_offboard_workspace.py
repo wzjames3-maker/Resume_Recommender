@@ -267,7 +267,7 @@ class Command(BaseCommand):
             self.stdout.write(f"  {key}: {value}")
 
     # ------------------------------------------------------------------ 编排入口
-    def execute_offboarding(self, workspace_id, *, user_id=None, force=False, dry_run=False, export_dir=None, include_export=False):
+    def execute_offboarding(self, workspace_id, *, user_id=None, force=False, dry_run=False, export_dir=None, include_export=False, delete_storage=True):
         """供管理命令与 workspace 注销编排/API 复用的无输出执行入口。"""
         try:
             user_id = uuid.UUID(str(user_id)) if user_id else uuid.UUID(int=0)
@@ -344,18 +344,20 @@ class Command(BaseCommand):
                 exported_path=exported_path, counts=counts, force=force,
             )
             # 9) 存储对象（缺失容忍；keys 为删除行前捕获）
-            for key in storage_keys:
-                try:
-                    if get_storage().exists(key):
-                        get_storage().delete(key)
-                except OSError:
-                    pass
+            if delete_storage:
+                for key in storage_keys:
+                    try:
+                        if get_storage().exists(key):
+                            get_storage().delete(key)
+                    except OSError:
+                        pass
 
         result.update({
             "status": "OFFBOARDED",
             "force": force,
             "exported_path": exported_path,
             "export": export_data if include_export else None,
+            "storage_keys": storage_keys if not delete_storage else [],
             "offboarded_at": tombstone.offboarded_at.isoformat(),
         })
         return result

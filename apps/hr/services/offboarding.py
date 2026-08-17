@@ -24,7 +24,7 @@ def export_workspace_data(workspace_id):
     return Command()._build_export(workspace_id)
 
 
-def offboard_workspace(workspace_id, *, user_id, force=False, include_export=False):
+def offboard_workspace(workspace_id, *, user_id, force=False, include_export=False, delete_storage=True):
     """执行 HR 域注销，作为内核 workspace 注销编排的幂等回调。
 
     user_id 必须由上层认证主体或系统注销任务显式传入；阻塞时返回 HTTP/业务 409，
@@ -35,6 +35,7 @@ def offboard_workspace(workspace_id, *, user_id, force=False, include_export=Fal
         user_id=user_id,
         force=force,
         include_export=include_export,
+        delete_storage=delete_storage,
     )
     if result["status"] == "BLOCKED":
         issues = "；".join(result.get("active_issues") or [])

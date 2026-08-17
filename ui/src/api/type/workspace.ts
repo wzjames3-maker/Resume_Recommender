@@ -17,4 +17,22 @@ interface WorkspaceMemberItem {
   role_id: string,
   role_name: string,
 }
+export interface WorkspaceOffboardingCounts {
+  [key: string]: number
+}
+
+export interface WorkspaceOffboardingPlan {
+  workspace_id: string
+  status: 'DRY_RUN' | 'PENDING' | 'BLOCKED' | 'OFFBOARDED' | 'ALREADY_OFFBOARDED'
+  counts: {
+    core: WorkspaceOffboardingCounts
+    hr: WorkspaceOffboardingCounts
+  }
+  active_issues: string[]
+  can_offboard: boolean
+  exported_path?: string
+  export?: Record<string, any> | null
+  storage_cleanup_errors?: Array<{ key: string; error: string }>
+}
+
 export type { WorkspaceItem, CreateWorkspaceMemberParamsItem, WorkspaceMemberItem }
