@@ -6,21 +6,19 @@
     @desc: ATS v2 Application 命令服务（传统 ATS：JobStage + Application + ApplicationEvent）
 """
 import uuid
+from datetime import datetime
 
 from django.db import IntegrityError, transaction
-from django.db.models import Max
+from django.db.models import Max, Q
 from django.utils import timezone
 
 from common.exception.app_exception import AppApiException, AppUnauthorizedFailed, NotFound404
 from hr.models import (
-    ACTIVE_ASSIGNMENT_STATUSES,
     Application,
     ApplicationEvent,
     ApplicationEventType,
     ApplicationStatus,
-    AssignmentStatus,
     Candidate,
-    CandidateAssignment,
     CandidateStatus,
     Interview,
     Job,
@@ -186,6 +184,42 @@ class ApplicationService:
         user = User.objects.filter(id=user_id).only("nick_name").first()
         return user.nick_name if user else ""
 
+    @staticmethod
+    def _relation_type(data):
+        value = data.get("relation_type", RelationType.APPLY)
+        if value not in RelationType.values:
+            raise AppApiException(400, "relation_type is invalid")
+        return value
+
+    @staticmethod
+    def _channel(data):
+        value = data.get("channel", ResumeChannel.OTHER)
+        if value not in ResumeChannel.values:
+            raise AppApiException(400, "channel is invalid")
+        return value
+
+    @staticmethod
+    def _applied_at(data):
+        value = data.get("applied_at")
+        if value in (None, ""):
+            return None
+        if isinstance(value, datetime):
+            return value
+        try:
+            return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
+        except ValueError as exc:
+            raise AppApiException(400, "applied_at is invalid") from exc
+
+    @staticmethod
+    def _uuid_field(data, field):
+        value = data.get(field)
+        if value in (None, ""):
+            return None
+        try:
+            return uuid.UUID(str(value))
+        except (ValueError, TypeError) as exc:
+            raise AppApiException(400, f"{field} is invalid") from exc
+
     # ---------- 命令 ----------
     def create_application(self, job_id, candidate_id, data):
         self._require_operator()
@@ -218,6 +252,8 @@ class ApplicationService:
         stage = self._first_stage(job)
         if stage is None:
             raise AppApiException(400, "Job has no pipeline stages")
+        owner_id = self._uuid_field(data, "owner_id") or self.user_id
+        recruiter_id = self._uuid_field(data, "recruiter_id") or owner_id
         try:
             with transaction.atomic():
                 application = Application.objects.create(
@@ -227,17 +263,17 @@ class ApplicationService:
                     job=job,
                     current_stage=stage,
                     status=ApplicationStatus.ACTIVE,
-                    relation_type=data.get("relation_type") or RelationType.APPLY,
-                    channel=data.get("channel") or ResumeChannel.OTHER,
-                    channel_detail=data.get("channel_detail") or "",
-                    applied_at=data.get("applied_at") or timezone.now(),
-                    owner_id=data.get("owner_id") or self.user_id,
-                    recruiter_id=data.get("recruiter_id") or data.get("owner_id") or self.user_id,
+                    relation_type=self._relation_type(data),
+                    channel=self._channel(data),
+                    channel_detail=self._optional_string(data, "channel_detail", 128),
+                    applied_at=self._applied_at(data) or timezone.now(),
+                    owner_id=owner_id,
+                    recruiter_id=recruiter_id,
                     reapply_of=previous,
                     reapply_no=reapply_no,
                     rehire_confirmed=bool(data.get("rehire_confirmed")),
-                    rehire_reason=data.get("rehire_reason") or "",
-                    note=data.get("note") or "",
+                    rehire_reason=self._optional_string(data, "rehire_reason", 4096),
+                    note=self._optional_string(data, "note", 4096),
                 )
                 self._write_event(
                     application,
@@ -260,6 +296,14 @@ class ApplicationService:
         idempotency_key = data.get("idempotency_key") or str(uuid.uuid4())
         with transaction.atomic():
             application = self._application(application_id, for_update=True)
+            existing_event = ApplicationEvent.objects.filter(
+                workspace_id=self.workspace_id,
+                application=application,
+                event_type=ApplicationEventType.STAGE_MOVED,
+                idempotency_key=idempotency_key,
+            ).first()
+            if existing_event is not None:
+                return self._output(application)
             if application.status != ApplicationStatus.ACTIVE:
                 raise AppApiException(400, "Application is not active")
             target = self._stage(application.job, to_stage_id)
@@ -300,6 +344,14 @@ class ApplicationService:
             application = self._application(application_id, for_update=True)
             if application.status != ApplicationStatus.ACTIVE:
                 raise AppApiException(400, "Application is not active")
+            existing_event = ApplicationEvent.objects.filter(
+                workspace_id=self.workspace_id,
+                application=application,
+                event_type=event_type,
+                idempotency_key=idempotency_key,
+            ).first()
+            if existing_event is not None:
+                return self._output(application)
             application.status = status
             application.termination_reason = reason
             application.terminated_at = timezone.now()
@@ -450,25 +502,14 @@ class ApplicationService:
                 application__job=job,
                 status__in=[OfferStatus.DRAFT, OfferStatus.SENT],
             ).update(status=OfferStatus.WITHDRAWN, withdrawn_at=timezone.now(), update_time=timezone.now())
-            # legacy 兼容：存量 CandidateAssignment 一并收尾（迁移期双表并行）
-            closed_assignments = CandidateAssignment.objects.filter(
-                workspace_id=self.workspace_id,
-                job=job,
-                status__in=ACTIVE_ASSIGNMENT_STATUSES,
-            ).update(
-                status=AssignmentStatus.CLOSED,
-                termination_reason=TerminationReason.JOB_CLOSED,
-                update_time=timezone.now(),
-            )
         write_audit_log(
             self.workspace_id, self.user_id, "JOB_CLOSE", "JOB", job.id,
-            detail=f"{reason} mode={mode} closed={len(active)} assignments={closed_assignments}",
+            detail=f"{reason} mode={mode} closed={len(active)} offers={withdrawn_offers}",
         )
         return {
             "job_id": str(job.id),
             "closed_count": len(active),
             "withdrawn_offer_count": withdrawn_offers,
-            "closed_assignment_count": closed_assignments,
         }
 
     # ---------- Interview（R3：挂 Application） ----------
@@ -489,7 +530,6 @@ class ApplicationService:
             interview = Interview.objects.create(
                 workspace_id=self.workspace_id,
                 application=application,
-                assignment=None,
                 round_no=max_round + 1,
                 interviewer=self._optional_string(data, "interviewer", 64) or self._user_nick_name(interviewer_user_id),
                 interviewer_user_id=interviewer_user_id,
@@ -530,6 +570,24 @@ class ApplicationService:
         stage_id = query.get("stage_id")
         if stage_id:
             queryset = queryset.filter(current_stage_id=stage_id)
+        channel = query.get("channel")
+        if channel:
+            queryset = queryset.filter(channel=channel)
+        relation_type = query.get("relation_type")
+        if relation_type:
+            queryset = queryset.filter(relation_type=relation_type)
+        city = query.get("city")
+        if city:
+            queryset = queryset.filter(
+                Q(candidate__current_city__icontains=city) | Q(candidate__target_city__icontains=city)
+            )
+        q = query.get("q")
+        if q:
+            queryset = queryset.filter(
+                Q(candidate__name__icontains=q)
+                | Q(candidate__phone__icontains=q)
+                | Q(candidate__email__icontains=q)
+            )
         total = queryset.count()
         start = (current_page - 1) * page_size
         records = queryset.order_by("-update_time")[start:start + page_size]
@@ -596,8 +654,8 @@ class ApplicationService:
             "update_time": interview.update_time,
         }
 
-    @staticmethod
-    def _event_output(event):
+    def _event_output(self, event):
+        is_viewer = self.hr_role == "VIEWER"
         return {
             "id": str(event.id),
             "application_id": str(event.application_id),
@@ -606,8 +664,8 @@ class ApplicationService:
             "to_stage_id": str(event.to_stage_id) if event.to_stage_id else None,
             "from_status": event.from_status,
             "to_status": event.to_status,
-            "actor_id": str(event.actor_id) if event.actor_id else None,
+            "actor_id": None if is_viewer else (str(event.actor_id) if event.actor_id else None),
             "reason_code": event.reason_code,
-            "reason_text": event.reason_text,
+            "reason_text": "" if is_viewer else event.reason_text,
             "create_time": event.create_time,
         }

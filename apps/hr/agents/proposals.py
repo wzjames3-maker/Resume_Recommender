@@ -319,8 +319,8 @@ class ProposalService:
         job.save(update_fields=[*update_fields, "update_time"])
 
     # ---------- 输出 ----------
-    @staticmethod
-    def _output(proposal):
+    def _output(self, proposal):
+        is_viewer = self.hr_role == "VIEWER"
         return {
             "id": str(proposal.id),
             "run_id": str(proposal.run_id) if proposal.run_id else None,
@@ -328,10 +328,10 @@ class ProposalService:
             "target_id": proposal.target_id,
             "action": proposal.action,
             "status": proposal.status,
-            "payload": proposal.payload_json,
-            "decided_by": str(proposal.decided_by) if proposal.decided_by else None,
+            "payload": {} if is_viewer else proposal.payload_json,
+            "decided_by": None if is_viewer else (str(proposal.decided_by) if proposal.decided_by else None),
             "decided_at": proposal.decided_at,
-            "decision_note": proposal.decision_note,
+            "decision_note": "" if is_viewer else proposal.decision_note,
             "create_time": proposal.create_time,
             "update_time": proposal.update_time,
         }

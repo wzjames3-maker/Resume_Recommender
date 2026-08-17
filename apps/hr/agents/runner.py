@@ -120,7 +120,7 @@ def structured_filter(job, candidate):
             "met": met,
             "detail": f"候选人现居 {candidate.current_city or '未知'}，目标城市 {candidate.target_city or '未知'}",
         })
-    hard_met = bool(conditions) and all(condition["met"] for condition in conditions)
+    hard_met = all(condition["met"] for condition in conditions)
     return {"conditions": conditions, "hard_met": hard_met}
 
 
@@ -155,24 +155,46 @@ def _collect_evidence(workspace_id, job, candidate, document_ids):
     return results
 
 
+def _allowed_paragraph_ids(results):
+    """从检索结果中收集合法 evidence paragraph_id 集合。"""
+    ids = set()
+    for result in results:
+        for item in result.get("items", []):
+            for paragraph in item.get("paragraphs", []):
+                paragraph_id = paragraph.get("paragraph_id") or paragraph.get("id")
+                if paragraph_id:
+                    ids.add(str(paragraph_id))
+    return ids
+
+
 def _invoke_llm(model, prompt):
     response = model.invoke(prompt)
     content = getattr(response, "content", None)
     if not isinstance(content, str) or not content.strip():
         raise ValueError("empty LLM response")
+    usage = getattr(response, "usage_metadata", None) or {}
+    if not isinstance(usage, dict):
+        usage = {}
+    try:
+        model._last_usage = usage
+    except Exception:
+        pass
     try:
         return json.loads(content)
     except json.JSONDecodeError as exc:
         raise ValueError("invalid JSON from LLM") from exc
 
 
-def _validate_facts(data):
-    """结构化校验 LLM 评估事实；失败抛 ValueError（触发重试）。"""
+def _validate_facts(data, allowed_paragraph_ids=None):
+    """结构化校验 LLM 评估事实；失败抛 ValueError（触发重试）。
+    allowed_paragraph_ids 非空时，evidence.paragraph_id 必须来自本次检索结果，防止编造证据。"""
     if not isinstance(data, dict):
         raise ValueError("facts must be an object")
     dimensions = data.get("dimensions")
     if not isinstance(dimensions, list) or not dimensions:
         raise ValueError("dimensions must be a non-empty list")
+    if allowed_paragraph_ids is not None:
+        allowed_paragraph_ids = {str(x) for x in allowed_paragraph_ids}
     cleaned = []
     for dimension in dimensions:
         if not isinstance(dimension, dict) or not str(dimension.get("name") or "").strip():
@@ -180,8 +202,11 @@ def _validate_facts(data):
         evidence = []
         for item in (dimension.get("evidence") or []):
             if isinstance(item, dict):
+                paragraph_id = item.get("paragraph_id")
+                if allowed_paragraph_ids is not None and str(paragraph_id or "") not in allowed_paragraph_ids:
+                    raise ValueError(f"evidence paragraph_id not in retrieved set: {paragraph_id}")
                 evidence.append({
-                    "paragraph_id": item.get("paragraph_id"),
+                    "paragraph_id": paragraph_id,
                     "excerpt": str(item.get("excerpt") or "")[:500],
                     "relevance": float(item.get("relevance", 0) or 0) if _is_number(item.get("relevance")) else 0.0,
                 })
@@ -226,12 +251,15 @@ def _guard_limits(workspace_id, config, agent_type=_AGENT_TYPE):
     return None
 
 
-def run_screening_agent(application_id, trigger_type=HrAgentTriggerType.EVENT, user_id=None):
-    """执行一次 Screening Agent 运行；任何失败 run=FAILED，业务零影响。"""
+def run_screening_agent(application_id, trigger_type=HrAgentTriggerType.EVENT, user_id=None, workspace_id=None):
+    """执行一次 Screening Agent 运行；任何失败 run=FAILED，业务零影响。
+    workspace_id 由 API 传入时强制校验归属；事件触发可不传。"""
     application = Application.objects.filter(id=application_id).select_related(
         "candidate", "job", "current_stage"
     ).first()
     if application is None:
+        return None
+    if workspace_id is not None and str(application.workspace_id) != str(workspace_id):
         return None
     workspace_id = application.workspace_id
     actor_id = user_id or application.user_id or _SYSTEM_USER_ID
@@ -302,6 +330,7 @@ def run_screening_agent(application_id, trigger_type=HrAgentTriggerType.EVENT, u
             ]
         t0 = time.monotonic()
         evidence = _collect_evidence(workspace_id, application.job, application.candidate, document_ids)
+        allowed_paragraph_ids = _allowed_paragraph_ids(evidence)
         trace.append({"tool": "search_resumes", "elapsed_ms": int((time.monotonic() - t0) * 1000), "rows": len(evidence)})
 
         prompt = _SCREENING_PROMPT.format(
@@ -314,7 +343,7 @@ def run_screening_agent(application_id, trigger_type=HrAgentTriggerType.EVENT, u
         last_error = ""
         for _attempt in range(2):
             try:
-                facts = _validate_facts(_invoke_llm(model, prompt))
+                facts = _validate_facts(_invoke_llm(model, prompt), allowed_paragraph_ids=allowed_paragraph_ids)
                 break
             except (ValueError, TypeError, KeyError) as exc:
                 last_error = str(exc)
@@ -359,7 +388,10 @@ def run_screening_agent(application_id, trigger_type=HrAgentTriggerType.EVENT, u
         run.llm_model = model_name
         run.tool_trace = trace
         run.duration_ms = int((time.monotonic() - started) * 1000)
-        run.save(update_fields=["output_json", "status", "llm_model", "tool_trace", "duration_ms", "update_time"])
+        usage = getattr(model, "_last_usage", {}) or {}
+        run.prompt_tokens = int(usage.get("input_tokens") or usage.get("prompt_tokens") or 0)
+        run.completion_tokens = int(usage.get("output_tokens") or usage.get("completion_tokens") or 0)
+        run.save(update_fields=["output_json", "status", "llm_model", "tool_trace", "duration_ms", "prompt_tokens", "completion_tokens", "update_time"])
         write_audit_log(
             workspace_id, actor_id, "AGENT_RUN", "APPLICATION", application.id,
             detail={

@@ -137,16 +137,6 @@ class JobAPI(APIView):
         def get(self, request, workspace_id, current_page, page_size):
             return result.success(_service(request, workspace_id).page_jobs(current_page, page_size, request.query_params))
 
-    class Assignment(APIView):
-        authentication_classes = [TokenAuth]
-
-        @hr_access_required
-        def post(self, request, workspace_id, job_id):
-            return result.success(
-                _service(request, workspace_id).create_assignment(job_id, request.data.get("candidate_id"), request.data)
-            )
-
-
 class JobDetailAPI(APIView):
     authentication_classes = [TokenAuth]
 
@@ -158,29 +148,12 @@ class JobDetailAPI(APIView):
     def put(self, request, workspace_id, job_id):
         return result.success(_service(request, workspace_id).edit_job(job_id, request.data))
 
-    class Close(APIView):
-        authentication_classes = [TokenAuth]
-
-        @hr_admin_required
-        def put(self, request, workspace_id, job_id):
-            return result.success(
-                _service(request, workspace_id).close_job(job_id, request.data.get("close_reason"))
-            )
-
     class Reopen(APIView):
         authentication_classes = [TokenAuth]
 
         @hr_admin_required
         def put(self, request, workspace_id, job_id):
             return result.success(_service(request, workspace_id).reopen_job(job_id))
-
-
-class AssignmentAPI(APIView):
-    authentication_classes = [TokenAuth]
-
-    @hr_access_required
-    def put(self, request, workspace_id, assignment_id):
-        return result.success(_service(request, workspace_id).update_assignment(assignment_id, request.data))
 
 
 class ResumeAPI(APIView):
@@ -244,18 +217,6 @@ class JobMatchAPI(APIView):
         return result.success(
             _service(request, workspace_id).match_job_candidates(job_id, current_page, page_size)
         )
-
-
-class InterviewAPI(APIView):
-    authentication_classes = [TokenAuth]
-
-    @hr_access_required
-    def post(self, request, workspace_id, assignment_id):
-        return result.success(_service(request, workspace_id).create_interview(assignment_id, request.data))
-
-    @hr_access_required
-    def get(self, request, workspace_id, assignment_id):
-        return result.success(_service(request, workspace_id).list_interviews(assignment_id))
 
 
 class InterviewDetailAPI(APIView):

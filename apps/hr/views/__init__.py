@@ -1,10 +1,8 @@
 from .recruitment import (
-    AssignmentAPI,
     CandidateAPI,
     CandidateCheckDuplicateAPI,
     CandidateDetailAPI,
     CandidateExportAPI,
-    InterviewAPI,
     InterviewDetailAPI,
     InterviewerFeedbackAPI,
     InterviewerMineAPI,
@@ -27,7 +25,6 @@ from .offer_views import (
     HandoffListAPI,
     HandoffRetryAPI,
     OfferDetailAPI,
-    OfferListAPI,
 )
 from .agent_views import (
     AgentRunAPI,
@@ -52,12 +49,10 @@ from .application_views import (
 )
 
 __all__ = [
-    "AssignmentAPI",
     "CandidateAPI",
     "CandidateCheckDuplicateAPI",
     "CandidateDetailAPI",
     "CandidateExportAPI",
-    "InterviewAPI",
     "InterviewDetailAPI",
     "InterviewerFeedbackAPI",
     "InterviewerMineAPI",

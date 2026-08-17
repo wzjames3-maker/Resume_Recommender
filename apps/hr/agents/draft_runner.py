@@ -108,10 +108,13 @@ def _facts_from_llm(model, prompt):
     }
 
 
-def run_communication_draft(application_id, data=None, user_id=None, hr_role=None):
-    """执行一次沟通草稿运行；任何失败 run=FAILED，流程不受影响。"""
+def run_communication_draft(application_id, data=None, user_id=None, hr_role=None, workspace_id=None):
+    """执行一次沟通草稿运行；任何失败 run=FAILED，流程不受影响。
+    workspace_id 由 API 传入时强制校验归属。"""
     application = Application.objects.filter(id=application_id).select_related("candidate", "job").first()
     if application is None:
+        return None
+    if workspace_id is not None and str(application.workspace_id) != str(workspace_id):
         return None
     workspace_id = application.workspace_id
     actor_id = user_id or application.user_id or _SYSTEM_USER_ID
@@ -205,7 +208,10 @@ def run_communication_draft(application_id, data=None, user_id=None, hr_role=Non
         run.llm_model = model_name
         run.tool_trace = trace
         run.duration_ms = int((time.monotonic() - started) * 1000)
-        run.save(update_fields=["output_json", "status", "llm_model", "tool_trace", "duration_ms", "update_time"])
+        usage = getattr(model, "_last_usage", {}) or {}
+        run.prompt_tokens = int(usage.get("input_tokens") or usage.get("prompt_tokens") or 0)
+        run.completion_tokens = int(usage.get("output_tokens") or usage.get("completion_tokens") or 0)
+        run.save(update_fields=["output_json", "status", "llm_model", "tool_trace", "duration_ms", "prompt_tokens", "completion_tokens", "update_time"])
         record_prompt_version(config, _AGENT_TYPE, _PROMPT_VERSION)
         write_audit_log(
             workspace_id, actor_id, "AGENT_RUN", "APPLICATION", application.id,

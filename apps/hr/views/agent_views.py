@@ -57,6 +57,7 @@ class AgentRunAPI(APIView):
                     application_id,
                     trigger_type=HrAgentTriggerType.MANUAL,
                     user_id=request.user.id,
+                    workspace_id=workspace_id,
                 )
             else:
                 output = run_communication_draft(
@@ -64,15 +65,22 @@ class AgentRunAPI(APIView):
                     data=request.data,
                     user_id=request.user.id,
                     hr_role=hr_role,
+                    workspace_id=workspace_id,
                 )
         elif agent_type in ("JD_DRAFT", "SOURCING"):
             job_id = request.data.get("job_id")
             if not job_id:
                 raise AppApiException(400, "job_id is required")
             if agent_type == "JD_DRAFT":
-                output = run_jd_draft_agent(job_id, trigger_type=HrAgentTriggerType.MANUAL, user_id=request.user.id)
+                output = run_jd_draft_agent(
+                    job_id, trigger_type=HrAgentTriggerType.MANUAL, user_id=request.user.id,
+                    workspace_id=workspace_id,
+                )
             else:
-                output = run_sourcing_agent(job_id, trigger_type=HrAgentTriggerType.MANUAL, user_id=request.user.id)
+                output = run_sourcing_agent(
+                    job_id, trigger_type=HrAgentTriggerType.MANUAL, user_id=request.user.id,
+                    workspace_id=workspace_id,
+                )
         else:
             interview_id = request.data.get("interview_id")
             if not interview_id:
@@ -82,6 +90,7 @@ class AgentRunAPI(APIView):
                 data=request.data,
                 user_id=request.user.id,
                 hr_role=hr_role,
+                workspace_id=workspace_id,
             )
         if output is None:
             raise NotFound404(404, "Resource not found")

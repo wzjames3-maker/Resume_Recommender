@@ -21,8 +21,6 @@ from hr.models import (
     Application,
     ApplicationEventType,
     ApplicationStatus,
-    AssignmentStatus,
-    CandidateAssignment,
     HandoffStatus,
     HandoffTargetType,
     HrConfig,
@@ -120,7 +118,7 @@ class OfferService:
     def _offer_output(offer):
         return {
             "id": str(offer.id),
-            "assignment_id": str(offer.assignment_id) if offer.assignment_id else None,
+            "assignment_id": None,
             "application_id": str(offer.application_id) if offer.application_id else None,
             "candidate_id": str(offer.candidate_id),
             "job_id": str(offer.job_id),
@@ -140,32 +138,6 @@ class OfferService:
             "create_time": offer.create_time,
             "update_time": offer.update_time,
         }
-
-    def create_offer(self, assignment_id, data):
-        self._require_manage()
-        assignment = CandidateAssignment.objects.filter(
-            id=assignment_id, workspace_id=self.workspace_id
-        ).select_related("candidate", "job").first()
-        if assignment is None:
-            raise NotFound404(404, "Resource not found")
-        if assignment.status != AssignmentStatus.OFFER:
-            raise AppApiException(400, "Assignment is not in offer status")
-        max_version = Offer.objects.filter(
-            workspace_id=self.workspace_id, assignment=assignment
-        ).aggregate(max_version=Max("version"))["max_version"] or 0
-        offer = Offer.objects.create(
-            workspace_id=self.workspace_id,
-            assignment=assignment,
-            candidate=assignment.candidate,
-            job=assignment.job,
-            version=max_version + 1,
-            salary_amount=self._salary_amount(data),
-            currency=self._currency(data),
-            note=self._optional_string(data, "note", 4096),
-            user_id=self.user_id,
-        )
-        write_audit_log(self.workspace_id, self.user_id, "CREATE", "OFFER", offer.id, detail=f"v{offer.version}")
-        return self._offer_output(offer)
 
     def create_offer_for_application(self, application_id, data):
         """按 Application 创建 Offer：Stage=OFFER、无 DRAFT/SENT 活跃 Offer；版本号唯一约束兜底。"""
@@ -192,7 +164,6 @@ class OfferService:
             offer = Offer.objects.create(
                 workspace_id=self.workspace_id,
                 application=application,
-                assignment=None,
                 candidate=application.candidate,
                 job=application.job,
                 version=max_version + 1,
@@ -268,11 +239,9 @@ class OfferService:
         offer = self._offer(offer_id)
         if offer.approval_status != OfferApprovalStatus.APPROVED:
             raise AppApiException(400, "Offer must be approved before sending")
-        sent_query = Q(workspace_id=self.workspace_id, status=OfferStatus.SENT)
-        if offer.application_id:
-            sent_query &= Q(application_id=offer.application_id)
-        elif offer.assignment_id:
-            sent_query &= Q(assignment_id=offer.assignment_id)
+        if not offer.application_id:
+            raise AppApiException(400, "Offer must be linked to an application")
+        sent_query = Q(workspace_id=self.workspace_id, application_id=offer.application_id, status=OfferStatus.SENT)
         if Offer.objects.filter(sent_query).exclude(id=offer.id).exists():
             raise AppApiException(400, "An offer has already been sent")
         self._transition(offer, OfferStatus.SENT, "sent_at", "OFFER_SEND")
@@ -288,38 +257,31 @@ class OfferService:
         with transaction.atomic():
             offer = Offer.objects.select_for_update().get(id=offer.id)
             self._transition(offer, OfferStatus.ACCEPTED, "accepted_at", "OFFER_ACCEPT")
-            if offer.application_id:
-                application = Application.objects.select_for_update().get(id=offer.application_id)
-                if application.status != ApplicationStatus.ACTIVE:
-                    raise AppApiException(400, "Application is not active")
-                application.status = ApplicationStatus.HIRED
-                application.terminated_at = timezone.now()
-                application.save(update_fields=["status", "terminated_at", "update_time"])
-                write_application_event(
-                    self.workspace_id,
-                    self.user_id,
-                    application,
-                    ApplicationEventType.HIRED,
-                    from_stage=application.current_stage,
-                    to_stage=application.current_stage,
-                    from_status=ApplicationStatus.ACTIVE,
-                    to_status=ApplicationStatus.HIRED,
-                    reason_code="",
-                    reason_text=f"offer v{offer.version} accepted",
-                    idempotency_key=f"offer_accept:{offer.id}",
-                )
-                write_audit_log(
-                    self.workspace_id, self.user_id, "ASSIGNMENT_TRANSITION", "APPLICATION",
-                    application.id, detail="auto to HIRED via offer accept",
-                )
-            if offer.assignment_id:
-                assignment = CandidateAssignment.objects.select_for_update().get(id=offer.assignment_id)
-                assignment.status = AssignmentStatus.HIRED
-                assignment.save(update_fields=["status", "update_time"])
-                write_audit_log(
-                    self.workspace_id, self.user_id, "ASSIGNMENT_TRANSITION", "ASSIGNMENT",
-                    assignment.id, detail="auto to HIRED via offer accept",
-                )
+            if not offer.application_id:
+                raise AppApiException(400, "Offer must be linked to an application")
+            application = Application.objects.select_for_update().get(id=offer.application_id)
+            if application.status != ApplicationStatus.ACTIVE:
+                raise AppApiException(400, "Application is not active")
+            application.status = ApplicationStatus.HIRED
+            application.terminated_at = timezone.now()
+            application.save(update_fields=["status", "terminated_at", "update_time"])
+            write_application_event(
+                self.workspace_id,
+                self.user_id,
+                application,
+                ApplicationEventType.HIRED,
+                from_stage=application.current_stage,
+                to_stage=application.current_stage,
+                from_status=ApplicationStatus.ACTIVE,
+                to_status=ApplicationStatus.HIRED,
+                reason_code="",
+                reason_text=f"offer v{offer.version} accepted",
+                idempotency_key=f"offer_accept:{offer.id}",
+            )
+            write_audit_log(
+                self.workspace_id, self.user_id, "ASSIGNMENT_TRANSITION", "APPLICATION",
+                application.id, detail="auto to HIRED via offer accept",
+            )
         handoff = OnboardingService(
             self.workspace_id, self.user_id, self.hr_role
         ).create_handoff_for_offer(offer)
@@ -341,22 +303,11 @@ class OfferService:
         self._transition(offer, OfferStatus.WITHDRAWN, "withdrawn_at", "OFFER_WITHDRAW")
         return self._offer_output(offer)
 
-    def list_offers(self, assignment_id):
-        assignment = CandidateAssignment.objects.filter(
-            id=assignment_id, workspace_id=self.workspace_id
-        ).first()
-        if assignment is None:
-            raise NotFound404(404, "Resource not found")
-        offers = Offer.objects.filter(
-            workspace_id=self.workspace_id, assignment=assignment
-        ).order_by("-version")
-        return [self._offer_output(offer) for offer in offers]
-
     def page_offers(self, current_page, page_size, params=None):
         """分页返回当前工作区全部 Offer（供独立 Offer 管理页使用）。"""
         params = params or {}
         queryset = Offer.objects.filter(workspace_id=self.workspace_id).select_related(
-            "candidate", "job", "assignment"
+            "candidate", "job", "application"
         ).order_by("-update_time")
         status = params.get("status")
         if status:
@@ -369,7 +320,9 @@ class OfferService:
             item = self._offer_output(offer)
             item["candidate_name"] = offer.candidate.name
             item["job_name"] = offer.job.name
-            item["assignment_status"] = offer.assignment.status
+            item["assignment_status"] = (
+                offer.application.current_stage.key if offer.application and offer.application.current_stage else None
+            )
             records.append(item)
         return {"total": total, "records": records}
 
@@ -383,6 +336,8 @@ class OfferService:
     def upload_offer_attachment(self, offer_id, file_path, file_name):
         self._require_manage()
         offer = self._offer(offer_id)
+        if offer.status != OfferStatus.DRAFT:
+            raise AppApiException(400, "Only draft offer can change attachment")
         if offer.attachment_path:
             try:
                 get_storage().delete(offer.attachment_path)
@@ -404,6 +359,8 @@ class OfferService:
     def remove_offer_attachment(self, offer_id):
         self._require_manage()
         offer = self._offer(offer_id)
+        if offer.status != OfferStatus.DRAFT:
+            raise AppApiException(400, "Only draft offer can change attachment")
         if offer.attachment_path:
             try:
                 get_storage().delete(offer.attachment_path)
@@ -451,14 +408,14 @@ class OnboardingService:
         }
 
     def create_handoff_for_offer(self, offer):
-        """按 Application（或 legacy 指派）唯一（幂等），不重复创建员工记录。"""
-        lookup = {"application_id": offer.application_id} if offer.application_id else {"assignment_id": offer.assignment_id}
+        """按 Application 唯一（幂等），不重复创建员工记录。"""
+        if not offer.application_id:
+            raise AppApiException(400, "Offer must be linked to an application")
         handoff, created = OnboardingHandoff.objects.get_or_create(
             workspace_id=self.workspace_id,
-            **lookup,
+            application_id=offer.application_id,
             defaults={
                 "application": offer.application,
-                "assignment": offer.assignment,
                 "candidate": offer.candidate,
                 "job": offer.job,
                 "offer": offer,
@@ -571,7 +528,7 @@ class OnboardingService:
             pass
         return {
             "id": str(handoff.id),
-            "assignment_id": str(handoff.assignment_id) if handoff.assignment_id else None,
+            "assignment_id": None,
             "application_id": str(handoff.application_id) if handoff.application_id else None,
             "candidate_id": str(handoff.candidate_id),
             "job_id": str(handoff.job_id),

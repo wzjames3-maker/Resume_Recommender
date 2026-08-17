@@ -369,13 +369,34 @@ def _search_skill_and(skills, workspace_id, knowledge, embedding_model, candidat
 
 
 def _scope_document_ids(workspace_id, candidate_id, document_ids):
-    """解析可选范围限定：document_ids 直接使用；candidate_id 解析其简历文档集；均不传返回 None。"""
+    """解析可选范围限定：document_ids 必须属于当前工作区，且若同时指定 candidate_id 必须属于该候选人。"""
     if document_ids is not None:
         if not isinstance(document_ids, list) or not document_ids or any(
             not isinstance(doc_id, str) or not doc_id.strip() for doc_id in document_ids
         ):
             raise AppApiException(400, "document_ids must be a non-empty list of strings")
-        return [doc_id.strip() for doc_id in document_ids]
+        document_ids = [doc_id.strip() for doc_id in document_ids]
+        valid = {
+            str(doc_id) for doc_id in QuerySet(ResumeFile)
+            .filter(workspace_id=workspace_id, document_id__in=document_ids, document_id__isnull=False)
+            .values_list("document_id", flat=True)
+        }
+        missing = set(document_ids) - valid
+        if missing:
+            raise AppApiException(400, f"document_ids contain invalid or inaccessible documents: {sorted(missing)[:5]}")
+        if candidate_id not in (None, ""):
+            candidate = QuerySet(Candidate).filter(id=candidate_id, workspace_id=workspace_id).first()
+            if candidate is None:
+                raise AppApiException(404, "Candidate not found")
+            allowed = {
+                str(doc_id) for doc_id in QuerySet(ResumeFile)
+                .filter(candidate=candidate, document_id__isnull=False)
+                .values_list("document_id", flat=True)
+            }
+            cross = set(document_ids) - allowed
+            if cross:
+                raise AppApiException(400, f"document_ids do not belong to the candidate: {sorted(cross)[:5]}")
+        return sorted(valid)
     if candidate_id is None or candidate_id == "":
         return None
     candidate = QuerySet(Candidate).filter(id=candidate_id, workspace_id=workspace_id).first()

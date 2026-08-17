@@ -36,18 +36,6 @@ def _handoff_service(request, workspace_id):
     )
 
 
-class OfferListAPI(APIView):
-    authentication_classes = [TokenAuth]
-
-    @hr_access_required
-    def get(self, request, workspace_id, assignment_id):
-        return result.success(_offer_service(request, workspace_id).list_offers(assignment_id))
-
-    @hr_admin_required
-    def post(self, request, workspace_id, assignment_id):
-        return result.success(_offer_service(request, workspace_id).create_offer(assignment_id, request.data))
-
-
 class AllOffersAPI(APIView):
     authentication_classes = [TokenAuth]
 

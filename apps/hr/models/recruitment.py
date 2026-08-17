@@ -38,17 +38,6 @@ class JobCloseReason(models.TextChoices):
     OTHER = "OTHER", "Other"
 
 
-class AssignmentStatus(models.TextChoices):
-    PENDING_SCREEN = "PENDING_SCREEN", "Pending screen"
-    SCREEN_PASSED = "SCREEN_PASSED", "Screen passed"
-    INTERVIEWING = "INTERVIEWING", "Interviewing"
-    OFFER = "OFFER", "Offer"
-    HIRED = "HIRED", "Hired"
-    REJECTED = "REJECTED", "Rejected"
-    WITHDRAWN = "WITHDRAWN", "Withdrawn"
-    CLOSED = "CLOSED", "Closed"
-
-
 class TerminationReason(models.TextChoices):
     NOT_FIT = "NOT_FIT", "Not fit"
     SALARY = "SALARY", "Salary"
@@ -65,20 +54,6 @@ class RelationType(models.TextChoices):
     REFERRAL = "REFERRAL", "Referral"
     HEADHUNTER = "HEADHUNTER", "Headhunter"
 
-
-ACTIVE_ASSIGNMENT_STATUSES = [
-    AssignmentStatus.PENDING_SCREEN,
-    AssignmentStatus.SCREEN_PASSED,
-    AssignmentStatus.INTERVIEWING,
-    AssignmentStatus.OFFER,
-]
-
-TERMINAL_ASSIGNMENT_STATUSES = [
-    AssignmentStatus.REJECTED,
-    AssignmentStatus.WITHDRAWN,
-    AssignmentStatus.CLOSED,
-    AssignmentStatus.HIRED,
-]
 
 
 class ResumeChannel(models.TextChoices):
@@ -158,38 +133,6 @@ class Job(models.Model):
         ]
 
 
-class CandidateAssignment(models.Model):
-    id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
-    workspace_id = models.CharField(max_length=64, db_index=True)
-    candidate = models.ForeignKey(Candidate, on_delete=models.PROTECT)
-    job = models.ForeignKey(Job, on_delete=models.PROTECT)
-    status = models.CharField(
-        max_length=16,
-        choices=AssignmentStatus.choices,
-        default=AssignmentStatus.PENDING_SCREEN,
-    )
-    relation_type = models.CharField(max_length=16, choices=RelationType.choices, default=RelationType.APPLY)
-    channel = models.CharField(max_length=20, choices=ResumeChannel.choices, default=ResumeChannel.OTHER)
-    applied_at = models.DateTimeField(default=timezone.now)
-    termination_reason = models.CharField(max_length=20, choices=TerminationReason.choices, null=True, blank=True)
-    is_reapply = models.BooleanField(default=False)
-    note = models.TextField(blank=True, default="")
-    owner_id = models.UUIDField(null=True, blank=True)
-    user_id = models.UUIDField(null=True, blank=True)
-    create_time = models.DateTimeField(auto_now_add=True)
-    update_time = models.DateTimeField(auto_now=True)
-
-    class Meta:
-        db_table = "hr_candidate_assignment"
-        constraints = [
-            models.UniqueConstraint(
-                fields=["workspace_id", "candidate", "job"],
-                condition=Q(status__in=ACTIVE_ASSIGNMENT_STATUSES),
-                name="hr_one_active_assignment_per_candidate_job",
-            )
-        ]
-
-
 class InterviewStatus(models.TextChoices):
     PENDING = "PENDING", "Pending"
     PASSED = "PASSED", "Passed"
@@ -215,7 +158,6 @@ class OfferApprovalStatus(models.TextChoices):
 class Offer(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
     workspace_id = models.CharField(max_length=64, db_index=True)
-    assignment = models.ForeignKey(CandidateAssignment, on_delete=models.CASCADE, null=True, blank=True)
     application = models.ForeignKey("Application", on_delete=models.CASCADE, null=True, blank=True, related_name="offers")
     candidate = models.ForeignKey(Candidate, on_delete=models.CASCADE)
     job = models.ForeignKey(Job, on_delete=models.CASCADE)
@@ -243,9 +185,6 @@ class Offer(models.Model):
         db_table = "hr_offer"
         constraints = [
             models.UniqueConstraint(
-                fields=["workspace_id", "assignment", "version"], name="hr_unique_offer_version_per_assignment"
-            ),
-            models.UniqueConstraint(
                 fields=["workspace_id", "application", "version"], name="hr_unique_offer_version_per_application"
             ),
         ]
@@ -265,7 +204,6 @@ class HandoffTargetType(models.TextChoices):
 class OnboardingHandoff(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
     workspace_id = models.CharField(max_length=64, db_index=True)
-    assignment = models.ForeignKey(CandidateAssignment, on_delete=models.CASCADE, null=True, blank=True)
     application = models.ForeignKey("Application", on_delete=models.CASCADE, null=True, blank=True, related_name="handoffs")
     candidate = models.ForeignKey(Candidate, on_delete=models.CASCADE)
     job = models.ForeignKey(Job, on_delete=models.CASCADE)
@@ -283,9 +221,6 @@ class OnboardingHandoff(models.Model):
         db_table = "hr_onboarding_handoff"
         constraints = [
             models.UniqueConstraint(
-                fields=["workspace_id", "assignment"], name="hr_unique_handoff_per_assignment"
-            ),
-            models.UniqueConstraint(
                 fields=["workspace_id", "application"], name="hr_unique_handoff_per_application"
             ),
         ]
@@ -294,7 +229,6 @@ class OnboardingHandoff(models.Model):
 class Interview(models.Model):
     id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
     workspace_id = models.CharField(max_length=64, db_index=True)
-    assignment = models.ForeignKey(CandidateAssignment, on_delete=models.CASCADE, null=True, blank=True)
     application = models.ForeignKey("Application", on_delete=models.CASCADE, null=True, blank=True, related_name="interviews")
     round_no = models.PositiveSmallIntegerField()
     interviewer = models.CharField(max_length=64, blank=True, default="")
