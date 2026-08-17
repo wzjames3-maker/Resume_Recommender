@@ -200,3 +200,6 @@ config.yml
 copilot-instructions.mdapi.txt
 
 api.txt
+
+# Agent 探针运行报告（不入库）
+logs/agent_probe_*.json
