@@ -29,7 +29,6 @@ from hr.models import (
 )
 from hr.services.audit import write_audit_log
 from hr.services.resume_search import search_resumes
-from hr.services.skill_normalize import normalize_skill
 from models_provider.tools import get_model_by_id, get_model_instance_by_model_workspace_id
 
 _SYSTEM_USER_ID = uuid.UUID(int=0)

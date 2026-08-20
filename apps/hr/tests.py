@@ -47,7 +47,7 @@ from hr.task.resume import cleanup_orphan_resumes, parse_resume_task
 from hr.serializers.ai import AiService
 from hr.serializers.import_service import ImportService
 from hr.serializers.offer import OfferService, OnboardingService
-from hr.serializers.recruitment import CANDIDATE_EXPORT_FIELDS, RecruitmentService
+from hr.serializers.recruitment import RecruitmentService
 from hr.services.ai_parser import extract_skills, parse_search_conditions
 from hr.services.resume_index import delete_resume_index, get_or_create_resume_knowledge, index_resume, set_resume_index_active
 from hr.services.application_service import ApplicationService

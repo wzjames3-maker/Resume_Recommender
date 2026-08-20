@@ -24,7 +24,6 @@ from django.utils import timezone
 from hr.agents.runner import run_screening_agent
 from hr.models import Application, Candidate, HrAgentRun, HrConfig, Job, JobStage, ResumeFile
 from hr.services.application_service import create_default_stages
-from hr.services.skill_normalize import normalize_skill
 from knowledge.models import Paragraph
 from models_provider.models import Model
 from models_provider.tools import get_model_instance_by_model_workspace_id

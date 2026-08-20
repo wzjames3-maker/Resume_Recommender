@@ -14,7 +14,7 @@ import os
 import re
 import time
 
-from django.db.models import F, Q, QuerySet
+from django.db.models import Q, QuerySet
 from knowledge.models import Document, Embedding, SearchMode
 from knowledge.serializers.common import get_embedding_model_by_knowledge_id, list_paragraph
 from knowledge.vector.pg_vector import EmbeddingSearch, KeywordsSearch
@@ -24,9 +24,8 @@ from common.exception.app_exception import AppApiException
 from hr.models import Candidate, CandidateStatus, ResumeDatabase, ResumeFile
 from hr.services.ai_parser import parse_search_skills
 from hr.services.audit import write_audit_log
-from hr.services.query_understand import degree_words, extract_slots, norm_city
+from hr.services.query_understand import extract_slots
 from hr.services.resume_index import get_resume_knowledge
-from hr.services.skill_normalize import normalize_skill
 def _env_float(name, default):
     """环境变量覆盖（F6）：解析失败回退默认并告警，避免非法值静默生效。"""
     raw = os.environ.get(name)
@@ -384,7 +383,6 @@ def _search_skill_and(skills, workspace_id, knowledge, embedding_model, candidat
     # Python 重建 per-doc 命中向量（保留"有序技能优先"排序语义）；表为空时回退 Candidate.skills JSON 路径（迁移期兼容）
     structured_vec = {}    # document_id -> hit_vec（结构化命中）
     # 0030 CandidateSkill 已 DROP：技能命中改为 候选人简历原文(raw_text) + 段落内容 的文本检索，按技能词分别命中后构向量
-    norm_skills = [normalize_skill(skill) for skill in skills]
     from knowledge.models import Paragraph as _Para
     candidate_to_vec = {}
     for idx, skill in enumerate(skills):
@@ -647,8 +645,8 @@ def _search_resumes_impl(workspace_id, query, top_k=5, recall_k=None, similarity
         meta["scope_document_ids"] = [str(doc_id) for doc_id in scope_document_ids]
 
     # ---------- 查询理解 v1（T4）：规则槽位（年限/学历/城市 + 语义词） ----------
-    candidate_scope = {"resumefile__database_memberships__resume_database_id__in": selected_database_ids} if selected_database_ids else {}
-    city_list = []  # 0030 current_city 已移除
+    # 0030 Candidate 结构化字段已移除，city_list 空，仅作语义提取
+    city_list: list[str] = []
     slots = extract_slots(query, city_list=city_list)
     meta["slots"] = {"years_min": slots["years_min"], "degree_level": slots["degree_level"],
                      "cities": slots["cities"]}
