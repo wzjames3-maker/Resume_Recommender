@@ -7129,3 +7129,65 @@ class PydanticAgentValidationTests(TestCase):
             # 验证 Agent 使用 retries=1（创建时校验）
             self.assertEqual(mock_agent.run_sync.call_count, 1)
 
+
+class HrOperatorViewerPermissionTests(_HrApiBase):
+    """补测：OPERATOR/VIEWER 层级权限（前端 hasPermissionChild 与后端 API 漏测）"""
+
+    def setUp(self):
+        self.workspace = "ws-perm-hierarchy"
+        self.viewer = self._user("perm-viewer", "Viewer")
+        self.operator = self._user("perm-operator", "Operator")
+        self.admin = self._user("perm-admin", "Admin")
+        HrAccess.objects.create(workspace_id=self.workspace, user_id=self.viewer.id, role="VIEWER")
+        HrAccess.objects.create(workspace_id=self.workspace, user_id=self.operator.id, role="OPERATOR")
+        HrAccess.objects.create(workspace_id=self.workspace, user_id=self.admin.id, role="ADMIN")
+
+    def test_viewer_can_access_viewer_routes_but_not_operator(self):
+        # VIEWER 可访 candidates/list（VIEWER）与 pipeline（VIEWER）
+        for path in [f"/admin/api/workspace/{self.workspace}/hr/candidates/1/10", f"/admin/api/workspace/{self.workspace}/hr/resume-databases"]:
+            resp = self._client(self.viewer).get(path)
+            self.assertEqual(resp.status_code, 200, f"VIEWER should 200 for {path}")
+        # VIEWER 不可访 OPERATOR：上传
+        from django.core.files.uploadedfile import SimpleUploadedFile
+
+        uploaded = SimpleUploadedFile("a.txt", b"hello", content_type="text/plain")
+        resp = self._client(self.viewer).post(
+            f"/admin/api/workspace/{self.workspace}/hr/candidates/resumes", {"files": uploaded}, format="multipart"
+        )
+        self.assertEqual(resp.status_code, 403)
+        # VIEWER 不可访 ADMIN：建库
+        resp = self._client(self.viewer).post(
+            f"/admin/api/workspace/{self.workspace}/hr/resume-databases", {"name": "x"}, format="json"
+        )
+        self.assertEqual(resp.status_code, 403)
+
+    def test_operator_can_access_viewer_and_operator_but_not_admin(self):
+        # OPERATOR 可访 VIEWER
+        resp = self._client(self.operator).get(f"/admin/api/workspace/{self.workspace}/hr/candidates/1/10")
+        self.assertEqual(resp.status_code, 200)
+        # OPERATOR 可访 OPERATOR：上传
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        from unittest.mock import patch
+
+        uploaded = SimpleUploadedFile("b.txt", b"hello operator", content_type="text/plain")
+        with patch("hr.serializers.recruitment.parse_resume_task.delay"):
+            resp = self._client(self.operator).post(
+                f"/admin/api/workspace/{self.workspace}/hr/candidates/resumes", {"files": uploaded}, format="multipart"
+            )
+        self.assertEqual(resp.status_code, 200)
+        # OPERATOR 不可访 ADMIN：建库
+        resp = self._client(self.operator).post(
+            f"/admin/api/workspace/{self.workspace}/hr/resume-databases", {"name": "op-db"}, format="json"
+        )
+        self.assertEqual(resp.status_code, 403)
+        # ADMIN 可访 ADMIN
+        resp = self._client(self.admin).post(
+            f"/admin/api/workspace/{self.workspace}/hr/resume-databases", {"name": "admin-db"}, format="json"
+        )
+        self.assertEqual(resp.status_code, 200)
+
+    def test_admin_can_access_all(self):
+        for path in [f"/admin/api/workspace/{self.workspace}/hr/candidates/1/10", f"/admin/api/workspace/{self.workspace}/hr/resume-databases"]:
+            resp = self._client(self.admin).get(path)
+            self.assertEqual(resp.status_code, 200)
+
