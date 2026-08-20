@@ -205,3 +205,4 @@ api.txt
 logs/agent_probe_*.json
 logs/resume_dataset_manifest.json
 logs/screening_eval_*.json
+installer/dataset30_report.json

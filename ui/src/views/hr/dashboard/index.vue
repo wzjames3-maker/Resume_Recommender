@@ -1,33 +1,48 @@
 <template>
   <div class="hr-page p-16-24">
-    <div class="flex-between mb-16">
+    <div class="dashboard-heading flex-between mb-16">
       <div>
+        <div class="eyebrow">RECRUITING OPERATIONS</div>
         <h2>招聘工作台</h2>
-        <span class="color-secondary">聚合待办与快捷入口</span>
+        <span class="color-secondary">从今日待办开始，快速推进候选人和职位流程</span>
       </div>
+      <el-button circle :icon="Refresh" title="刷新工作台" aria-label="刷新工作台" :loading="loading" @click="loadDashboard" />
     </div>
 
     <div class="quick-grid mb-16">
-      <el-card shadow="never" class="quick-card" @click="router.push('/hr/candidates?upload=1')">
-        <div class="quick-title">批量上传简历</div>
-        <div class="quick-desc">上传 docx/txt 简历并自动解析关联候选人</div>
+      <el-card shadow="never" class="quick-card" role="button" tabindex="0" @click="router.push('/hr/resumes/upload')" @keyup.enter="router.push('/hr/resumes/upload')">
+        <span class="quick-icon quick-icon--blue"><el-icon><Upload /></el-icon></span>
+        <div class="quick-copy"><div class="quick-title">批量上传简历</div><div class="quick-desc">上传并自动解析候选人档案</div></div>
+        <el-icon class="quick-arrow"><ArrowRight /></el-icon>
       </el-card>
-      <el-card shadow="never" class="quick-card" @click="router.push('/hr/jobs?new=1')">
-        <div class="quick-title">新建职位</div>
-        <div class="quick-desc">维护招聘需求与技能要求</div>
+      <el-card shadow="never" class="quick-card" role="button" tabindex="0" @click="router.push('/hr/jobs/new')" @keyup.enter="router.push('/hr/jobs/new')">
+        <span class="quick-icon quick-icon--green"><el-icon><Plus /></el-icon></span>
+        <div class="quick-copy"><div class="quick-title">新建职位</div><div class="quick-desc">维护需求、技能和招聘人数</div></div>
+        <el-icon class="quick-arrow"><ArrowRight /></el-icon>
       </el-card>
-      <el-card shadow="never" class="quick-card" @click="router.push('/hr/search')">
-        <div class="quick-title">语义检索</div>
-        <div class="quick-desc">自然语言查找候选人</div>
+      <el-card shadow="never" class="quick-card" role="button" tabindex="0" @click="router.push('/hr/search')" @keyup.enter="router.push('/hr/search')">
+        <span class="quick-icon quick-icon--purple"><el-icon><Search /></el-icon></span>
+        <div class="quick-copy"><div class="quick-title">语义检索</div><div class="quick-desc">用自然语言定位候选人</div></div>
+        <el-icon class="quick-arrow"><ArrowRight /></el-icon>
       </el-card>
-      <el-card shadow="never" class="quick-card" @click="router.push('/hr/my-interviews')">
-        <div class="quick-title">我的面试</div>
-        <div class="quick-desc">查看反馈截止与逾期状态</div>
+      <el-card shadow="never" class="quick-card" role="button" tabindex="0" @click="router.push('/hr/interviews')" @keyup.enter="router.push('/hr/interviews')">
+        <span class="quick-icon quick-icon--orange"><el-icon><Calendar /></el-icon></span>
+        <div class="quick-copy"><div class="quick-title">面试管理</div><div class="quick-desc">查看日程和反馈进度</div></div>
+        <el-icon class="quick-arrow"><ArrowRight /></el-icon>
       </el-card>
-      <div class="quick-secondary">
-        需要手动建档？<el-link type="primary" :underline="false" @click="router.push('/hr/candidates?new=1')">新建候选人</el-link>
-      </div>
+      <el-card v-if="isHrOperator" shadow="never" class="quick-card" role="button" tabindex="0" @click="router.push('/hr/agents')" @keyup.enter="router.push('/hr/agents')">
+        <span class="quick-icon quick-icon--teal"><el-icon><MagicStick /></el-icon></span>
+        <div class="quick-copy"><div class="quick-title">Agent 工作台</div><div class="quick-desc">查看提案、证据和运行状态</div></div>
+        <el-icon class="quick-arrow"><ArrowRight /></el-icon>
+      </el-card>
     </div>
+
+    <section class="metric-strip mb-16" aria-label="招聘工作台关键指标">
+      <div class="metric-item"><span class="metric-label">我负责的候选人</span><strong class="metric-value">{{ candidateTotal }}</strong><span class="metric-meta">当前在库</span></div>
+      <div class="metric-item"><span class="metric-label">开放职位</span><strong class="metric-value">{{ jobTotal }}</strong><span class="metric-meta">开放 / 暂停</span></div>
+      <div class="metric-item"><span class="metric-label">我的面试</span><strong class="metric-value">{{ interviews.length }}</strong><span class="metric-meta">待处理任务</span></div>
+      <div class="metric-item metric-item--alert"><span class="metric-label">待补反馈</span><strong class="metric-value">{{ pendingFeedback }}</strong><span class="metric-meta">其中逾期 {{ overdueInterviews }} 条</span></div>
+    </section>
 
     <el-row :gutter="16">
       <el-col :span="12">
@@ -35,7 +50,7 @@
           <template #header>
             <div class="flex-between">
               <span>我的待处理</span>
-              <el-button link type="primary" @click="router.push('/hr/candidates')">全部候选人</el-button>
+              <el-button link type="primary" @click="router.push('/hr/candidates/list')">全部候选人</el-button>
             </div>
           </template>
           <div class="p-16">
@@ -58,7 +73,7 @@
           <template #header>
             <div class="flex-between">
               <span>我的面试</span>
-              <el-button link type="primary" @click="router.push('/hr/my-interviews')">全部面试</el-button>
+              <el-button link type="primary" @click="router.push('/hr/interviews')">全部面试</el-button>
             </div>
           </template>
           <div class="p-16">
@@ -80,13 +95,9 @@
       </el-col>
     </el-row>
 
-    <el-card v-if="isHrOperator" style="--el-card-padding: 0" class="mt-16">
-      <template #header>
-        <div class="flex-between">
-          <span>Agent 采纳率（反馈闭环）</span>
-          <span class="color-secondary text-12">按 Agent × 分数带统计提案决策，用于阈值标定与试点观测</span>
-        </div>
-      </template>
+    <el-collapse v-model="agentCollapse" class="mt-16">
+      <el-collapse-item v-if="isHrOperator" title="Agent 采纳率（反馈闭环）" name="agent">
+        <div class="color-secondary text-12 mb-8">按 Agent × 分数带统计提案决策，用于阈值标定与试点观测</div>
       <el-table :data="agentStats?.by_agent || []" empty-text="暂无 Agent 运行数据" size="small">
         <el-table-column label="Agent" width="170">
           <template #default="{ row }">{{ agentTypeLabel(row.agent_type) }}</template>
@@ -118,13 +129,15 @@
           </template>
         </el-table-column>
       </el-table>
-    </el-card>
+      </el-collapse-item>
+    </el-collapse>
   </div>
 </template>
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { ArrowRight, Calendar, MagicStick, Plus, Refresh, Search, Upload } from '@element-plus/icons-vue'
 import HrApi from '@/api/hr/recruitment'
 import type { AgentStats, MyInterview } from '@/api/type/hr'
 import useStore from '@/stores'
@@ -138,7 +151,10 @@ const loading = ref(false)
 const candidateTotal = ref(0)
 const jobTotal = ref(0)
 const interviews = ref<MyInterview[]>([])
+const pendingFeedback = computed(() => interviews.value.filter((item) => !item.feedback_submitted_at && item.status === 'PENDING').length)
+const overdueInterviews = computed(() => interviews.value.filter((item) => item.is_overdue && !item.feedback_submitted_at).length)
 const agentStats = ref<AgentStats | null>(null)
+const agentCollapse = ref<string[]>([])
 
 function agentTypeLabel(agentType: string) {
   const labels: Record<string, string> = {
@@ -189,11 +205,29 @@ onMounted(loadDashboard)
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 16px;
 }
-.quick-card { cursor: pointer; transition: box-shadow .2s; }
-.quick-card:hover { box-shadow: var(--el-box-shadow-light); }
-.quick-title { font-weight: 600; margin-bottom: 6px; }
-.quick-desc { font-size: 12px; color: var(--el-text-color-secondary); }
+.eyebrow { margin-bottom: 5px; color: var(--el-color-primary); font-size: 11px; font-weight: 700; letter-spacing: 1.2px; }
+.dashboard-heading { align-items: flex-end; }
+.quick-card { min-height: 82px; cursor: pointer; transition: border-color .2s, box-shadow .2s, transform .2s; }
+.quick-card :deep(.el-card__body) { display: flex; align-items: center; gap: 12px; min-height: 82px; box-sizing: border-box; width: 100%; }
+.quick-card:hover { border-color: var(--el-color-primary-light-5); box-shadow: 0 6px 18px rgba(51, 112, 255, .10) !important; transform: translateY(-1px); }
+.quick-icon { display: inline-flex; align-items: center; justify-content: center; flex: 0 0 34px; width: 34px; height: 34px; border-radius: 9px; font-size: 17px; }
+.quick-icon--blue { color: #3370ff; background: #eaf0ff; }
+.quick-icon--green { color: #20a37a; background: #e5f7f0; }
+.quick-icon--purple { color: #8656d8; background: #f1eaff; }
+.quick-icon--orange { color: #d9822b; background: #fff1df; }
+.quick-icon--teal { color: #168c92; background: #e1f7f7; }
+.quick-copy { min-width: 0; flex: 1; }
+.quick-title { margin-bottom: 5px; color: var(--el-text-color-primary); font-weight: 600; }
+.quick-desc { overflow: hidden; color: var(--el-text-color-secondary); font-size: 12px; line-height: 18px; text-overflow: ellipsis; white-space: nowrap; }
+.quick-arrow { color: var(--el-text-color-placeholder); }
 .quick-secondary { grid-column: 1 / -1; font-size: 13px; color: var(--el-text-color-secondary); }
+.metric-strip { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border: 1px solid var(--hr-border); border-radius: 8px; background: var(--el-bg-color); overflow: hidden; }
+.metric-item { display: flex; flex-direction: column; gap: 3px; min-height: 84px; padding: 14px 18px; border-right: 1px solid var(--hr-border); }
+.metric-item:last-child { border-right: 0; }
+.metric-label { color: var(--el-text-color-secondary); font-size: 12px; }
+.metric-value { color: var(--el-text-color-primary); font-size: 25px; line-height: 30px; }
+.metric-meta { color: var(--el-text-color-placeholder); font-size: 11px; }
+.metric-item--alert .metric-value { color: var(--el-color-danger); }
 .p-16 { padding: 16px; }
 .todo-list { display: flex; flex-direction: column; gap: 12px; }
 .todo-item {
@@ -213,4 +247,13 @@ onMounted(loadDashboard)
 .interview-item:last-child { border-bottom: none; }
 .interview-name { font-weight: 500; }
 .text-12 { font-size: 12px; line-height: 18px; margin-top: 4px; }
+@media (max-width: 900px) {
+  .metric-strip { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .metric-item:nth-child(2) { border-right: 0; }
+  .metric-item:nth-child(-n + 2) { border-bottom: 1px solid var(--hr-border); }
+}
+@media (max-width: 640px) {
+  .dashboard-heading { align-items: flex-start; }
+  .quick-grid { grid-template-columns: 1fr; }
+}
 </style>

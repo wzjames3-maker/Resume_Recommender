@@ -119,6 +119,38 @@ def _parse_chunks(raw):
     return result
 
 
+def _parse_skills(raw):
+    """解析 LLM 输出中的 skills 数组（与 chunks 同一次调用产出）；缺失/不合法返回 []。"""
+    text = raw.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```(?:json)?\s*|\s*```$", "", text).strip()
+    try:
+        data = json.loads(text)
+    except (ValueError, TypeError):
+        return []
+    items = data.get("skills") if isinstance(data, dict) else None
+    if not isinstance(items, list):
+        return []
+    result = []
+    seen = set()
+    for item in items:
+        if not isinstance(item, str):
+            continue
+        skill = item.strip().strip("\"'，。；")
+        if not skill or len(skill) > 30 or len(skill) < 2:
+            continue
+        if "\n" in skill or "：" in skill or "负责" in skill or "熟悉" in skill:
+            continue
+        key = skill.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        result.append(skill)
+        if len(result) >= 15:
+            break
+    return result
+
+
 def _validate(chunks, lines, max_length=_MAX_CHUNK_LENGTH):
     """L2 校验：行号合法、不重叠、覆盖全部非空行、单段行数与字符数上限。"""
     total = len(lines)
@@ -192,9 +224,10 @@ def _smart_fallback(lines):
     return [{"title": "", "content": paragraph} for paragraph in smart_split_paragraph(text, _MAX_CHUNK_LENGTH)]
 
 
+
 def split_resume_text(text, chat_fn, max_retries=1, stats=None):
     """
-    简历切片主入口。
+    简历切片主入口（向后兼容，仅返回切片；切片+技能请用 split_resume_with_skills）。
 
     :param text: 简历提取原文（docx/txt 提取结果）
     :param chat_fn: (prompt: str) -> str，LLM 调用函数（模型适配器或测试 stub）
@@ -203,12 +236,24 @@ def split_resume_text(text, chat_fn, max_retries=1, stats=None):
     :return: [{title, content}]，content 已做 PII 掩码
     :raises ValueError: 清洗后文本过短或全部路径失败
     """
+    chunks, _, _ = split_resume_with_skills(text, chat_fn, max_retries=max_retries, stats=stats)
+    return chunks
+
+
+def split_resume_with_skills(text, chat_fn, max_retries=1, stats=None):
+    """一次 LLM 调用同时产出语义切片与技能（技能提取复用同一上下文，省一次模型调用）。
+
+    :return: (chunks: [{title, content}], skills: [str] 可能为空, stats)
+    :raises ValueError: 清洗后文本过短或全部路径失败
+    """
     text = sanitize_resume_text(text)
     if len(text) < _MIN_TEXT_LENGTH:
         raise ValueError("提取文本过短，无法切片")
     # PII 掩码前置（T1）：先于任何 LLM 调用。掩码均为行内替换、不含换行，行数不变，
     # 行号边界协议不受影响；保真语义 = 相对掩码后原文保真（scan_residual_pii 仍作入库 backstop）。
     text = mask_pii(text)
+    if stats is None:
+        stats = {}
     lines = text.split("\n")
     numbered_text = "\n".join(f"{index + 1}  {line}" for index, line in enumerate(lines))
     prompt = _PROMPT_TEMPLATE.format(numbered_text=numbered_text)
@@ -219,11 +264,12 @@ def split_resume_text(text, chat_fn, max_retries=1, stats=None):
         try:
             raw = chat_fn(prompt)
             chunks = _parse_chunks(raw)
+            skills = _parse_skills(raw)
             if _validate(chunks, lines):
                 if stats is not None:
                     stats["path"] = "llm"
                     stats["llm_calls"] = llm_calls
-                return _resolve(chunks, lines)
+                return _resolve(chunks, lines), skills, stats
         except Exception as exc:
             last_error = exc
     for fallback in (split_resume_rules(lines),):
@@ -231,12 +277,12 @@ def split_resume_text(text, chat_fn, max_retries=1, stats=None):
             if stats is not None:
                 stats["path"] = "rules"
                 stats["llm_calls"] = llm_calls
-            return _resolve(fallback, lines)
+            return _resolve(fallback, lines), [], stats
     # smart 兜底：按字符切分（不依赖行号，拼接==原文由 smart_split_paragraph 性质保证）
     smart = _smart_fallback(lines)
     if smart:
         if stats is not None:
             stats["path"] = "smart"
             stats["llm_calls"] = llm_calls
-        return smart
+        return smart, [], stats
     raise ValueError(f"简历切片失败: {last_error}")

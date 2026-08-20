@@ -41,6 +41,7 @@ class AllOffersAPI(APIView):
 
     @hr_access_required
     def get(self, request, workspace_id, current_page, page_size):
+        page_size = min(page_size, 100)
         params = {key: request.query_params.get(key) for key in ("status",) if request.query_params.get(key)}
         return result.success(_offer_service(request, workspace_id).page_offers(current_page, page_size, params))
 
@@ -150,6 +151,7 @@ class HandoffListAPI(APIView):
 
     @hr_access_required
     def get(self, request, workspace_id, current_page, page_size):
+        page_size = min(page_size, 100)
         return result.success(
             _handoff_service(request, workspace_id).page_handoffs(current_page, page_size)
         )

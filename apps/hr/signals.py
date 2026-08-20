@@ -29,6 +29,7 @@ def application_created(sender, instance, created, **kwargs):
 
     try:
         dispatch_event_screening(instance.id)
-    except Exception:
+    except Exception as exc:
         # 事件触发失败不影响业务请求；后续可人工触发
-        pass
+        import logging
+        logging.getLogger("hr").warning("Screening dispatch failed for application %s: %s", instance.id, exc)

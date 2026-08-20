@@ -16,16 +16,22 @@
           style="flex: 1"
           @keyup.enter="search"
         />
-        <span class="color-secondary">模式</span>
-        <el-select v-model="form.mode" style="width: 130px">
-          <el-option label="自动" value="auto" />
-          <el-option label="混合" value="hybrid" />
-          <el-option label="向量" value="dense" />
-          <el-option label="整句" value="phrase" />
-          <el-option label="技能" value="skills" />
+        <el-select v-model="form.resume_database_ids" multiple collapse-tags collapse-tags-tooltip filterable placeholder="全部简历库" clearable style="width: 220px" :loading="databaseLoading">
+          <el-option v-for="database in databases" :key="database.id" :label="database.name" :value="database.id" />
         </el-select>
-        <span class="color-secondary">TopK</span>
-        <el-input-number v-model="form.top_k" :min="1" :max="20" :step="1" />
+        <el-button text @click="showAdvanced = !showAdvanced">{{ showAdvanced ? '收起高级选项' : '高级选项' }}</el-button>
+        <template v-if="showAdvanced">
+          <span class="color-secondary">模式</span>
+          <el-select v-model="form.mode" style="width: 130px">
+            <el-option label="自动" value="auto" />
+            <el-option label="混合" value="hybrid" />
+            <el-option label="向量" value="dense" />
+            <el-option label="整句" value="phrase" />
+            <el-option label="技能" value="skills" />
+          </el-select>
+          <span class="color-secondary">TopK</span>
+          <el-input-number v-model="form.top_k" :min="1" :max="20" :step="1" />
+        </template>
         <el-button type="primary" :loading="searching" @click="search">检索</el-button>
       </div>
 
@@ -88,23 +94,26 @@
         <el-table-column label="分数" width="150">
           <template #default="{ row }">
             <div class="text-12">
-              <div v-if="row.score?.resume != null">综合 {{ Number(row.score.resume).toFixed(3) }}</div>
-              <div v-if="row.score?.rerank != null">Rerank {{ Number(row.score.rerank).toFixed(3) }}</div>
-              <div v-if="row.score?.rrf != null">RRF {{ Number(row.score.rrf).toFixed(3) }}</div>
-              <div v-if="row.score?.hit_count != null">命中 {{ row.score.hit_count }} 技能</div>
-              <div v-if="row.score?.name_match">姓名命中</div>
-              <div v-if="row.score?.structured">结构化命中</div>
+              <div>综合 {{ Number(row.score?.resume ?? 0).toFixed(3) }}</div>
+              <el-tag v-if="row.score?.name_match" size="small" class="mr-4">姓名命中</el-tag>
+              <el-tag v-if="row.score?.structured" size="small">结构化命中</el-tag>
+              <template v-if="showAdvanced">
+                <div v-if="row.score?.rerank != null">Rerank {{ Number(row.score.rerank).toFixed(3) }}</div>
+                <div v-if="row.score?.rrf != null">RRF {{ Number(row.score.rrf).toFixed(3) }}</div>
+                <div v-if="row.score?.hit_count != null">命中 {{ row.score.hit_count }} 技能</div>
+              </template>
             </div>
           </template>
         </el-table-column>
       </el-table>
     </el-card>
 
-    <el-card v-if="meta" class="mt-16" style="--el-card-padding: 0">
+    <el-card v-if="meta && showAdvanced" class="mt-16" style="--el-card-padding: 0">
       <template #header>
         <span>检索元信息</span>
       </template>
       <div class="meta-grid p-16">
+        <div class="meta-item"><span class="label">范围</span><span>{{ meta.scope?.applied ? `${meta.scope.database_count || 0} 个指定简历库` : '全部有效简历库' }}</span></div>
         <div class="meta-item"><span class="label">模式</span><span>{{ modeLabel(meta.mode) }}（{{ meta.search_type }}）</span></div>
         <div class="meta-item"><span class="label">技能</span><span>{{ meta.skills?.length ? meta.skills.join('、') : '-' }}</span></div>
         <div class="meta-item"><span class="label">召回</span><span>{{ formatMeta(meta.recall) }}</span></div>
@@ -117,21 +126,26 @@
 </template>
 
 <script setup lang="ts">
-import { computed, reactive, ref } from 'vue'
-import { useRouter } from 'vue-router'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import HrApi from '@/api/hr/recruitment'
-import type { ResumeSearchCandidate, ResumeSearchItem, ResumeSearchMeta, ResumeSearchMode } from '@/api/type/hr'
+import type { ResumeDatabase, ResumeSearchCandidate, ResumeSearchItem, ResumeSearchMeta, ResumeSearchMode } from '@/api/type/hr'
 import { MsgError } from '@/utils/message'
 
+const route = useRoute()
 const router = useRouter()
 
 const searching = ref(false)
+const showAdvanced = ref(false)
 const items = ref<ResumeSearchItem[]>([])
 const meta = ref<ResumeSearchMeta | null>(null)
+const databases = ref<ResumeDatabase[]>([])
+const databaseLoading = ref(false)
 const form = reactive({
   query: '',
   mode: 'auto' as ResumeSearchMode,
   top_k: 5,
+  resume_database_ids: [] as string[],
 })
 
 const emptyText = computed(() => {
@@ -140,6 +154,17 @@ const emptyText = computed(() => {
   if (meta.value.search_type === 'empty') return '未检索到结果'
   return '未检索到结果'
 })
+
+function loadDatabases() {
+  databaseLoading.value = true
+  HrApi.getResumeDatabases().then((response) => {
+    databases.value = (response.data || []).filter((database) => database.status === 'ACTIVE')
+    const preferredId = typeof route.query.database_id === 'string' ? route.query.database_id : ''
+    const preferred = databases.value.find((database) => database.id === preferredId)
+    const total = databases.value.find((database) => database.is_system || database.is_default)
+    form.resume_database_ids = preferred ? [preferred.id] : total ? [total.id] : []
+  }).catch(() => {}).finally(() => { databaseLoading.value = false })
+}
 
 function search() {
   const query = form.query.trim()
@@ -151,6 +176,7 @@ function search() {
     query,
     mode: form.mode,
     top_k: form.top_k,
+    resume_database_ids: form.resume_database_ids.length ? form.resume_database_ids : undefined,
   })
     .then((response) => {
       items.value = response.data.items || []
@@ -177,6 +203,8 @@ function modeLabel(mode: ResumeSearchMode | undefined) {
   }
   return mode ? labels[mode] || mode : '-'
 }
+
+onMounted(loadDatabases)
 
 function formatMeta(value: unknown) {
   if (!value) return '-'

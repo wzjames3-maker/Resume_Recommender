@@ -1,7 +1,7 @@
 # 简历 RAG v2 设计思路（目标态设计）
 
-> 日期：2026-08-16
-> 状态：设计稿（经代码级自审修订 v2）；**实施状态：P1/P2 已实施（T1-T7，提交 538a8a8..3797bfe；实施计划见 plans/2026-08-16-resume-rag-v2-implementation.md）；P3 后置**
+> 日期：2026-08-18
+> 状态：设计稿（经代码级自审修订 v2）；**实施状态：P1/P2 已实施（T1-T7）；已补齐 ResumeDatabase 多库范围和库内上下文；P3 后置**
 > 输入：`2026-08-16-kernel-rag-fullflow-review.md`（内核实现级）+ `2026-08-16-resume-rag-design-fit-assessment.md`（设计适配性）
 > 约束：非 EE MaxKB 内核；Embedding=bge-large-zh（512 token）；LLM=sensenova-6.8；Rerank=bge-reranker-v2-m3；pgvector
 > 核心原则：**检索原子=简历，证据原子=段落；结构化优先、语义补位**
@@ -18,6 +18,7 @@
 | G4 合规默认 | PII 掩码先于任何 LLM 调用；展示按角色最小可见 |
 | G5 降级链完备 | LLM/embed/rerank 任一失效检索仍可用 |
 | G6 成本可控 | 每查询 ≤1 LLM（查询理解）+ 1 embed + 1 rerank |
+| G7 库范围不越界 | 显式 resume_database_ids 只允许当前 workspace 的 ACTIVE 库，范围贯穿预筛、召回、重排和聚合 |
 
 ## 2. 总体架构：五层检索
 
@@ -41,6 +42,18 @@ L0 路由层   意图分类+槽位抽取（1 次 LLM，规则兜底）
 ```
 
 ## 3. 各层详细设计
+
+### 3.0 ResumeDatabase 库范围
+
+库范围是检索请求的硬边界，不能只在最终结果层过滤：
+
+- 请求可携带一个或多个 resume_database_ids，服务端验证 workspace、ACTIVE 状态和最多 50 个库，重复 ID 去重。
+- 独立打开 RAG 页面时，前端默认选择总库；从库内详情进入时，默认选择当前库。
+- 总库包含全部简历，和业务库同时选择时结果等价于总库；用户可以在独立 RAG 页面取消总库后只查询业务库。
+- 缺少或为空的范围参数按全部有效简历处理，旧的单库 resume_database_id 作为兼容输入转换为同一范围模型。
+- ResumeFile 与候选人的范围过滤均通过 ResumeDatabaseMembership 实现，不能使用 ResumeFile.resume_database 作为唯一事实来源。
+
+范围必须同时应用于结构化候选人预筛、document_id 集合、dense/sparse 双路召回、RRF、rerank、简历级聚合和姓名精确匹配。查询元数据返回选中的库 ID 和库数量，方便审计和前端展示。
 
 ### 3.1 解析与结构抽取
 

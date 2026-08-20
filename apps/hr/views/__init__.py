@@ -6,17 +6,20 @@ from .recruitment import (
     InterviewDetailAPI,
     InterviewerFeedbackAPI,
     InterviewerMineAPI,
+    InterviewListAPI,
     JobAPI,
     JobDetailAPI,
     JobMatchAPI,
     ResumeAPI,
     ResumeBatchStatusAPI,
+    ResumeDatabaseAPI,
+    ResumeDatabaseArchiveAPI,
     ResumeDetailAPI,
     ResumeFlowLogAPI,
     ResumeListAPI,
 )
 from .ai import HrAIConfigAPI, HrResumeSearchAPI, HrSearchParseAPI, HrSkillExtractAPI
-from .access import HrAccessAPI, HrAccessMeAPI, HrAuditLogAPI
+from .access import HrAccessAPI, HrAccessMeAPI, HrAuditLogAPI, HrMembersAPI
 from .offboarding import HrOffboardingAPI, HrOffboardingExportAPI, HrOffboardingPreviewAPI
 from .import_views import CandidateImportAPI, CandidateImportTemplateAPI
 from .offer_views import (
@@ -28,7 +31,12 @@ from .offer_views import (
     OfferDetailAPI,
 )
 from .agent_views import (
+    AgentEvidenceParagraphAPI,
+    AgentProposalInboxAPI,
     AgentRunAPI,
+    AgentRunDetailAPI,
+    AgentRunListAPI,
+    AgentRunRetryAPI,
     AgentStatsAPI,
     InterviewProposalListAPI,
     JobProposalListAPI,
@@ -57,11 +65,14 @@ __all__ = [
     "InterviewDetailAPI",
     "InterviewerFeedbackAPI",
     "InterviewerMineAPI",
+    "InterviewListAPI",
     "JobAPI",
     "JobDetailAPI",
     "JobMatchAPI",
     "ResumeAPI",
     "ResumeBatchStatusAPI",
+    "ResumeDatabaseAPI",
+    "ResumeDatabaseArchiveAPI",
     "ResumeDetailAPI",
     "ResumeFlowLogAPI",
     "ResumeListAPI",
@@ -72,6 +83,7 @@ __all__ = [
     "HrAccessAPI",
     "HrAccessMeAPI",
     "HrAuditLogAPI",
+    "HrMembersAPI",
     "HrOffboardingAPI",
     "HrOffboardingExportAPI",
     "HrOffboardingPreviewAPI",
@@ -81,10 +93,14 @@ __all__ = [
     "HandoffListAPI",
     "HandoffRetryAPI",
     "OfferDetailAPI",
-    "OfferListAPI",
     "CandidateImportAPI",
     "CandidateImportTemplateAPI",
+    "AgentEvidenceParagraphAPI",
+    "AgentProposalInboxAPI",
     "AgentRunAPI",
+    "AgentRunDetailAPI",
+    "AgentRunListAPI",
+    "AgentRunRetryAPI",
     "AgentStatsAPI",
     "InterviewProposalListAPI",
     "JobProposalListAPI",

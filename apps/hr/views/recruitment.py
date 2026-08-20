@@ -61,6 +61,7 @@ class CandidateAPI(APIView):
 
         @hr_access_required
         def get(self, request, workspace_id, current_page, page_size):
+            page_size = min(page_size, 100)
             return result.success(
                 _service(request, workspace_id).page_candidates(current_page, page_size, request.query_params)
             )
@@ -135,6 +136,7 @@ class JobAPI(APIView):
 
         @hr_access_required
         def get(self, request, workspace_id, current_page, page_size):
+            page_size = min(page_size, 100)
             return result.success(_service(request, workspace_id).page_jobs(current_page, page_size, request.query_params))
 
 class JobDetailAPI(APIView):
@@ -156,6 +158,26 @@ class JobDetailAPI(APIView):
             return result.success(_service(request, workspace_id).reopen_job(job_id))
 
 
+class ResumeDatabaseAPI(APIView):
+    authentication_classes = [TokenAuth]
+
+    @hr_access_required
+    def get(self, request, workspace_id):
+        return result.success(_service(request, workspace_id).list_resume_databases())
+
+    @hr_admin_required
+    def post(self, request, workspace_id):
+        return result.success(_service(request, workspace_id).create_resume_database(request.data))
+
+
+class ResumeDatabaseArchiveAPI(APIView):
+    authentication_classes = [TokenAuth]
+
+    @hr_admin_required
+    def put(self, request, workspace_id, database_id):
+        return result.success(_service(request, workspace_id).archive_resume_database(database_id))
+
+
 class ResumeAPI(APIView):
     authentication_classes = [TokenAuth]
     parser_classes = [MultiPartParser]
@@ -163,6 +185,9 @@ class ResumeAPI(APIView):
     @hr_access_required
     def post(self, request, workspace_id):
         source_channel = request.data.get("source_channel", "OTHER")
+        resume_database_ids = request.data.getlist("resume_database_ids") if hasattr(request.data, "getlist") else None
+        if not resume_database_ids:
+            resume_database_ids = request.data.get("resume_database_ids") or request.data.get("resume_database_id")
         files = []
         for upload in request.FILES.getlist("files"):
             temp_path = os.path.join(tempfile.gettempdir(), f"{uuid.uuid7()}_{upload.name}")
@@ -171,7 +196,7 @@ class ResumeAPI(APIView):
                     handle.write(chunk)
             extension = os.path.splitext(upload.name)[1].lstrip(".").lower()
             files.append((temp_path, upload.name, extension))
-        return result.success(_service(request, workspace_id).upload_resumes(files, source_channel))
+        return result.success(_service(request, workspace_id).upload_resumes(files, source_channel, resume_database_ids))
 
 
 class ResumeListAPI(APIView):
@@ -214,6 +239,7 @@ class JobMatchAPI(APIView):
 
     @hr_access_required
     def get(self, request, workspace_id, job_id, current_page, page_size):
+        page_size = min(page_size, 100)
         return result.success(
             _service(request, workspace_id).match_job_candidates(job_id, current_page, page_size)
         )
@@ -225,6 +251,16 @@ class InterviewDetailAPI(APIView):
     @hr_access_required
     def put(self, request, workspace_id, interview_id):
         return result.success(_service(request, workspace_id).update_interview(interview_id, request.data))
+
+
+class InterviewListAPI(APIView):
+    """HR 全局面试列表（OPERATOR+）：分页 + 状态/关键词/逾期筛选。"""
+
+    authentication_classes = [TokenAuth]
+
+    @hr_operator_required
+    def get(self, request, workspace_id):
+        return result.success(_service(request, workspace_id).list_interviews(request.query_params))
 
 
 class InterviewerMineAPI(APIView):

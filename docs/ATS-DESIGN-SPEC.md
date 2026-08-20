@@ -1,6 +1,6 @@
 # ATS 精确设计规格（模糊点裁决与领域规范）
 
-> 文档状态：设计规格，2026-08-16。本文件解决 `docs/PRD.md` 中 ATS 设计「表述模糊、枚举不闭合、状态联动未定义、与实现脱节」的问题：以当前代码事实（v2 分支，2026-08-16 基线）为准把每个模糊点裁决为**唯一确定的行为**。
+> 文档状态：设计规格，2026-08-18。本文件解决 `docs/PRD.md` 中 ATS 设计「表述模糊、枚举不闭合、状态联动未定义、与实现脱节」的问题：以当前代码事实（v2 分支，2026-08-18 基线）为准把每个模糊点裁决为**唯一确定的行为**。
 >
 > 标注约定：
 > - **【F】事实**：代码已如此实现，本规格固化；修改须走规格变更评审。
@@ -50,6 +50,7 @@
 | `HandoffTargetType` | `CHECKLIST` 人工清单 / `WEBHOOK` 投递 | 交接目标、HrConfig | |
 | `CandidateStatus` | `ACTIVE` / `ARCHIVED` / `DELETED` | 候选人 `status` | DELETED 仅 ADMIN 可见/查询 |
 | `ResumeStatus` | `PENDING` / `SUCCESS` / `FAILED` | 简历 `status` | |
+| `ResumeDatabaseStatus` | `ACTIVE` / `ARCHIVED` | 简历库 `status` | 总库只能 ACTIVE；业务库可归档 |
 | `HrRole` | `VIEWER` / `OPERATOR` / `ADMIN` | HrAccess `role` | |
 | `HrAuditAction` | 26 值（`apps/hr/models/recruitment.py:380`） | 审计 | Agent 增补动作见 PRD-AGENT-RAG §8 |
 
@@ -143,6 +144,13 @@
 - ResumeFlowLog：简历六节点流转日志（UPLOAD/EXTRACT/SANITIZE/SPLIT/DOCUMENT/LIFECYCLE），EXTRACT/SANITIZE 含未脱敏全文，**仅 OPERATOR+ 可读**。
 - HrAccess：(workspace, user) 唯一，role 三值。
 - HrAuditLog：只增不改；`action(26 值)/object_type/object_id/result(SUCCESS|FAILED|DENIED)/detail`。
+
+### 3.9 ResumeDatabase 与 ResumeDatabaseMembership
+
+- ResumeDatabase：workspace_id、name、description、status、is_default、is_system、user_id；每个 workspace 自动维护一个 is_system=true 的“总库”，总库不能归档。
+- ResumeDatabaseMembership：resume_file、resume_database、create_time；唯一约束是 (resume_file, resume_database)，是实际多库归属真源。
+- ResumeFile.resume_database 仍保留为主归属和旧接口兼容字段；物理文件、解析结果和语义索引按 workspace + sha256 去重，重复上传到其他库只新增成员关系。
+- 业务库归档保留历史成员关系，但从上传、候选人库筛选和 RAG 有效选择范围中排除。
 
 ## 4. 状态机规格
 
@@ -248,6 +256,8 @@ DRAFT→OPEN 无字段完整性前置校验【F，维持：DRAFT 是轻量草稿
 | 候选人：主档编辑/归档/恢复/删除/合并/导出（白名单 14 字段）/CSV 导入 | ✗ | ✗ | ✓ |
 | 简历：上传/下载/原文/批量状态/流转日志 | ✗ | ✓ | ✓ |
 | 简历：详情（含候选人口径） | ✗ | ✗ | ✓ |
+| 简历库：查看、库内候选人、库内检索 | ✓ | ✓ | ✓ |
+| 简历库：创建、归档业务库 | ✗ | ✗ | ✓ |
 | 职位：创建/编辑/关闭/重开 | ✗ | ✗ | ✓（R：DRAFT 编辑另允许 owner） |
 | 职位/关联：列表/详情/匹配 | ✓ | ✓ | ✓ |
 | 关联：创建/状态迁移/备注/负责人/面试管理 | ✗ | ✓（恢复与设回 PENDING_SCREEN 需 ADMIN） | ✓ |
@@ -262,17 +272,19 @@ DRAFT→OPEN 无字段完整性前置校验【F，维持：DRAFT 是轻量草稿
 
 - **查重**：phone 精确等值 OR email `iexact`；列表行附着 `duplicate_ids`；合并仅 ADMIN（保留主档，副档关联迁移）。
 - **简历 TTL**：上传 30 自然日未关联候选人 → 后台删除原件/文本/解析结果/语义索引，级联清理流转日志节点，记 LIFECYCLE 日志。
+- **简历库**：总库自动加入每份简历，业务库通过 ResumeDatabaseMembership 多对多归属；上传总库强制保留，重复 SHA-256 文件跨库复用；归档库不接收新上传和检索。
 - **导出白名单**（`CANDIDATE_EXPORT_FIELDS`，14 字段）：name/status/city×2/degree/years/skills/source×3/collected_at/consent_status/contact_preference/create_time——**不含联系方式与备注**。
 - **脱敏格式**：phone `前3****后4`；email `前2***@域名`。
 - **CSV 导入**：≤200 行 ≤2MB；逐行校验、失败原因报告、疑似重复标注。
 - **三类备注不得混用**：候选人 `note`（人才库通用）、关联 `note`（筛选过程）、面试 `feedback`（轮次评估）——各自归属各自展示，互不回落。
 
-## 9. API 面清单（51 路由，`apps/hr/urls.py`）
+## 9. API 面清单（apps/hr/urls.py）
 
 | 分组 | 端点（前缀 `/admin/api/workspace/{ws}/hr`） |
 |---|---|
 | 候选人（8） | `candidates` CRUD/分页/查重/归档/恢复/删除/合并/导出 |
 | 简历（7） | 上传（`candidates/resumes`）/列表/详情/下载/原文/批量状态/流转日志 |
+| 简历库（3） | resume-databases GET/POST、resume-databases/{id}/archive；总库、多业务库统计和归档 |
 | 语义检索（1） | `resumes/search`（POST，模式 A/B，见检索设计文档） |
 | 职位（7） | `jobs` CRUD/分页/关闭/重开/关联创建/匹配分页 |
 | 关联（1） | `assignments/{id}`（详情 + 状态迁移）；R：+ 队列分页（§6） |

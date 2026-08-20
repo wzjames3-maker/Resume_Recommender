@@ -5,6 +5,8 @@
     @date：2026/8/17
     @desc: ATS v2 Application / JobStage 命令 API
 """
+import uuid as _uuid
+
 from rest_framework.views import APIView
 
 from common import result
@@ -62,6 +64,7 @@ class ApplicationPageAPI(APIView):
 
     @hr_access_required
     def get(self, request, workspace_id, current_page, page_size):
+        page_size = min(page_size, 100)
         return result.success(_service(request, workspace_id).page_applications(current_page, page_size, request.query_params))
 
 
@@ -73,6 +76,10 @@ class ApplicationMoveStageAPI(APIView):
         to_stage_id = request.data.get("to_stage_id")
         if not to_stage_id:
             raise AppApiException(400, "to_stage_id is required")
+        try:
+            _uuid.UUID(str(to_stage_id))
+        except (ValueError, TypeError, AttributeError) as exc:
+            raise AppApiException(400, "to_stage_id is invalid") from exc
         return result.success(_service(request, workspace_id).move_stage(application_id, to_stage_id, request.data))
 
 

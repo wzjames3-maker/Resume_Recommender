@@ -29,6 +29,18 @@ python main.py status           # 守护状态
 - HTTPS：gunicorn 加 --certfile/--keyfile（或前置 nginx 终止 TLS）；本机已验证 HTTPS 生效、明文拒绝。
 - 首次启动自动 collectstatic + migrate（含 PG 崩溃恢复重试）。
 
+### 3.1 简历多库迁移核验
+
+本版本新增 0028_resumedatabasemembership。正式环境发布前必须先备份数据库，再执行迁移并检查：
+
+- 每个 workspace 存在一个 ACTIVE 的系统总库，名称为“总库”。
+- 每份既有 ResumeFile 至少有一条总库成员关系。
+- 总库成员数与 workspace 的 ResumeFile 数量一致。
+- 业务库的简历数、候选人数和待解析数通过成员关系去重统计。
+- 归档业务库不出现在上传和 RAG 的有效库选择器中。
+
+建议发布后使用一份测试简历执行“总库 + 业务库上传、重复文件跨库归属、库内候选人筛选、库内 RAG 查询”验收，再开放真实 PII。详细规则见 docs/RESUME-DATABASES.md。
+
 ## 4. 备份与恢复（已验证闭环）
 
 ```bash

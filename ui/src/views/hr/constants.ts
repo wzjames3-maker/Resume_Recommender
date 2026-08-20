@@ -78,11 +78,6 @@ export const assignmentStatusLabels: Record<string, string> = {
   CLOSED: '已关闭',
 }
 
-/** 看板进行中列的链式顺序:只允许按此顺序前进 */
-export const PIPELINE_ORDER = ['PENDING_SCREEN', 'SCREEN_PASSED', 'INTERVIEWING', 'OFFER', 'HIRED'] as const
-
-export const TERMINAL_STATUSES = ['REJECTED', 'WITHDRAWN', 'CLOSED'] as const
-
 export function assignmentTagType(status: string) {
   if (status === 'HIRED') return 'success'
   if (status === 'REJECTED' || status === 'WITHDRAWN' || status === 'CLOSED') return 'info'
@@ -97,8 +92,6 @@ export const applicationStatusLabels: Record<string, string> = {
   WITHDRAWN: '已退出',
   CLOSED: '已关闭',
 }
-
-export const TERMINAL_APPLICATION_STATUSES = ['REJECTED', 'WITHDRAWN', 'CLOSED'] as const
 
 export function applicationStatusTagType(status: string) {
   if (status === 'ACTIVE') return 'primary'

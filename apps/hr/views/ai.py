@@ -92,4 +92,6 @@ class HrResumeSearchAPI(APIView):
             rerank_model=_service(request, workspace_id)._rerank_model_or_none(),
             candidate_id=request.data.get("candidate_id"),
             document_ids=request.data.get("document_ids"),
+            resume_database_id=request.data.get("resume_database_id"),
+            resume_database_ids=request.data.get("resume_database_ids"),
         ))

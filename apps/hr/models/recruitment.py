@@ -251,6 +251,30 @@ class Interview(models.Model):
         ]
 
 
+class ResumeDatabaseStatus(models.TextChoices):
+    ACTIVE = "ACTIVE", "Active"
+    ARCHIVED = "ARCHIVED", "Archived"
+
+
+class ResumeDatabase(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
+    workspace_id = models.CharField(max_length=64, db_index=True)
+    name = models.CharField(max_length=128)
+    description = models.CharField(max_length=512, blank=True, default="")
+    status = models.CharField(max_length=16, choices=ResumeDatabaseStatus.choices, default=ResumeDatabaseStatus.ACTIVE)
+    is_default = models.BooleanField(default=False)
+    is_system = models.BooleanField(default=False)
+    user_id = models.UUIDField(null=True, blank=True)
+    create_time = models.DateTimeField(auto_now_add=True)
+    update_time = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        db_table = "hr_resume_database"
+        constraints = [
+            models.UniqueConstraint(fields=["workspace_id", "name"], name="hr_resume_database_workspace_name_uniq"),
+        ]
+
+
 class ResumeStatus(models.TextChoices):
     PENDING = "PENDING", "Pending"
     SUCCESS = "SUCCESS", "Success"
@@ -266,18 +290,63 @@ class ResumeFile(models.Model):
     file_size = models.IntegerField()
     sha256 = models.CharField(max_length=64, db_index=True)
     source_channel = models.CharField(max_length=20, choices=ResumeChannel.choices, default=ResumeChannel.OTHER)
+    resume_database = models.ForeignKey(ResumeDatabase, on_delete=models.PROTECT, related_name="resume_files")
     status = models.CharField(max_length=16, choices=ResumeStatus.choices, default=ResumeStatus.PENDING)
     error_message = models.TextField(blank=True, default="")
+    raw_text = models.TextField(blank=True, default="", verbose_name="docx/txt 提取原文（混合检索关键字腿）")
     candidate = models.ForeignKey(Candidate, on_delete=models.SET_NULL, null=True, blank=True)
     document_id = models.UUIDField(null=True, blank=True, verbose_name="语义索引文档id")
     user_id = models.UUIDField(null=True, blank=True)
     create_time = models.DateTimeField(auto_now_add=True)
     update_time = models.DateTimeField(auto_now=True)
 
+    def save(self, *args, **kwargs):
+        # 低层导入/管理命令也必须遵守总库归属，避免绕过上传服务产生无范围简历。
+        if not kwargs.get("raw") and self.workspace_id:
+            total = ResumeDatabase.objects.filter(
+                workspace_id=self.workspace_id, status=ResumeDatabaseStatus.ACTIVE, is_system=True
+            ).first()
+            if total is None:
+                total = ResumeDatabase.objects.filter(
+                    workspace_id=self.workspace_id, status=ResumeDatabaseStatus.ACTIVE, is_default=True
+                ).first()
+            if total is None:
+                total = ResumeDatabase.objects.create(
+                    workspace_id=self.workspace_id, name="总库", is_default=True, is_system=True
+                )
+            if not total.is_system:
+                total.is_system = True
+                total.save(update_fields=["is_system", "update_time"])
+            if not self.resume_database_id:
+                self.resume_database = total
+        super().save(*args, **kwargs)
+        membership_model = globals().get("ResumeDatabaseMembership")
+        if not kwargs.get("raw") and membership_model and self.resume_database_id and self.workspace_id:
+            total = ResumeDatabase.objects.filter(
+                workspace_id=self.workspace_id, status=ResumeDatabaseStatus.ACTIVE, is_system=True
+            ).first()
+            if total is not None:
+                membership_model.objects.get_or_create(resume_file=self, resume_database=total)
+
     class Meta:
         db_table = "hr_resume_file"
         constraints = [
             models.UniqueConstraint(fields=["workspace_id", "sha256"], name="hr_unique_resume_sha256_per_workspace")
+        ]
+
+
+class ResumeDatabaseMembership(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
+    resume_file = models.ForeignKey(ResumeFile, on_delete=models.CASCADE, related_name="database_memberships")
+    resume_database = models.ForeignKey(ResumeDatabase, on_delete=models.CASCADE, related_name="resume_memberships")
+    create_time = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        db_table = "hr_resume_database_membership"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["resume_file", "resume_database"], name="hr_resume_database_membership_uniq"
+            ),
         ]
 
 

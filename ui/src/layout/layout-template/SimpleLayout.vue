@@ -3,6 +3,7 @@ import { computed } from 'vue'
 import UserHeader from '@/layout/layout-header/UserHeader.vue'
 import SystemHeader from '@/layout/layout-header/SystemHeader.vue'
 import AppMain from '@/layout/app-main/index.vue'
+import HrWorkspaceNav from '@/layout/hr/HrWorkspaceNav.vue'
 import useStore from '@/stores'
 import { useRoute } from 'vue-router'
 const route = useRoute()
@@ -10,6 +11,7 @@ const { theme, user } = useStore()
 const isDefaultTheme = computed(() => {
   return theme.isDefaultTheme()
 })
+const isHrRoute = computed(() => route.path === '/hr' || route.path.startsWith('/hr/'))
 const {
   params: { folderId }, // id为knowledgeID
   query: { from },
@@ -28,7 +30,7 @@ const isShared = computed(() => {
 
 <template>
   <div class="app-layout">
-    <div class="app-header" :class="!isDefaultTheme ? 'custom-header' : ''">
+    <div class="app-header" :class="[!isDefaultTheme ? 'custom-header' : '', isHrRoute ? 'is-hr-header' : '']">
       <el-alert
         v-if="user.isExpire()"
         :title="$t('layout.isExpire')"
@@ -40,8 +42,9 @@ const isShared = computed(() => {
 
       <SystemHeader v-if="isShared"></SystemHeader>
       <UserHeader v-else />
+      <HrWorkspaceNav v-if="isHrRoute" />
     </div>
-    <div class="app-main" :class="user.isExpire() ? 'isExpire' : ''">
+    <div class="app-main" :class="[user.isExpire() ? 'isExpire' : '', isHrRoute ? 'is-hr-main' : '']">
       <AppMain />
     </div>
   </div>

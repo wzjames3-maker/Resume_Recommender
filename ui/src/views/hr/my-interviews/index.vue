@@ -2,10 +2,14 @@
   <div class="hr-page p-16-24">
     <div class="flex-between mb-16">
       <div>
+        <div class="eyebrow">INTERVIEWER VIEW</div>
         <h2>我的面试</h2>
-        <span class="color-secondary">查看被安排的面试并提交反馈（仅本人可见）；AI 面试助手生成面题与评估草稿（草稿不自动提交）</span>
+        <span class="color-secondary">处理分配给你的面试，提交反馈并使用 AI 生成草稿（不会自动提交）</span>
       </div>
-      <el-button type="primary" plain :loading="loading" @click="loadInterviews">刷新</el-button>
+      <div class="header-actions">
+        <el-button link type="primary" @click="router.push('/hr/interviews')">全局面试</el-button>
+        <el-button circle :icon="Refresh" title="刷新面试" aria-label="刷新面试" :loading="loading" @click="loadInterviews" />
+      </div>
     </div>
 
     <el-card style="--el-card-padding: 0" v-loading="loading">
@@ -151,14 +155,17 @@
 </template>
 
 <script setup lang="ts">
-import { onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref } from 'vue'
+import { useRouter } from 'vue-router'
+import { Refresh } from '@element-plus/icons-vue'
 import HrApi from '@/api/hr/recruitment'
 import type { CopilotProposal, MyInterview } from '@/api/type/hr'
 import useStore from '@/stores'
 import { MsgConfirm, MsgSuccess } from '@/utils/message'
 
+const router = useRouter()
 const { user } = useStore()
-const isHrOperator = user.getHrRole() === 'OPERATOR' || user.getHrRole() === 'ADMIN'
+const isHrOperator = computed(() => user.getHrRole() === 'OPERATOR' || user.getHrRole() === 'ADMIN')
 
 const loading = ref(false)
 const submitting = ref(false)

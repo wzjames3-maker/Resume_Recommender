@@ -18,7 +18,8 @@ from hr.agents import context
 from hr.agents.base import guard_limits, record_prompt_version, run_output, write_skipped_run
 from hr.agents.proposals import expire_pending_proposals_for, propose
 from hr.agents.runner import _config, _invoke_llm, _is_number, _load_llm
-from hr.models import HrAgentRun, HrAgentRunStatus, HrAgentTriggerType, HrAgentType, Interview, InterviewStatus, ResumeFile
+from hr.agents.scope import candidate_document_ids, validate_resume_database_ids
+from hr.models import HrAgentRun, HrAgentRunStatus, HrAgentTriggerType, HrAgentType, Interview, InterviewStatus
 from hr.services.audit import write_audit_log
 from hr.services.knowledge_search import search_knowledge
 from hr.services.resume_search import search_resumes
@@ -141,15 +142,11 @@ def _check_trigger_permission(interview, user_id, hr_role):
     raise AppUnauthorizedFailed(403, "仅面试官本人或 OPERATOR 以上可运行 Interview Copilot")
 
 
-def _candidate_document_ids(candidate):
-    return [
-        str(doc_id) for doc_id in ResumeFile.objects.filter(
-            candidate=candidate, document_id__isnull=False
-        ).values_list("document_id", flat=True)
-    ]
+def _candidate_document_ids(workspace_id, candidate_id, resume_database_ids=None):
+    return candidate_document_ids(workspace_id, candidate_id, resume_database_ids)
 
 
-def _collect_weak_spots(workspace_id, application, document_ids):
+def _collect_weak_spots(workspace_id, application, document_ids, resume_database_ids=None):
     """候选人文档集内软条件语义检索（复用 RRF+rerank，召回入口限集）。"""
     job = application.job
     queries = []
@@ -173,6 +170,7 @@ def _collect_weak_spots(workspace_id, application, document_ids):
                 rerank_model=None,
                 candidate_id=str(application.candidate_id),
                 document_ids=document_ids,
+                resume_database_ids=resume_database_ids,
             )
         except AppApiException:
             continue
@@ -219,6 +217,9 @@ def run_interview_copilot(interview_id, data=None, user_id=None, hr_role=None, w
     config = _config(workspace_id)
 
     data = data or {}
+    resume_database_ids = validate_resume_database_ids(
+        workspace_id, data.get("resume_database_ids") or data.get("resume_database_id")
+    )
     phase = str(data.get("phase") or "prepare").strip()
     if phase not in ("prepare", "feedback"):
         return write_skipped_run(
@@ -262,6 +263,7 @@ def run_interview_copilot(interview_id, data=None, user_id=None, hr_role=None, w
             "candidate_id": str(application.candidate_id),
             "phase": phase,
             "round_no": interview.round_no,
+            "resume_database_ids": resume_database_ids or [],
         },
         prompt_version=_PROMPT_VERSION,
         user_id=actor_id,
@@ -289,7 +291,8 @@ def run_interview_copilot(interview_id, data=None, user_id=None, hr_role=None, w
         if phase == "prepare":
             # 工具 ③ search_resumes（候选人文档集限定，找弱项）
             t0 = time.monotonic()
-            weak_spots = _collect_weak_spots(workspace_id, application, _candidate_document_ids(application.candidate))
+            document_ids = _candidate_document_ids(workspace_id, application.candidate_id, resume_database_ids)
+            weak_spots = _collect_weak_spots(workspace_id, application, document_ids, resume_database_ids)
             trace.append({"tool": "search_resumes", "elapsed_ms": int((time.monotonic() - t0) * 1000),
                           "rows": len(weak_spots)})
             # 工具 ④ search_knowledge（企业题库，白名单）

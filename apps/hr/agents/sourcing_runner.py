@@ -17,6 +17,7 @@ from hr.agents import context
 from hr.agents.base import guard_limits, record_prompt_version, run_output, write_skipped_run
 from hr.agents.proposals import expire_pending_proposals_for, propose
 from hr.agents.runner import _config, _invoke_llm, _load_llm, structured_filter
+from hr.agents.scope import validate_resume_database_ids
 from hr.models import (
     Application,
     Candidate,
@@ -111,7 +112,7 @@ def _facts_from_llm(model, prompt, allowed_ids):
     }
 
 
-def run_sourcing_agent(job_id, trigger_type=HrAgentTriggerType.MANUAL, user_id=None, workspace_id=None):
+def run_sourcing_agent(job_id, trigger_type=HrAgentTriggerType.MANUAL, user_id=None, workspace_id=None, data=None):
     """执行一次 Sourcing 运行；任何失败 run=FAILED，职位与人才库不受影响。
     workspace_id 由 API 传入时强制校验归属。"""
     job = Job.objects.filter(id=job_id).first()
@@ -120,6 +121,10 @@ def run_sourcing_agent(job_id, trigger_type=HrAgentTriggerType.MANUAL, user_id=N
     if workspace_id is not None and str(job.workspace_id) != str(workspace_id):
         return None
     workspace_id = job.workspace_id
+    data = data or {}
+    resume_database_ids = validate_resume_database_ids(
+        workspace_id, data.get("resume_database_ids") or data.get("resume_database_id")
+    )
     actor_id = user_id or job.user_id or _SYSTEM_USER_ID
     config = _config(workspace_id)
     if job.status != JobStatus.OPEN:
@@ -143,7 +148,12 @@ def run_sourcing_agent(job_id, trigger_type=HrAgentTriggerType.MANUAL, user_id=N
         ref_object_type="JOB",
         ref_object_id=str(job.id),
         status=HrAgentRunStatus.RUNNING,
-        input_meta={"job_id": str(job.id), "job_name": job.name, "department": job.department},
+        input_meta={
+            "job_id": str(job.id),
+            "job_name": job.name,
+            "department": job.department,
+            "resume_database_ids": resume_database_ids or [],
+        },
         prompt_version=_PROMPT_VERSION,
         user_id=actor_id,
     )
@@ -173,6 +183,7 @@ def run_sourcing_agent(job_id, trigger_type=HrAgentTriggerType.MANUAL, user_id=N
                 raw = search_resumes(
                     workspace_id, query, top_k=8, mode="phrase", hr_role="VIEWER", user_id=None,
                     llm_model=None, rerank_model=None,
+                    resume_database_ids=resume_database_ids,
                 )
             except AppApiException:
                 continue
@@ -181,16 +192,29 @@ def run_sourcing_agent(job_id, trigger_type=HrAgentTriggerType.MANUAL, user_id=N
         trace.append({"tool": "search_resumes", "elapsed_ms": int((time.monotonic() - t0) * 1000),
                       "rows": len(recalled)})
 
-        # 工具 ③ structured_filter（硬条件核对，仅保留 hard_met）
+        # 工具 ③ structured_filter（硬条件核对，仅保留 hard_met）— 批量查询消除 N+1
         t0 = time.monotonic()
         pool_items = []
         seen = set()
+        candidate_ids = []
         for item in recalled:
             candidate_id = str((item.get("candidate") or {}).get("id") or "")
             if not candidate_id or candidate_id in seen:
                 continue
             seen.add(candidate_id)
-            candidate = Candidate.objects.filter(id=candidate_id, workspace_id=workspace_id).first()
+            candidate_ids.append(candidate_id)
+        # 批量拉取候选人，避免逐条查询的 N+1
+        candidate_map = {
+            str(candidate.id): candidate
+            for candidate in Candidate.objects.filter(id__in=candidate_ids, workspace_id=workspace_id)
+        }
+        seen.clear()
+        for item in recalled:
+            candidate_id = str((item.get("candidate") or {}).get("id") or "")
+            if not candidate_id or candidate_id in seen:
+                continue
+            seen.add(candidate_id)
+            candidate = candidate_map.get(candidate_id)
             if candidate is None:
                 continue
             check = structured_filter(job, candidate)

@@ -276,10 +276,13 @@
   }
 }
 .el-form-item__label {
-  display: block;
   font-weight: 400;
-  width: 100% !important;
   color: var(--el-text-color-primary);
+}
+
+.el-form--label-top .el-form-item__label {
+  display: block;
+  width: 100% !important;
 }
 
 .el-form-item__content {

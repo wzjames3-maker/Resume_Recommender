@@ -2,7 +2,7 @@
   <div class="hr-page p-16-24" v-loading="loading">
     <div class="flex-between mb-16">
       <div class="flex gap-12 align-center">
-        <el-button plain @click="router.push('/hr/candidates')">返回列表</el-button>
+        <el-button plain @click="router.push('/hr/candidates/list')">返回列表</el-button>
         <h2 class="m-0">{{ candidate?.name || '候选人详情' }}</h2>
         <el-tag v-if="candidate" :type="candidate.status === 'ACTIVE' ? 'success' : 'info'">
           {{ candidate.status === 'ACTIVE' ? '在库' : '已归档' }}
@@ -41,14 +41,6 @@
         <el-descriptions-item label="最高学历">{{ candidate.highest_degree || '-' }}</el-descriptions-item>
         <el-descriptions-item label="工作年限">{{ candidate.years_experience == null ? '-' : `${candidate.years_experience} 年` }}</el-descriptions-item>
         <el-descriptions-item label="来源">{{ candidate.source || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="创建时间">{{ formatDateTime(candidate.create_time) }}</el-descriptions-item>
-        <el-descriptions-item label="更新时间">{{ formatDateTime(candidate.update_time) }}</el-descriptions-item>
-        <el-descriptions-item label="来源类型">{{ channelLabels[candidate.source_type] || candidate.source_type || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="来源详情">{{ candidate.source_detail || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="收集日期">{{ formatDateTime(candidate.collected_at) }}</el-descriptions-item>
-        <el-descriptions-item label="告知状态">{{ consentStatusLabels[candidate.consent_status] || candidate.consent_status || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="告知版本">{{ candidate.consent_version || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="联系偏好">{{ contactPreferenceLabels[candidate.contact_preference] || candidate.contact_preference || '-' }}</el-descriptions-item>
         <el-descriptions-item label="技能" :span="2">
           <template v-if="candidate.skills?.length">
             <el-tag v-for="skill in candidate.skills" :key="skill" size="small" class="mr-8 mb-8">{{ skill }}</el-tag>
@@ -57,6 +49,20 @@
         </el-descriptions-item>
         <el-descriptions-item label="备注" :span="2">{{ candidate.note || '-' }}</el-descriptions-item>
       </el-descriptions>
+      <el-collapse v-model="systemCollapse" class="p-16">
+        <el-collapse-item title="系统与合规信息" name="system">
+          <el-descriptions :column="2" border>
+            <el-descriptions-item label="来源类型">{{ channelLabels[candidate.source_type] || candidate.source_type || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="来源详情">{{ candidate.source_detail || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="收集日期">{{ formatDateTime(candidate.collected_at) }}</el-descriptions-item>
+            <el-descriptions-item label="告知状态">{{ consentStatusLabels[candidate.consent_status] || candidate.consent_status || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="告知版本">{{ candidate.consent_version || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="联系偏好">{{ contactPreferenceLabels[candidate.contact_preference] || candidate.contact_preference || '-' }}</el-descriptions-item>
+            <el-descriptions-item label="创建时间">{{ formatDateTime(candidate.create_time) }}</el-descriptions-item>
+            <el-descriptions-item label="更新时间">{{ formatDateTime(candidate.update_time) }}</el-descriptions-item>
+          </el-descriptions>
+        </el-collapse-item>
+      </el-collapse>
     </el-card>
 
     <el-card v-if="candidate" class="mb-16" style="--el-card-padding: 0">
@@ -115,10 +121,9 @@
 </template>
 
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import HrApi from '@/api/hr/recruitment'
-import AuthorizationApi from '@/api/system/resource-authorization'
 import type { Candidate, CandidateDetail, ResumeFile } from '@/api/type/hr'
 import {
   assignmentStatusLabels,
@@ -144,6 +149,7 @@ const isHrOperator = computed(() => user.getHrRole() === 'OPERATOR' || user.getH
 const loading = ref(false)
 const members = ref<Array<{ id: string; nick_name: string }>>([])
 const candidate = ref<CandidateDetail | null>(null)
+const systemCollapse = ref<string[]>([])
 const resumes = ref<ResumeFile[]>([])
 const resumeLoading = ref(false)
 const contentVisible = ref(false)
@@ -155,7 +161,7 @@ function ownerName(ownerId: string | null) {
 }
 
 function loadMembers() {
-  AuthorizationApi.getUserMember(user.getWorkspaceId() || '').then((response) => {
+  HrApi.getMembers().then((response) => {
     members.value = response.data || []
   }).catch(() => {})
 }
@@ -193,7 +199,7 @@ function loadResumes() {
 }
 
 function editCandidate() {
-  router.push({ path: '/hr/candidates', query: { edit_candidate: candidate.value?.id } })
+  router.push({ path: '/hr/candidates/list', query: { edit_candidate: candidate.value?.id } })
 }
 
 function archive() {
@@ -228,7 +234,7 @@ function remove() {
     .then(() => HrApi.deleteCandidate(candidate.value!.id))
     .then(() => {
       MsgSuccess('候选人已删除')
-      router.push('/hr/candidates')
+      router.push('/hr/candidates/list')
     })
     .catch(() => {})
 }
@@ -266,6 +272,14 @@ onMounted(() => {
   loadDetail()
   loadResumes()
 })
+
+watch(
+  () => route.params.id,
+  () => {
+    loadDetail()
+    loadResumes()
+  },
+)
 </script>
 
 <style scoped>

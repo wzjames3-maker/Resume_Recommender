@@ -83,7 +83,7 @@ export default defineConfig((conf: any) => {
   return {
     preflight: false,
     lintOnSave: false,
-    base: './',
+    base: mode === 'development' ? './' : ENV.VITE_BASE_PATH,
     envDir: envDir,
     plugins: [
       vue(),

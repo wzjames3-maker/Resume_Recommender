@@ -15,6 +15,42 @@ from hr.services.audit import write_audit_log
 from users.models import User
 from users.serializers.user import UserManageSerializer
 
+# 内核内置系统管理员（不存在于 user 表，防御性排除）
+_KERNEL_SYSTEM_USER_ID = uuid.UUID("f0dd8f71-e4ee-11ee-8c84-a8a1595801ab")
+
+
+def hr_members(workspace_id):
+    """HR 工作区成员列表。
+
+    优先使用内核工作区成员；精简部署下内核成员模型缺失导致返回空时，
+    回退到本工作区已有 HR 授权的用户 + 已被指派为负责人/面试官的用户——
+    防止多租户下枚举全平台用户目录（审查修复 #1：跨租户泄露）。
+    """
+    members = UserManageSerializer().get_user_members(workspace_id)
+    if members:
+        return members
+    # 回退：仅限本工作区已有 HR 角色或被指派过的用户，绝不返回全系统用户
+    access_user_ids = set(
+        HrAccess.objects.filter(workspace_id=workspace_id).values_list("user_id", flat=True)
+    )
+    assigned_user_ids = set()
+    from hr.models import Application, Interview
+    assigned_user_ids.update(
+        Application.objects.filter(workspace_id=workspace_id).exclude(owner_id=None)
+        .values_list("owner_id", flat=True)
+    )
+    assigned_user_ids.update(
+        Interview.objects.filter(workspace_id=workspace_id).exclude(interviewer_user_id=None)
+        .values_list("interviewer_user_id", flat=True)
+    )
+    user_ids = access_user_ids | assigned_user_ids
+    if not user_ids:
+        return []
+    return [
+        {"id": user.id, "nick_name": user.nick_name, "roles": [user.role]}
+        for user in User.objects.filter(id__in=user_ids, is_active=True)
+    ]
+
 
 class AccessService:
     def __init__(self, workspace_id, user_id):
@@ -27,7 +63,7 @@ class AccessService:
             for access in HrAccess.objects.filter(workspace_id=self.workspace_id)
         }
         members = []
-        for member in UserManageSerializer().get_user_members(self.workspace_id):
+        for member in hr_members(self.workspace_id):
             user_id = member["id"]
             members.append({**member, "hr_role": role_map.get(user_id)})
         return members
@@ -47,9 +83,7 @@ class AccessService:
     def set_access(self, items):
         if not isinstance(items, list):
             raise AppApiException(400, "items must be a list")
-        member_ids = {
-            member["id"] for member in UserManageSerializer().get_user_members(self.workspace_id)
-        }
+        member_ids = {member["id"] for member in hr_members(self.workspace_id)}
         normalized = []
         for item in items:
             user_id = self._item_user_id(item)

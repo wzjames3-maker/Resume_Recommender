@@ -2,14 +2,15 @@
   <div class="hr-page p-16-24">
     <div class="flex-between mb-16">
       <div>
+        <div class="eyebrow">OFFER OPERATIONS</div>
         <h2>Offer 管理</h2>
         <span class="color-secondary">统一查看工作区内 Offer 版本、审批与发送状态</span>
       </div>
-      <div class="flex gap-12">
+      <div class="header-actions">
         <el-select v-model="filters.status" placeholder="状态" clearable style="width: 140px" @change="refresh">
           <el-option v-for="(label, value) in offerStatusLabels" :key="value" :label="label" :value="value" />
         </el-select>
-        <el-button type="primary" plain :loading="loading" @click="loadOffers">刷新</el-button>
+        <el-button circle :icon="Refresh" title="刷新 Offer" aria-label="刷新 Offer" :loading="loading" @click="loadOffers" />
       </div>
     </div>
 
@@ -77,6 +78,7 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { Refresh } from '@element-plus/icons-vue'
 import HrApi from '@/api/hr/recruitment'
 import type { Offer, OfferStatus } from '@/api/type/hr'
 import useStore from '@/stores'

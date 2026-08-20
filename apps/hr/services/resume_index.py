@@ -9,7 +9,7 @@
 """
 import uuid_utils.compat as uuid
 from celery_once import AlreadyQueued
-from django.db import transaction
+from django.db import IntegrityError, transaction
 from django.db.models import QuerySet
 
 from common.chunk import text_to_chunk
@@ -42,8 +42,10 @@ def get_resume_knowledge(workspace_id):
 
 def get_or_create_resume_knowledge(workspace_id, user_id):
     """
-    获取或创建工作区的简历语义知识库（幂等）。
+    获取或创建工作区的简历语义知识库（幂等；审查修复 #3：并发安全）。
     embedding 模型取第一个已注册的 EMBEDDING 类型模型；folder 复用 default（非 EE 单租户内核）。
+    并发首传时可能双写——捕获 IntegrityError 后重查返回已有 KB，
+    避免建出两个同名「简历语义索引」导致部分简历永远不可搜。
     """
     knowledge = get_resume_knowledge(workspace_id)
     if knowledge is not None:
@@ -54,19 +56,23 @@ def get_or_create_resume_knowledge(workspace_id, user_id):
     KnowledgeFolder.objects.get_or_create(
         id=_DEFAULT_FOLDER_ID, defaults={"name": _DEFAULT_FOLDER_ID, "workspace_id": "default"}
     )
-    serializer = KnowledgeSerializer.Create(data={"user_id": str(user_id), "workspace_id": workspace_id})
-    serializer.save_base(
-        {
-            "name": _KNOWLEDGE_NAME,
-            "desc": "HR 简历语义索引（自动维护，勿手动编辑）",
-            "folder_id": _DEFAULT_FOLDER_ID,
-            "embedding_model_id": str(embedding_model.id),
-            "type": KnowledgeType.BASE.value,
-            "scope": KnowledgeScope.WORKSPACE.value,
-            "meta": {"hr_protected": True},
-        },
-        with_valid=True,
-    )
+    try:
+        serializer = KnowledgeSerializer.Create(data={"user_id": str(user_id), "workspace_id": workspace_id})
+        serializer.save_base(
+            {
+                "name": _KNOWLEDGE_NAME,
+                "desc": "HR 简历语义索引（自动维护，勿手动编辑）",
+                "folder_id": _DEFAULT_FOLDER_ID,
+                "embedding_model_id": str(embedding_model.id),
+                "type": KnowledgeType.BASE.value,
+                "scope": KnowledgeScope.WORKSPACE.value,
+                "meta": {"hr_protected": True},
+            },
+            with_valid=True,
+        )
+    except IntegrityError:
+        # 并发双写——另一个线程/进程已抢先创建，重查返回已有 KB
+        pass
     return get_resume_knowledge(workspace_id)
 
 
@@ -128,6 +134,35 @@ def index_resume(workspace_id, user_id, resume, text, chat_fn, stats=None, chunk
     return str(document_id)
 
 
+_PIECE_MAX = 100
+_PIECE_BOUNDARY = "。；;！？!?\n，,"
+
+
+def _split_pieces(text, max_len=_PIECE_MAX):
+    """把文本按段落/句读边界拆成 <=max_len 的子段（对半找最近断点，无断点硬切）。
+
+    用于稀疏检索：短段关键词密度高、命中更准；密集仍对整段向量化（embedding 内部按 chunks 拆分）。
+    """
+    text = text.strip()
+    if not text:
+        return []
+    if len(text) <= max_len:
+        return [text]
+    mid = len(text) // 2
+    lo = max(0, mid - max_len // 2)
+    hi = min(len(text), mid + max_len // 2)
+    best = -1
+    for i in range(lo, hi):
+        if text[i] in _PIECE_BOUNDARY:
+            if best == -1 or abs(i - mid) < abs(best - mid):
+                best = i
+    if best > 0:
+        left = text[:best].rstrip(_PIECE_BOUNDARY).strip()
+        right = text[best:].lstrip(_PIECE_BOUNDARY).strip()
+        if left and right:
+            return _split_pieces(left, max_len) + _split_pieces(right, max_len)
+    return [text[:max_len], *(_split_pieces(text[max_len:], max_len) if text[max_len:] else [])]
+
 def _create_document_with_chunks(knowledge, user_id, file_name, chunks):
     """自建 Document/Paragraph（原子）：chunks = ["{title}\n{chunk}" ...]（title 入向量）；
     content 字段保持原文。字段构造对照 kernel paragraph.py:419-426 与 document.py:1085-1097。"""
@@ -144,21 +179,27 @@ def _create_document_with_chunks(knowledge, user_id, file_name, chunks):
             user_id=user_id,
         )
         document.save()
-        paragraph_list = [
-            Paragraph(
-                id=uuid.uuid7(),
-                document_id=document_id,
-                knowledge_id=knowledge.id,
-                content=chunk["content"],
-                title=chunk["title"],
-                chunks=[
-                    f"{chunk['title']}\n{c}" if chunk["title"] else c
-                    for c in text_to_chunk(chunk["content"])
-                ],
-                position=index + 1,
-            )
-            for index, chunk in enumerate(chunks)
-        ]
+        paragraph_list = []
+        position = 0
+        for chunk in chunks:
+            # 稀疏友好：超长 chunk 按句读边界拆成 <=100 字子段，一个子段一条 paragraph；
+            # 密集仍对子段向量化（chunks 字段由 embedding 内部按 text_to_chunk 拆分）。
+            for piece in _split_pieces(chunk["content"]):
+                position += 1
+                paragraph_list.append(
+                    Paragraph(
+                        id=uuid.uuid7(),
+                        document_id=document_id,
+                        knowledge_id=knowledge.id,
+                        content=piece,
+                        title=chunk["title"],
+                        chunks=[
+                            f"{chunk['title']}\n{c}" if chunk["title"] else c
+                            for c in text_to_chunk(piece)
+                        ],
+                        position=position,
+                    )
+                )
         if paragraph_list:
             QuerySet(Paragraph).bulk_create(paragraph_list)
     return str(document_id)

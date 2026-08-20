@@ -1,0 +1,330 @@
+{
+ "workspace": "default",
+ "seed": 42,
+ "imported": 30,
+ "skipped": 0,
+ "failed": 0,
+ "records": [
+  {
+   "key": "4d1b5dc3d014",
+   "file_name": "ds_4d1b5dc3d014.txt",
+   "candidate_id": "01a01048-10ec-76c3-aeef-a74c2fc2ac3c",
+   "document_id": "01a01048-1102-7d53-88b5-88e7ffec3e91",
+   "name": "庞炎",
+   "skills": [
+    "excel",
+    "数据分析"
+   ],
+   "years_experience": 15,
+   "highest_degree": ""
+  },
+  {
+   "key": "9f258fdfce29",
+   "file_name": "ds_9f258fdfce29.txt",
+   "candidate_id": "01a01048-1717-72e0-9dea-666233c7511e",
+   "document_id": "01a01048-171d-79f2-90bc-f68193b61bcf",
+   "name": "姚苑",
+   "skills": [],
+   "years_experience": 20,
+   "highest_degree": "本科"
+  },
+  {
+   "key": "5b3351e0ec72",
+   "file_name": "ds_5b3351e0ec72.txt",
+   "candidate_id": "01a01048-1ab7-7b22-91a7-49d89b2ad03e",
+   "document_id": "01a01048-1abe-7973-8bdc-70ca8d4c9349",
+   "name": "范超发",
+   "skills": [
+    "ppt"
+   ],
+   "years_experience": 18,
+   "highest_degree": "博士"
+  },
+  {
+   "key": "019ba53df6c6",
+   "file_name": "ds_019ba53df6c6.txt",
+   "candidate_id": "01a01048-1e6d-78b3-88b8-37914ba4e7a8",
+   "document_id": "01a01048-1e73-7191-8f6d-a566213bca4d",
+   "name": "吕刚顺",
+   "skills": [],
+   "years_experience": 23,
+   "highest_degree": ""
+  },
+  {
+   "key": "6a83ccbb5ca1",
+   "file_name": "ds_6a83ccbb5ca1.txt",
+   "candidate_id": "01a01048-21e2-75c2-b9bc-a55a4b992c96",
+   "document_id": "01a01048-21e8-7142-a98b-1ad4794f6ff8",
+   "name": "严裕",
+   "skills": [],
+   "years_experience": 28,
+   "highest_degree": "本科"
+  },
+  {
+   "key": "3d353fd881fd",
+   "file_name": "ds_3d353fd881fd.txt",
+   "candidate_id": "01a01048-2664-73a0-aad8-3dc4892c8b46",
+   "document_id": "01a01048-266a-7e73-b8ae-f84579f464e2",
+   "name": "魏菁竹",
+   "skills": [],
+   "years_experience": 19,
+   "highest_degree": "博士"
+  },
+  {
+   "key": "64765929e42c",
+   "file_name": "ds_64765929e42c.txt",
+   "candidate_id": "01a01048-2a00-72b1-99f9-7193629a498a",
+   "document_id": "01a01048-2a07-7680-98a3-c000e1edb1bf",
+   "name": "纪欢",
+   "skills": [
+    "ppt"
+   ],
+   "years_experience": 20,
+   "highest_degree": "本科"
+  },
+  {
+   "key": "cfcf927bd690",
+   "file_name": "ds_cfcf927bd690.txt",
+   "candidate_id": "01a01048-2e53-7913-bd17-4213882978e9",
+   "document_id": "01a01048-2e5a-76d2-85a8-918b8a8e2b1d",
+   "name": "陶荣融",
+   "skills": [
+    "数据分析"
+   ],
+   "years_experience": 20,
+   "highest_degree": "博士"
+  },
+  {
+   "key": "4eab54f092b3",
+   "file_name": "ds_4eab54f092b3.txt",
+   "candidate_id": "01a01048-332f-7723-bd7d-6dd206268f4c",
+   "document_id": "01a01048-3335-7361-a3fb-a3a2f3238b15",
+   "name": "昌承",
+   "skills": [],
+   "years_experience": 15,
+   "highest_degree": "本科"
+  },
+  {
+   "key": "089cd0234d5f",
+   "file_name": "ds_089cd0234d5f.txt",
+   "candidate_id": "01a01048-36ad-7bb0-bd0f-1d62089f7095",
+   "document_id": "01a01048-36b4-7822-8afe-b5d902564e68",
+   "name": "康国",
+   "skills": [],
+   "years_experience": 21,
+   "highest_degree": "博士"
+  },
+  {
+   "key": "a5a0da3191c3",
+   "file_name": "ds_a5a0da3191c3.txt",
+   "candidate_id": "01a01048-3ae2-7042-9cf6-693dc99d0958",
+   "document_id": "01a01048-3ae8-7210-8038-e57ed3652dc2",
+   "name": "成雁真",
+   "skills": [],
+   "years_experience": null,
+   "highest_degree": "硕士"
+  },
+  {
+   "key": "9bbc6fe2f8f8",
+   "file_name": "ds_9bbc6fe2f8f8.txt",
+   "candidate_id": "01a01048-3e66-7710-9392-818218accb09",
+   "document_id": "01a01048-3e6c-7ec3-ab6e-dc4f8173a18f",
+   "name": "章惠滢",
+   "skills": [],
+   "years_experience": 22,
+   "highest_degree": "硕士"
+  },
+  {
+   "key": "5aa96dced7e3",
+   "file_name": "ds_5aa96dced7e3.txt",
+   "candidate_id": "01a01048-4225-71b2-b827-9142cef292d4",
+   "document_id": "01a01048-422c-7342-a586-d7de8f5b8d88",
+   "name": "廉露",
+   "skills": [
+    "数据分析"
+   ],
+   "years_experience": 15,
+   "highest_degree": "硕士"
+  },
+  {
+   "key": "8571a30c3be0",
+   "file_name": "ds_8571a30c3be0.txt",
+   "candidate_id": "01a01048-461d-7ab3-9a2a-fee749633aea",
+   "document_id": "01a01048-4623-7611-991c-be938d5c9f13",
+   "name": "项保志",
+   "skills": [],
+   "years_experience": 14,
+   "highest_degree": ""
+  },
+  {
+   "key": "721a1374f870",
+   "file_name": "ds_721a1374f870.txt",
+   "candidate_id": "01a01048-497a-7212-bca4-edaa591dc8a1",
+   "document_id": "01a01048-4981-7181-b11b-aa07f29db702",
+   "name": "俞行林",
+   "skills": [
+    "c++"
+   ],
+   "years_experience": null,
+   "highest_degree": ""
+  },
+  {
+   "key": "f4198cb690cf",
+   "file_name": "ds_f4198cb690cf.txt",
+   "candidate_id": "01a01048-4d08-7141-ba9d-69a33883a3e6",
+   "document_id": "01a01048-4d0e-7d32-ba8d-6751648a7672",
+   "name": "戚素姬",
+   "skills": [],
+   "years_experience": 6,
+   "highest_degree": "硕士"
+  },
+  {
+   "key": "df9eeb0c8cb2",
+   "file_name": "ds_df9eeb0c8cb2.txt",
+   "candidate_id": "01a01048-504a-7321-95a6-a2e10c8a4787",
+   "document_id": "01a01048-5050-7041-8701-8bbe5fa51761",
+   "name": "鲍英纯",
+   "skills": [],
+   "years_experience": 15,
+   "highest_degree": "本科"
+  },
+  {
+   "key": "8be8e2f72ab8",
+   "file_name": "ds_8be8e2f72ab8.txt",
+   "candidate_id": "01a01048-5534-7873-8cdf-b122b63ce129",
+   "document_id": "01a01048-553b-7873-a666-87f1c208077f",
+   "name": "郝芳馨",
+   "skills": [],
+   "years_experience": null,
+   "highest_degree": "博士"
+  },
+  {
+   "key": "a0f3ba56cdcf",
+   "file_name": "ds_a0f3ba56cdcf.txt",
+   "candidate_id": "01a01048-5966-71e3-bda7-aa78be4d0024",
+   "document_id": "01a01048-596c-7462-9087-c72c2a7df2a1",
+   "name": "史伟龙",
+   "skills": [],
+   "years_experience": 19,
+   "highest_degree": "硕士"
+  },
+  {
+   "key": "c1e46dc478d6",
+   "file_name": "ds_c1e46dc478d6.txt",
+   "candidate_id": "01a01048-5c71-75f2-be8d-7055b1638664",
+   "document_id": "01a01048-5c78-7da2-bd9e-557c2e4766f5",
+   "name": "邵慧勤",
+   "skills": [],
+   "years_experience": 20,
+   "highest_degree": "本科"
+  },
+  {
+   "key": "5d8b9d565738",
+   "file_name": "ds_5d8b9d565738.txt",
+   "candidate_id": "01a01048-60d8-7bb2-9a08-16c328721eaf",
+   "document_id": "01a01048-60de-78b3-a55a-49d876116299",
+   "name": "史婷",
+   "skills": [],
+   "years_experience": 3,
+   "highest_degree": ""
+  },
+  {
+   "key": "65fc4779938c",
+   "file_name": "ds_65fc4779938c.txt",
+   "candidate_id": "01a01048-6364-7153-a9f8-293b1cbb17dc",
+   "document_id": "01a01048-636a-7c40-9e42-ca46b6e95a36",
+   "name": "萧洁",
+   "skills": [],
+   "years_experience": 12,
+   "highest_degree": ""
+  },
+  {
+   "key": "da1cde62e453",
+   "file_name": "ds_da1cde62e453.txt",
+   "candidate_id": "01a01048-67a8-7d00-a363-b4cd5a0fcdc1",
+   "document_id": "01a01048-67af-7471-bd59-3d96f2b78740",
+   "name": "席聪馨",
+   "skills": [
+    "数据分析"
+   ],
+   "years_experience": 23,
+   "highest_degree": ""
+  },
+  {
+   "key": "ea3cdd3639e1",
+   "file_name": "ds_ea3cdd3639e1.txt",
+   "candidate_id": "01a01048-6bf8-7232-afa7-f952b0f7316a",
+   "document_id": "01a01048-6bfe-7a60-bf9b-a1cd74ebb99a",
+   "name": "项毓琦",
+   "skills": [],
+   "years_experience": 12,
+   "highest_degree": "本科"
+  },
+  {
+   "key": "7090e8d5a20a",
+   "file_name": "ds_7090e8d5a20a.txt",
+   "candidate_id": "01a01048-6e29-7ff0-b1cf-47a266b189ac",
+   "document_id": "01a01048-6e31-7772-829b-a605bc122e51",
+   "name": "姜羽妍",
+   "skills": [
+    "项目管理"
+   ],
+   "years_experience": 27,
+   "highest_degree": "博士"
+  },
+  {
+   "key": "5b55686868af",
+   "file_name": "ds_5b55686868af.txt",
+   "candidate_id": "01a01048-7205-7783-af16-e6cb12169660",
+   "document_id": "01a01048-720b-7fd1-ae1a-a4b4d7fc2f95",
+   "name": "江冰纨",
+   "skills": [],
+   "years_experience": 7,
+   "highest_degree": "博士"
+  },
+  {
+   "key": "16260f375e92",
+   "file_name": "ds_16260f375e92.txt",
+   "candidate_id": "01a01048-7658-7273-b83a-2900999b2715",
+   "document_id": "01a01048-765d-77b1-8232-97dca2c6906f",
+   "name": "康德厚",
+   "skills": [],
+   "years_experience": 9,
+   "highest_degree": ""
+  },
+  {
+   "key": "e105108a443e",
+   "file_name": "ds_e105108a443e.txt",
+   "candidate_id": "01a01048-7990-73c2-be64-253e9ab1626d",
+   "document_id": "01a01048-7997-7293-8270-6e8f614a2def",
+   "name": "何全",
+   "skills": [
+    "linux"
+   ],
+   "years_experience": 25,
+   "highest_degree": "本科"
+  },
+  {
+   "key": "f3fb6f12de9f",
+   "file_name": "ds_f3fb6f12de9f.txt",
+   "candidate_id": "01a01048-7e07-7bf0-934b-89c6b11fd648",
+   "document_id": "01a01048-7e0c-7161-9ad8-1e758887207c",
+   "name": "计邦",
+   "skills": [],
+   "years_experience": 21,
+   "highest_degree": "博士"
+  },
+  {
+   "key": "ba1e289ea6a6",
+   "file_name": "ds_ba1e289ea6a6.txt",
+   "candidate_id": "01a01048-812e-71a3-92bf-431d11899142",
+   "document_id": "01a01048-8135-73b1-bf6b-c887696f88a9",
+   "name": "项云霭",
+   "skills": [
+    "数据分析"
+   ],
+   "years_experience": 26,
+   "highest_degree": "博士"
+  }
+ ]
+}

@@ -21,7 +21,7 @@ from knowledge.vector.pg_vector import EmbeddingSearch, KeywordsSearch
 
 from common.exception.app_exception import AppApiException
 
-from hr.models import Candidate, CandidateSkill, CandidateStatus, ResumeFile
+from hr.models import Candidate, CandidateSkill, CandidateStatus, ResumeDatabase, ResumeFile
 from hr.services.ai_parser import parse_search_skills
 from hr.services.audit import write_audit_log
 from hr.services.query_understand import degree_words, extract_slots, norm_city
@@ -150,6 +150,93 @@ def _sparse_query(query, max_terms=6):
     return " ".join(terms[:max_terms])
 
 
+def _keyword_terms(query, max_terms=8):
+    """关键字腿取词：jieba 切词去停用词（与 _sparse_query 同词表）。"""
+    import jieba
+
+    stopwords = {"的", "了", "有", "和", "与", "过", "做", "在", "人", "我", "你", "他", "是", "会", "熟悉", "精通", "经验", "工作", "候选人", "负责"}
+    return [t for t in jieba.lcut(query) if t.strip() and t not in stopwords and len(t) > 1][:max_terms]
+
+
+_KEYWORD_MAX_COVERAGE = 0.5  # keyword 腿词频上限：命中候选人比例超过即视为无区分度高频词剔除
+_KEYWORD_MIN_COVERAGE_ABS = 30  # 高频剔除的小语料下限：命中数低于该绝对值不触发剔除（防小库误杀）
+
+
+def _keyword_recall_docs(query, workspace_id, resume_file_scope, max_docs=100, document_ids=None):
+    """关键字腿（保证召回）：查询词在简历原文/段落中 OR ILIKE 命中即纳入混合检索。
+
+    返回 ({document_id: {"terms": [匹配词], "paragraph": {id,title,content}}}, dropped_terms)；
+    原文(raw_text)优先（docx 解析文本），段落内容兜底（覆盖无 raw_text 的存量简历，内容=原文保真切片）。
+    高频无区分度词（命中面超 _KEYWORD_MAX_COVERAGE）从 keyword 腿剔除——否则 OR 语义 + 常见词
+    （开发/客户/内容/销售…）会把大量无关简历追加进结果（实测「Python 后端开发」曾追加 72 个
+    不含 Python 的简历）；命中多个查询词的简历优先排序。
+    document_ids（审查修复 #4）：限定 keyword 腿召回范围，防止限定单候选人/单文档检索时
+    返回全工作区其他候选人简历（作用域泄露）。
+    """
+    terms = _keyword_terms(query)
+    if not terms:
+        return {}, []
+    from hr.models import ResumeFile
+
+    from knowledge.models import Paragraph
+
+    resume_qs = ResumeFile.objects.filter(
+        workspace_id=workspace_id, **resume_file_scope, document_id__isnull=False
+    )
+    # 审查修复 #4：限定 keyword 腿召回范围到指定文档集（防止 candidate_id/document_ids 作用域泄露）
+    if document_ids:
+        resume_qs = resume_qs.filter(document_id__in=document_ids)
+    resume_doc_ids = list(resume_qs.values_list("document_id", flat=True))
+    doc2cand = {
+        str(r["document_id"]): str(r["candidate_id"])
+        for r in resume_qs.values("document_id", "candidate_id")
+        if r["candidate_id"]
+    }
+    total = len(doc2cand)
+    cover_threshold = max(_KEYWORD_MIN_COVERAGE_ABS, int(total * _KEYWORD_MAX_COVERAGE))
+    kept_terms = []
+    dropped = []
+    term_rows = {}  # term -> [paragraph row]
+    raw_term_docs = {}  # term -> set(doc_id)
+    for term in terms:
+        para_rows = list(
+            Paragraph.objects.filter(
+                document_id__in=resume_doc_ids, content__icontains=term, is_active=True
+            ).values("id", "document_id", "title", "content")
+        )
+        raw_docs = set(
+            str(doc_id)
+            for doc_id in resume_qs.filter(raw_text__icontains=term).values_list("document_id", flat=True)
+        )
+        hit_cands = {doc2cand[str(row["document_id"])] for row in para_rows if str(row["document_id"]) in doc2cand}
+        hit_cands |= {doc2cand[doc_id] for doc_id in raw_docs if doc_id in doc2cand}
+        if total and len(hit_cands) > cover_threshold:
+            dropped.append(term)
+            continue
+        kept_terms.append(term)
+        term_rows[term] = para_rows
+        raw_term_docs[term] = raw_docs
+
+    para_hits = {}
+    for term in kept_terms:
+        for row in term_rows[term]:
+            doc_id = str(row["document_id"])
+            entry = para_hits.setdefault(doc_id, {"terms": [], "paragraph": None})
+            if term not in entry["terms"]:
+                entry["terms"].append(term)
+            if entry["paragraph"] is None:
+                entry["paragraph"] = {
+                    "id": str(row["id"]), "title": row["title"] or "", "content": (row["content"] or "")[:400],
+                }
+        for doc_id in raw_term_docs[term]:
+            entry = para_hits.setdefault(doc_id, {"terms": [], "paragraph": None})
+            if term not in entry["terms"]:
+                entry["terms"].append(term)
+    # 命中多个查询词的简历优先（OR 语义下的粗相关排序），最多 max_docs
+    ordered = sorted(para_hits.items(), key=lambda kv: len(kv[1]["terms"]), reverse=True)[:max_docs]
+    return dict(ordered), dropped
+
+
 def _recall_dual(query, knowledge, embedding_model, candidate_k, similarity, use_sparse=True, document_ids=None):
     """一次 embed，双路独立召回。返回 {dense: [...], sparse: [...], query_embedding, sparse_failed}。
     结果项: {paragraph_id, similarity}。document_ids（T4）：结构化预筛后的文档集，限定召回范围。"""
@@ -237,7 +324,7 @@ def _aggregate(paragraphs, hr_role):
     resumes = []
     resume_by_doc = {}
     if doc_ids:
-        resumes = list(QuerySet(ResumeFile).filter(document_id__in=doc_ids).select_related("candidate"))
+        resumes = list(QuerySet(ResumeFile).filter(document_id__in=doc_ids).select_related("candidate", "resume_database"))
         resume_by_doc = {str(r.document_id): r for r in resumes}
     resume_map = {}
     for p in paragraphs:
@@ -409,9 +496,101 @@ def _scope_document_ids(workspace_id, candidate_id, document_ids):
     ]
 
 
+def _resolve_resume_database_ids(workspace_id, resume_database_id=None, resume_database_ids=None):
+    raw_ids = resume_database_ids if resume_database_ids is not None else resume_database_id
+    if raw_ids is None or raw_ids == "" or raw_ids == []:
+        return []
+    if isinstance(raw_ids, str):
+        raw_ids = [item.strip() for item in raw_ids.split(",") if item.strip()]
+    if not isinstance(raw_ids, (list, tuple, set)):
+        raise AppApiException(400, "resume_database_ids must be an array")
+    normalized = list(dict.fromkeys(str(item) for item in raw_ids if str(item).strip()))
+    if len(normalized) > 50:
+        raise AppApiException(400, "最多同时查询 50 个简历库")
+    databases = list(ResumeDatabase.objects.filter(
+        workspace_id=workspace_id, status="ACTIVE", id__in=normalized
+    ).values_list("id", flat=True))
+    database_map = {str(database_id): database_id for database_id in databases}
+    if len(database_map) != len(normalized):
+        raise AppApiException(400, "简历库不存在、无权访问或已归档")
+    return [database_map[database_id] for database_id in normalized]
+
+
 def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
                    mode="auto", hr_role=None, user_id=None, llm_model=None, rerank_model=None,
-                   candidate_id=None, document_ids=None):
+                   candidate_id=None, document_ids=None, resume_database_id=None, resume_database_ids=None):
+    """简历语义检索入口（包装 _search_resumes_impl + 关键字腿）。
+
+    三路混合检索：dense（块向量语义） + sparse（块词法） + keyword（简历原文/段落 OR 命中保证召回）。
+    关键字腿在 impl 返回后统一追加，覆盖所有模式与早期返回路径；语义结果已有条目打 keyword 标记。
+    """
+    result = _search_resumes_impl(
+        workspace_id, query, top_k=top_k, recall_k=recall_k, similarity=similarity,
+        mode=mode, hr_role=hr_role, user_id=user_id, llm_model=llm_model, rerank_model=rerank_model,
+        candidate_id=candidate_id, document_ids=document_ids,
+        resume_database_id=resume_database_id, resume_database_ids=resume_database_ids,
+    )
+    if result.get("items") is None:
+        result["items"] = []
+    items = result["items"]
+    meta = result.get("meta") or {}
+    selected_database_ids = _resolve_resume_database_ids(
+        workspace_id, resume_database_id=resume_database_id, resume_database_ids=resume_database_ids
+    )
+    resume_file_scope = {}
+    if selected_database_ids:
+        resume_file_scope = {"database_memberships__resume_database_id__in": selected_database_ids}
+    scope_doc_ids = meta.get("scope_document_ids")
+    keyword_docs, dropped_terms = _keyword_recall_docs(query, workspace_id, resume_file_scope,
+                                                        document_ids=scope_doc_ids)
+    kw_added = 0
+    if keyword_docs:
+        kw_by_doc = {str(k): v for k, v in keyword_docs.items()}
+        seen_doc_ids = {item["document_id"] for item in items if item.get("document_id")}
+        for item in items:
+            if item.get("document_id") in kw_by_doc:
+                item["keyword"] = True
+        missing = [doc_id for doc_id in kw_by_doc if doc_id not in seen_doc_ids]
+        if missing:
+            resumes = {
+                str(r.document_id): r
+                for r in QuerySet(ResumeFile)
+                .filter(document_id__in=missing, **resume_file_scope)
+                .select_related("candidate")
+            }
+            slots = meta.get("slots") or {}
+            hard_slots = bool(slots.get("years_min") is not None or slots.get("degree_level") is not None or slots.get("cities"))
+            start_rank = len(items) + 1
+            for doc_id in missing:
+                rf = resumes.get(doc_id)
+                if rf is None or rf.candidate is None or rf.candidate.status != CandidateStatus.ACTIVE:
+                    continue
+                if hard_slots and not _candidate_matches_hard_slots(rf.candidate, slots):
+                    continue
+                info = kw_by_doc[doc_id]
+                items.append({
+                    "rank": start_rank,
+                    "candidate": _mask_for_role(rf.candidate, hr_role),
+                    "resume": {"id": str(rf.id), "file_name": rf.file_name, "extension": rf.extension},
+                    "score": {"keyword": True, "terms": info["terms"]},
+                    "paragraphs": [info["paragraph"]] if info["paragraph"] else [],
+                    "document_id": doc_id,
+                    "keyword": True,
+                })
+                start_rank += 1
+                kw_added += 1
+    meta["keyword_recall"] = {
+        "applied": bool(keyword_docs),
+        "terms": _keyword_terms(query),
+        "dropped_terms": dropped_terms,
+        "added": kw_added,
+    }
+    return result
+
+
+def _search_resumes_impl(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
+                         mode="auto", hr_role=None, user_id=None, llm_model=None, rerank_model=None,
+                         candidate_id=None, document_ids=None, resume_database_id=None, resume_database_ids=None):
     """
     简历语义检索入口。返回 {"items": [...], "meta": {...}}。
     模式 A（整句）/ 模式 B（技能复合，auto 自动判定）。
@@ -436,6 +615,22 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
 
     # 可选范围限定（§八）：document_ids 优先；candidate_id 解析其简历文档集
     scope_document_ids = _scope_document_ids(workspace_id, candidate_id, document_ids)
+    selected_database_ids = _resolve_resume_database_ids(
+        workspace_id, resume_database_id=resume_database_id, resume_database_ids=resume_database_ids
+    )
+    resume_file_scope = {}
+    if selected_database_ids:
+        resume_file_scope = {"database_memberships__resume_database_id__in": selected_database_ids}
+        database_document_ids = list(
+            QuerySet(ResumeFile).filter(
+                workspace_id=workspace_id, **resume_file_scope, document_id__isnull=False
+            ).values_list("document_id", flat=True)
+        )
+        if scope_document_ids is None:
+            scope_document_ids = database_document_ids
+        else:
+            database_document_set = set(database_document_ids)
+            scope_document_ids = [doc_id for doc_id in scope_document_ids if doc_id in database_document_set]
 
     knowledge = get_resume_knowledge(workspace_id)
     if knowledge is None:
@@ -448,11 +643,22 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
 
     meta = {"mode": mode, "search_type": "", "skills": [], "recall": {}, "rerank": {},
             "aggregation": {}, "elapsed_ms": {}, "query": {"length": len(query), "truncated": False}}
+    if selected_database_ids:
+        meta["scope"] = {
+            "applied": True,
+            "resume_database_ids": [str(database_id) for database_id in selected_database_ids],
+            "database_count": len(selected_database_ids),
+        }
+    # 审查修复 #4：scope_document_ids 下传到 keyword 腿，防止限定单候选人/单文档检索时
+    # keyword 补位返回全工作区其他候选人简历（作用域泄露）
+    if scope_document_ids is not None:
+        meta["scope_document_ids"] = [str(doc_id) for doc_id in scope_document_ids]
 
     # ---------- 查询理解 v1（T4）：规则槽位（年限/学历/城市 + 语义词） ----------
+    candidate_scope = {"resumefile__database_memberships__resume_database_id__in": selected_database_ids} if selected_database_ids else {}
     city_list = list(
         QuerySet(Candidate)
-        .filter(workspace_id=workspace_id, status=CandidateStatus.ACTIVE)
+        .filter(workspace_id=workspace_id, status=CandidateStatus.ACTIVE, **candidate_scope)
         .exclude(current_city="")
         .values_list("current_city", flat=True)
         .distinct()
@@ -488,22 +694,16 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
         meta["mode"] = "phrase"
 
     # ---------- 结构化预筛（T4/T7，整句/混合/Skills 模式；G1：精确条件由 SQL 保证） ----------
-    # 技能维度仅整句/混合模式接入（T7：LLM 已解析出技能且 <2 时 AND 上 candidate_skill EXISTS）；
-    # skills 模式的技能命中由模式 B 自身（结构化路 + 语义路 OR 合并）负责，预筛只保年限/学历/城市——
-    # 避免与 candidate_skill EXISTS 双重收窄、回填稀疏期误杀（审查修复 F1，owner 决策：不含技能维度）。
+    # 新架构（LLM 只切片、正则只抽身份字段）：技能不再是结构化字段，技能词改由
+    # 关键字腿（原文/段落 ILIKE）+ 稀疏（BM25）+ 密集（语义）在文本里命中。
+    # 预筛只保留真实结构化硬条件（年限/学历/城市），不再 AND candidate_skill EXISTS——
+    # 否则存量回填技能数据会把技能词查询误杀成 prefilter_empty（技能维度移除）。
     # 显式 dense 模式不接预筛（消融纯净性，评测口径依赖该契约）。
-    skill_norms = [normalize_skill(s) for s in skills]
-    hard = (
-        slots["years_min"] is not None
-        or slots["degree_level"] is not None
-        or bool(slots["cities"])
-        or bool(skill_norms)
-    )
-    # skills 模式门控只认硬条件槽位（年限/学历/城市）：技能词恒非空会使 hard 恒真，
-    # 空条件时不应触发全量预筛（避免大库全量 IN 子句与误导性 applied 标记，复审 P3-1）
     hard_slots = slots["years_min"] is not None or slots["degree_level"] is not None or bool(slots["cities"])
-    if (mode in ("phrase", "hybrid") and hard) or (mode == "skills" and hard_slots):
+    if hard_slots and mode in ("phrase", "hybrid", "skills"):
         q = Q()
+        if selected_database_ids:
+            q &= Q(id__in=QuerySet(ResumeFile).filter(**resume_file_scope).values_list("candidate_id", flat=True))
         if slots["years_min"] is not None:
             # 年限未知（NULL）纳入但排序靠后（years_unknown 标记），不静默消失（R2）
             q &= Q(years_experience__gte=slots["years_min"]) | Q(years_experience__isnull=True)
@@ -511,24 +711,19 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
             q &= Q(highest_degree__in=degree_words(slots["degree_level"]))
         for city in slots["cities"]:
             q &= Q(current_city=city) | Q(current_city=norm_city(city)) | Q(current_city=norm_city(city) + "市")
-        if mode in ("phrase", "hybrid") and skill_norms and QuerySet(CandidateSkill).filter(
-            candidate__workspace_id=workspace_id, candidate__status=CandidateStatus.ACTIVE
-        ).exists():
-            # 表空（未回填/语料无技能）时跳过技能维度，避免 EXISTS 空表误杀整条查询（迁移期兼容）
-            q &= Q(skill_rows__skill_norm__in=skill_norms)
         candidate_ids = list(
             QuerySet(Candidate)
             .filter(workspace_id=workspace_id, status=CandidateStatus.ACTIVE)
             .filter(q)
             .values_list("id", flat=True)
-            .distinct()  # F4：技能维度联表 __in 可能产生重复行（防御性，当前路径最多 1 个技能词）
+            .distinct()
         )
         meta["prefilter"]["candidate_count"] = len(candidate_ids)
         doc_ids = []
         if candidate_ids:
             doc_ids = list(
                 QuerySet(ResumeFile)
-                .filter(candidate_id__in=candidate_ids, document_id__isnull=False)
+                .filter(candidate_id__in=candidate_ids, document_id__isnull=False, **resume_file_scope)
                 .values_list("document_id", flat=True)
             )
         meta["prefilter"]["resume_count"] = len(doc_ids)
@@ -547,7 +742,7 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
             if not slots["semantic_query"]:
                 structured_resumes = list(
                     QuerySet(ResumeFile)
-                    .filter(candidate_id__in=candidate_ids, document_id__isnull=False)
+                    .filter(candidate_id__in=candidate_ids, document_id__isnull=False, **resume_file_scope)
                     .select_related("candidate")
                     .order_by(F("candidate__years_experience").desc(nulls_last=True), "-update_time")
                 )
@@ -585,7 +780,9 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
             scope_set = set(scope_document_ids)
             prefilter_ids = [doc_id for doc_id in prefilter_ids if doc_id in scope_set]
         meta["scope"] = {"applied": True, "document_count": len(scope_document_ids),
-                         "restricted_count": len(prefilter_ids)}
+                         "restricted_count": len(prefilter_ids),
+                         "resume_database_ids": [str(database_id) for database_id in selected_database_ids],
+                         "database_count": len(selected_database_ids)}
 
     # ---------- 模式 B：Skill-AND ----------
     if mode == "skills" and len(skills) >= 2:
@@ -776,7 +973,7 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
         agg_doc_ids = [a["document_id"] for a in aggregated if a.get("document_id")]
         agg_resumes = {
             str(rf.document_id): rf
-            for rf in QuerySet(ResumeFile).filter(document_id__in=agg_doc_ids).select_related("candidate")
+            for rf in QuerySet(ResumeFile).filter(document_id__in=agg_doc_ids, **resume_file_scope).select_related("candidate")
         }
         aggregated = [
             a for a in aggregated

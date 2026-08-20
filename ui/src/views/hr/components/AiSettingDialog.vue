@@ -84,6 +84,7 @@ function save() {
       MsgSuccess('AI 设置已保存')
       visible.value = false
     })
+    .catch(() => {})
     .finally(() => {
       saving.value = false
     })

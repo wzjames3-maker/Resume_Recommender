@@ -33,7 +33,6 @@ from hr.models import (
 )
 from hr.services.audit import write_audit_log
 from users.models import User
-from users.serializers.user import UserManageSerializer
 
 _DEFAULT_STAGES = [
     ("APPLIED", "待筛选", 1),
@@ -163,7 +162,9 @@ class ApplicationService:
             user_id = uuid.UUID(str(value))
         except (ValueError, TypeError) as exc:
             raise AppApiException(400, "interviewer_user_id is invalid") from exc
-        member_ids = {member["id"] for member in UserManageSerializer().get_user_members(self.workspace_id)}
+        from hr.serializers.access import hr_members
+
+        member_ids = {member["id"] for member in hr_members(self.workspace_id)}
         if user_id not in member_ids:
             raise AppApiException(400, "User is not a workspace member")
         return user_id

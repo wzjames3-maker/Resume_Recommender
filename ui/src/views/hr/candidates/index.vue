@@ -1,26 +1,38 @@
 <template>
   <div class="hr-page p-16-24">
-    <div class="flex-between mb-16">
-      <div>
-        <h2>候选人</h2>
-        <span class="color-secondary">维护招聘候选人与职位指派</span>
+    <div class="database-detail-header mb-16">
+      <div class="detail-heading">
+        <el-button link :icon="ArrowLeft" @click="router.push('/hr/candidates')">返回{{ currentDatabaseId ? '多库管理' : '简历数据库' }}</el-button>
+        <div>
+          <div class="eyebrow">CANDIDATE RECORDS</div>
+          <h2>{{ currentDatabase?.name || '全部候选人' }}</h2>
+          <span class="color-secondary">{{ currentDatabaseId ? '当前库内的候选人档案、简历和来源信息' : '跨库查看候选人档案、简历和来源信息' }}</span>
+        </div>
       </div>
       <div class="flex gap-12">
-        <el-button v-if="isHrOperator" plain @click="openResumeUpload()">上传简历</el-button>
+        <el-dropdown v-if="isHrOperator" trigger="click" @command="onImportCommand">
+          <el-button plain>导入候选人<el-icon class="el-icon--right"><ArrowDown /></el-icon></el-button>
+          <template #dropdown>
+            <el-dropdown-menu>
+              <el-dropdown-item command="upload">上传简历（docx/txt）</el-dropdown-item>
+              <el-dropdown-item v-if="isHrAdmin" command="csv">CSV 批量导入</el-dropdown-item>
+            </el-dropdown-menu>
+          </template>
+        </el-dropdown>
+        <el-button v-if="isHrAdmin" plain @click="router.push('/hr/resumes/databases')">库管理</el-button>
         <el-button v-if="isHrAdmin" plain @click="aiSettingVisible = true">AI 设置</el-button>
-        <el-button plain @click="router.push('/hr/search')">语义检索</el-button>
+        <el-button plain @click="router.push({ path: '/hr/search', query: { database_id: currentDatabaseId } })">库内检索</el-button>
         <el-button v-if="isHrAdmin" plain :loading="exporting" @click="exportCandidates">导出</el-button>
-        <el-button v-if="isHrAdmin" plain @click="importDialogVisible = true">批量导入</el-button>
         <el-button v-if="isHrOperator" type="primary" @click="openCandidateDialog()">新建候选人</el-button>
       </div>
       <input ref="resumeInputRef" type="file" multiple accept=".docx,.txt" class="hidden-input" @change="handleResumeFiles" />
     </div>
 
     <el-card style="--el-card-padding: 0" v-loading="loading">
-      <div class="p-16 border-b flex gap-12">
-        <el-input v-model="filters.name" placeholder="按姓名搜索" clearable @change="refresh" />
-        <el-input v-model="filters.city" placeholder="按城市搜索" clearable @change="refresh" />
-        <el-input v-model="filters.skills" placeholder="按技能搜索" clearable @change="refresh" />
+      <div class="filter-toolbar p-16 border-b">
+        <el-input v-model="filters.name" placeholder="按姓名搜索" clearable />
+        <el-input v-model="filters.city" placeholder="按城市搜索" clearable />
+        <el-input v-model="filters.skills" placeholder="技能 / 简历关键词（逗号分隔，全部命中）" clearable />
         <el-input-number v-model="filters.years_min" :min="0" :max="99" placeholder="最低年限" @change="refresh" style="width: 140px" />
         <el-input-number v-model="filters.years_max" :min="0" :max="99" placeholder="最高年限" @change="refresh" style="width: 140px" />
         <el-select v-model="filters.highest_degree" placeholder="学历" clearable @change="refresh" style="width: 120px">
@@ -29,6 +41,9 @@
         <el-select v-model="filters.source" placeholder="来源" clearable @change="refresh" style="width: 140px">
           <el-option v-for="(label, value) in channelLabels" :key="value" :label="label" :value="value" />
         </el-select>
+        <el-select v-if="!currentDatabaseId" v-model="filters.resume_database_id" placeholder="简历库" clearable :loading="databaseLoading" @change="refresh" style="width: 170px">
+          <el-option v-for="database in databases" :key="database.id" :label="database.name" :value="database.id" />
+        </el-select>
         <el-select v-model="filters.status" placeholder="状态" clearable @change="refresh" style="width: 140px">
           <el-option label="在库" value="ACTIVE" />
           <el-option label="已归档" value="ARCHIVED" />
@@ -36,6 +51,7 @@
         <el-button :type="filters.owner_id ? 'primary' : 'default'" plain @click="toggleMyCandidates">待我处理</el-button>
         <el-input v-if="isHrOperator" v-model="aiQuery" placeholder="AI 搜索：如 找 3 年以上 Python 经验在上海的人" clearable @keyup.enter="aiSearch" style="width: 300px" />
         <el-button v-if="isHrOperator" type="primary" plain :loading="aiSearching" @click="aiSearch">AI 搜索</el-button>
+        <el-button plain @click="resetCandidateFilters">重置筛选</el-button>
       </div>
 
       <AppTable :data="candidates" :pagination-config="pagination" @change-page="loadCandidates" @size-change="refresh">
@@ -361,13 +377,14 @@
 
 <script setup lang="ts">
 import { computed, onMounted, onUnmounted, reactive, ref, watch } from 'vue'
+import { debounce } from 'lodash-es'
 import { useRoute, useRouter } from 'vue-router'
+import { ArrowDown, ArrowLeft } from '@element-plus/icons-vue'
 import AppTable from '@/components/app-table/index.vue'
 import AiSettingDialog from '@/views/hr/components/AiSettingDialog.vue'
 import HrApi from '@/api/hr/recruitment'
-import AuthorizationApi from '@/api/system/resource-authorization'
 import type { UploadFile } from 'element-plus'
-import type { Candidate, CandidateDetail, ConsentStatus, ContactPreference, ImportReport, Job, RelationType, ResumeChannel, ResumeFile, ResumeFlowLog, ResumeUploadResult } from '@/api/type/hr'
+import type { Candidate, CandidateDetail, ConsentStatus, ContactPreference, ImportReport, Job, RelationType, ResumeChannel, ResumeDatabase, ResumeFile, ResumeFlowLog, ResumeUploadResult } from '@/api/type/hr'
 import useStore from '@/stores'
 import { MsgConfirm, MsgError, MsgSuccess } from '@/utils/message'
 import {
@@ -394,9 +411,11 @@ const exporting = ref(false)
 const candidates = ref<Candidate[]>([])
 const openJobs = ref<Job[]>([])
 const members = ref<WorkspaceMember[]>([])
+const databases = ref<ResumeDatabase[]>([])
+const databaseLoading = ref(false)
 const filters = reactive({
   name: '', city: '', skills: '', years_min: null as number | null, years_max: null as number | null,
-  highest_degree: '', source: '', status: '', owner_id: '',
+  highest_degree: '', source: '', status: '', owner_id: '', resume_database_id: '',
 })
 const pagination = reactive({ current_page: 1, page_size: 20, total: 0 })
 const candidateDialogVisible = ref(false)
@@ -422,6 +441,17 @@ const route = useRoute()
 const router = useRouter()
 const isHrAdmin = computed(() => user.getHrRole() === 'ADMIN')
 const isHrOperator = computed(() => user.getHrRole() === 'OPERATOR' || user.getHrRole() === 'ADMIN')
+const currentDatabaseId = computed(() => typeof route.params.databaseId === 'string' ? route.params.databaseId : '')
+const currentDatabase = computed(() => databases.value.find((database) => database.id === currentDatabaseId.value) || null)
+filters.resume_database_id = currentDatabaseId.value
+// 文本筛选输入防抖（300ms），避免每字符触发请求；选择类仍用 @change 立即刷新
+const debouncedRefresh = debounce(() => refresh(), 300)
+const _watchName = watch(() => filters.name, debouncedRefresh)
+const _watchCity = watch(() => filters.city, debouncedRefresh)
+const _watchSkills = watch(() => filters.skills, debouncedRefresh)
+void _watchName
+void _watchCity
+void _watchSkills
 const candidateForm = reactive({
   name: '', email: '', phone: '', current_city: '', target_city: '', highest_degree: '',
   years_experience: null as number | null, source: '', note: '',
@@ -440,13 +470,44 @@ function complianceMissing(candidate: Candidate) {
 }
 
 function loadMembers() {
-  AuthorizationApi.getUserMember(user.getWorkspaceId() || '').then((response) => {
+  HrApi.getMembers().then((response) => {
     members.value = response.data || []
   }).catch(() => {})
 }
 
+function loadDatabases() {
+  databaseLoading.value = true
+  HrApi.getResumeDatabases().then((response) => {
+    databases.value = (response.data || []).filter((database) => database.status === 'ACTIVE')
+  }).catch(() => {}).finally(() => { databaseLoading.value = false })
+}
+
 function toggleMyCandidates() {
   filters.owner_id = filters.owner_id ? '' : user.userInfo?.id || ''
+  refresh()
+}
+
+function onImportCommand(cmd: string) {
+  if (cmd === 'upload') {
+    const databaseId = currentDatabaseId.value || undefined
+    router.push({ path: '/hr/resumes/upload', query: databaseId ? { database_id: databaseId } : {} })
+  } else if (cmd === 'csv') {
+    importDialogVisible.value = true
+  }
+}
+
+function resetCandidateFilters() {
+  filters.name = ''
+  filters.city = ''
+  filters.skills = ''
+  filters.years_min = null
+  filters.years_max = null
+  filters.highest_degree = ''
+  filters.source = ''
+  filters.status = ''
+  filters.owner_id = ''
+  filters.resume_database_id = currentDatabaseId.value
+  aiQuery.value = ''
   refresh()
 }
 
@@ -497,10 +558,11 @@ function handleRowCommand(command: string, row: Candidate) {
 }
 
 function loadCandidates() {
+  loading.value = true
   HrApi.getCandidates(pagination, filters).then((response) => {
     candidates.value = response.data.records
     pagination.total = response.data.total
-  })
+  }).catch(() => {}).finally(() => { loading.value = false })
 }
 
 function refresh() {
@@ -680,8 +742,10 @@ function handleResumeFiles(event: Event) {
   const files = input.files ? Array.from(input.files) : []
   input.value = ''
   if (files.length === 0) return
+  const targetDatabase = databases.value.find((database) => database.is_system || database.is_default) || databases.value[0]
+  if (!targetDatabase) { MsgError('暂无可用简历库，请刷新后重试'); return }
   uploadDialogVisible.value = true
-  HrApi.uploadResumes(files, uploadChannel.value)
+  HrApi.uploadResumes(files, uploadChannel.value, [targetDatabase.id])
     .then((response) => {
       uploadResults.value = response.data
       const pendingIds = uploadResults.value.filter((record) => record.status === 'PENDING').map((record) => record.resume_id)
@@ -851,9 +915,20 @@ function openCandidateFromQuery() {
 
 onMounted(() => {
   loadMembers()
+  loadDatabases()
   loadCandidates()
   openCandidateFromQuery()
 })
+watch(currentDatabaseId, (databaseId) => {
+  if (databaseId && filters.resume_database_id !== databaseId) {
+    filters.resume_database_id = databaseId
+    loadCandidates()
+  } else if (!databaseId && filters.resume_database_id) {
+    filters.resume_database_id = ''
+    loadCandidates()
+  }
+})
+
 watch(() => route.query.candidate_id, (candidateId) => {
   if (typeof candidateId === 'string' && candidateId) {
     openCandidateDetail({ id: candidateId } as Candidate)
@@ -884,6 +959,9 @@ onUnmounted(stopResumePolling)
 
 <style scoped>
 .hr-page { min-width: 0; }
+.database-detail-header { display: flex; justify-content: space-between; align-items: flex-start; gap: 20px; }
+.detail-heading { display: flex; align-items: flex-start; gap: 12px; }
+.detail-heading h2 { margin: 0 0 4px; }
 .candidate-name { font-weight: 600; }
 .gap-12 { gap: 12px; }
 .gap-4 { gap: 4px; }

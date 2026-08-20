@@ -2,11 +2,14 @@
   <div class="hr-page p-16-24">
     <div class="flex-between mb-16">
       <div>
+        <div class="eyebrow">ONBOARDING HANDOFF</div>
         <h2>入职交接</h2>
-        <span class="color-secondary">Offer 接受后的 HRIS/OA/人工清单交接记录（联系方式已脱敏）</span>
+        <span class="color-secondary">跟踪 Offer 接受后的 HRIS、OA 与人工清单交接（联系方式已脱敏）</span>
       </div>
-      <el-button type="primary" plain :loading="loading" @click="loadHandoffs">刷新</el-button>
-      <el-button type="primary" plain @click="openConfig">交接配置</el-button>
+      <div class="header-actions">
+        <el-button circle :icon="Refresh" title="刷新交接记录" aria-label="刷新交接记录" :loading="loading" @click="loadHandoffs" />
+        <el-button type="primary" plain :icon="Setting" @click="openConfig">交接配置</el-button>
+      </div>
     </div>
 
     <el-card style="--el-card-padding: 0" v-loading="loading">
@@ -74,6 +77,7 @@
 
 <script setup lang="ts">
 import { onMounted, reactive, ref } from 'vue'
+import { Refresh, Setting } from '@element-plus/icons-vue'
 import HrApi from '@/api/hr/recruitment'
 import type { HandoffRecord } from '@/api/type/hr'
 import { MsgConfirm, MsgSuccess } from '@/utils/message'

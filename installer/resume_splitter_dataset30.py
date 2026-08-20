@@ -2,9 +2,9 @@
 """
     @project: MaxKB
     @file： resume_splitter_dataset30.py
-    @desc：数据集 30 份简历切片效果测试：label_studio.json OCR 原文 → sanitize(含分号转行) → LLM 切片（不向量化）。
+    @desc：数据集 30 份简历切片效果测试：项目 数据集/train.json 结构化记录 → sanitize → LLM 切片（不向量化）；兼容旧 Label Studio 原文回退。
           保真度量 = 非空白字符序列一致（内容无改写，允许空行归属差异）。
-          用法：SENSENOVA_API_KEY=... python installer/resume_splitter_dataset30.py [份数默认30] [随机种子默认42]
+          用法：MAXKB_CONFIG_TYPE=ENV SENSENOVA_API_KEY=... python installer/resume_splitter_dataset30.py [份数默认30] [随机种子默认42]
 """
 import json
 import os
@@ -14,21 +14,64 @@ import statistics
 import sys
 import time
 
-sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "apps"))
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, os.path.join(ROOT, "apps"))
+os.environ.setdefault("MAXKB_CONFIG_TYPE", "ENV")
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "maxkb.settings")
+
+import django  # noqa: E402
+
+django.setup()
 
 from hr.services.resume_splitter import mask_pii, sanitize_resume_text, split_resume_text  # noqa: E402
 
 _COUNT = int(sys.argv[1]) if len(sys.argv) > 1 else 30
 _SEED = int(sys.argv[2]) if len(sys.argv) > 2 else 42
-LABEL_JSON = "/tmp/ds192080/label_studio.json"
+DATASET_JSON = os.path.join(ROOT, "数据集", "train.json")
+LEGACY_LABEL_JSON = "/tmp/ds192080/label_studio.json"
 MIN_LEN = 20
 
 
+def _record_to_text(record):
+    """将项目结构化训练集渲染为不含联系方式和敏感属性的切片输入。"""
+    lines = []
+    if record.get("姓名"):
+        lines.append("姓名：" + str(record["姓名"]))
+    education = record.get("教育经历") or []
+    if education:
+        lines.append("【教育经历】")
+        for item in education:
+            lines.append("- 院校：%s | 学位：%s | 毕业时间：%s" % (
+                item.get("毕业院校", ""), item.get("学位", ""), item.get("毕业时间", "")
+            ))
+    work = record.get("工作经历") or []
+    if work:
+        lines.append("【工作经历】")
+        for item in work:
+            lines.append("- 时间：%s | 单位：%s | 职务：%s" % (
+                item.get("工作时间", ""), item.get("工作单位", ""), item.get("职务", "")
+            ))
+            if item.get("工作内容"):
+                lines.append("  内容：" + str(item["工作内容"]))
+    projects = record.get("项目经历") or []
+    if projects:
+        lines.append("【项目经历】")
+        for item in projects:
+            lines.append("- 项目：%s | 时间：%s" % (item.get("项目名称", ""), item.get("项目时间", "")))
+            if item.get("项目责任"):
+                lines.append("  职责：" + str(item["项目责任"]))
+    return "\n".join(lines)
+
+
 def load_tasks():
-    with open(LABEL_JSON, encoding="utf-8") as fh:
+    if os.path.exists(DATASET_JSON):
+        with open(DATASET_JSON, encoding="utf-8") as fh:
+            data = json.load(fh)
+        records = data.values() if isinstance(data, dict) else data
+        return [text for record in records if (text := _record_to_text(record)) and len(text) >= MIN_LEN]
+    with open(LEGACY_LABEL_JSON, encoding="utf-8") as fh:
         tasks = json.load(fh)
-    texts = [t["data"]["text"] for t in tasks if t.get("data", {}).get("text")]
-    return texts
+    return [t["data"]["text"] for t in tasks if t.get("data", {}).get("text")]
 
 
 def sample_texts(texts, count, seed):

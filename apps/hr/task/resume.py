@@ -16,7 +16,7 @@ from hr.services.audit import write_audit_log
 from hr.services.flow_log import log_flow
 from hr.services.resume_index import ResidualPIIError, delete_resume_index, index_resume
 from hr.services.resume_parser import extract_text_from_docx, extract_text_from_txt, parse_resume_text
-from hr.services.resume_splitter import sanitize_resume_text
+from hr.services.resume_splitter import sanitize_resume_text, split_resume_with_skills
 from models_provider.tools import get_model_instance_by_model_workspace_id
 from hr.services.storage import get_storage
 from ops import celery_app
@@ -76,6 +76,17 @@ def parse_resume_task(resume_id):
             detail={"length": len(text), "lines": text.count("\n") + 1, "source": resume.extension, "text": text},
         )
         parsed = parse_resume_text(text)
+        # 设计：LLM 只负责切片；技能/城市/学历等字段不做规则解析（正则只抽姓名/电话/邮箱），
+        # 统一由切片与混合检索（关键字+稀疏+密集）按需处理。
+        # 预切片为空时回退 _index_resume 内部切片；失败不阻塞建档。
+        chat_fn = _llm_chat_fn(resume.workspace_id)
+        pre_split = None
+        if chat_fn is not None:
+            try:
+                chunks, _, split_stats = split_resume_with_skills(text, chat_fn)
+                pre_split = {"chunks": chunks, "stats": split_stats}
+            except Exception:
+                pre_split = None
         with transaction.atomic():
             candidate = Candidate.objects.create(
                 workspace_id=resume.workspace_id,
@@ -94,8 +105,13 @@ def parse_resume_task(resume_id):
             resume.candidate = candidate
             resume.status = ResumeStatus.SUCCESS
             resume.error_message = ""
-            resume.save(update_fields=["candidate", "status", "error_message", "update_time"])
-        _index_resume(resume, text)
+            resume.raw_text = text
+            resume.save(update_fields=["candidate", "status", "error_message", "raw_text", "update_time"])
+        _index_resume(
+            resume, text,
+            chunks=(pre_split or {}).get("chunks"),
+            split_stats=(pre_split or {}).get("stats"),
+        )
     except Exception as exc:
         resume.status = ResumeStatus.FAILED
         resume.error_message = str(exc)
@@ -114,13 +130,13 @@ def _llm_chat_fn(workspace_id):
     return lambda prompt: model.invoke(prompt).content
 
 
-def _index_resume(resume, text):
+def _index_resume(resume, text, chunks=None, split_stats=None):
     """
     简历语义索引（清洗→切片→建文档→向量化）。失败只记录 error_message，不阻塞候选人建档。
     每个节点写流转日志（ResumeFlowLog）。
     """
     chat_fn = _llm_chat_fn(resume.workspace_id)
-    if chat_fn is None:
+    if chat_fn is None and chunks is None:
         log_flow(resume.workspace_id, "SPLIT", status="FAILED", resume_id=resume.id,
                  error_message="HR AI 模型未配置，无法切片")
         resume.error_message = "语义索引失败: HR AI 模型未配置"
@@ -132,9 +148,12 @@ def _index_resume(resume, text):
             resume.workspace_id, "SANITIZE", resume_id=resume.id,
             detail={"before": len(text), "after": len(cleaned), "cleaned": cleaned},
         )
-        stats = {}
+        stats = dict(split_stats) if split_stats else {}
         started = time.time()
-        document_id = index_resume(resume.workspace_id, resume.user_id or _SYSTEM_USER_ID, resume, cleaned, chat_fn, stats=stats)
+        document_id = index_resume(
+            resume.workspace_id, resume.user_id or _SYSTEM_USER_ID, resume, cleaned, chat_fn,
+            stats=stats, chunks=chunks,
+        )
         document = QuerySet(Document).filter(id=document_id).first()
         log_flow(
             resume.workspace_id, "DOCUMENT", resume_id=resume.id, document_id=document_id,

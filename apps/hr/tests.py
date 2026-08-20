@@ -37,6 +37,8 @@ from hr.models import (
     Job,
     Offer,
     OnboardingHandoff,
+    ResumeDatabase,
+    ResumeDatabaseMembership,
     ResumeFile,
     ResumeStatus,
 )
@@ -67,11 +69,11 @@ class ResumeParserTests(TestCase):
         self.assertEqual(result["name"], "张三")
         self.assertEqual(result["phone"], "13812345678")
         self.assertEqual(result["email"], "zhangsan@example.com")
-        self.assertEqual(result["current_city"], "杭州")
-        self.assertEqual(result["target_city"], "上海")
-        self.assertEqual(result["highest_degree"], "本科")
-        self.assertEqual(result["years_experience"], 5)
-        self.assertEqual(result["skills"], ["Python", "Django", "PostgreSQL"])
+        # 设计：正则只抽身份字段，其余（城市/学历/年限/技能）留空由切片+检索处理
+        self.assertEqual(result["current_city"], "")
+        self.assertEqual(result["highest_degree"], "")
+        self.assertIsNone(result["years_experience"])
+        self.assertEqual(result["skills"], [])
 
     def test_unknown_fields_stay_empty(self):
         result = parse_resume_text("这是一个没有结构化字段的文本")
@@ -80,28 +82,53 @@ class ResumeParserTests(TestCase):
         self.assertEqual(result["phone"], "")
         self.assertEqual(result["skills"], [])
 
-    def test_ocr_semicolon_flow_city_and_skills(self):
-        """A2 增强：OCR 分号流（籍贯/户籍/个人技能 + 「；」分隔）抽取城市与技能，城市粒度归一。"""
+    def test_identity_fields_only(self):
+        """设计：正则只抽姓名/电话/邮箱，城市/学历/年限/技能不再做规则解析。"""
         text = (
             "简历；姓名；李冠光；出生年月；1933年10月；籍贯；新疆省阿克苏市；政治面貌；群众；"
-            "户籍；澳门省澳门市；个人技能；吃饭喝茶；办公软件；教育背景；"
+            "户籍；澳门省澳门市；个人技能；吃饭喝茶；办公软件；教育背景；现居城市：北京市；工作年限：2年"
         )
         result = parse_resume_text(text)
-        self.assertEqual(result["current_city"], "阿克苏")  # 去「省」前缀与「市」后缀
-        self.assertEqual(result["skills"], ["吃饭喝茶", "办公软件"])
+        self.assertEqual(result["name"], "李冠光")
+        self.assertEqual(result["current_city"], "")
+        self.assertEqual(result["skills"], [])
+        self.assertIsNone(result["years_experience"])
 
-    def test_ocr_city_variants_normalized(self):
-        """A2 增强：直辖市与「X省Y市」形态归一（北京市→北京、河南省信阳市→信阳、上海→上海）。"""
-        for raw, expect in (
-            ("现居城市：北京市", "北京"),
-            ("籍贯：河南省信阳市", "信阳"),
-            ("户口：上海", "上海"),
-            ("所在地区：台湾省高雄市", "高雄"),
-            ("户籍；北京市朝阳区", "北京"),
-        ):
-            result = parse_resume_text(raw + "\n工作年限：2年")
-            self.assertEqual(result["current_city"], expect, raw)
-            self.assertEqual(result["years_experience"], 2, raw)
+    def test_extract_skills_llm_parses_json_array(self):
+        from hr.services.resume_parser import extract_skills_llm
+
+        def chat_fn(prompt):
+            return '["Python", "市场营销", "新媒体运营"]'
+
+        self.assertEqual(
+            extract_skills_llm("姓名：张三\n工作经历：负责 Python 后端与市场营销", chat_fn),
+            ["Python", "市场营销", "新媒体运营"],
+        )
+
+    def test_extract_skills_llm_tolerates_code_fence_and_dedupes(self):
+        from hr.services.resume_parser import extract_skills_llm
+
+        def chat_fn(prompt):
+            return '```json\\n["Python", "python", "市场营销", "新媒体运营"]\\n```'
+
+        result = extract_skills_llm("简历文本", chat_fn)
+        self.assertEqual(result, ["Python", "市场营销", "新媒体运营"])
+
+    def test_extract_skills_llm_filters_junk_and_falls_back_empty(self):
+        from hr.services.resume_parser import extract_skills_llm
+
+        def chat_fn(prompt):
+            return '["负责 Python 后端开发", "熟悉市场营销，具备客户沟通能力", "", "Python"]'
+
+        self.assertEqual(extract_skills_llm("简历文本", chat_fn), ["Python"])
+
+    def test_extract_skills_llm_returns_empty_on_invalid_output(self):
+        from hr.services.resume_parser import extract_skills_llm
+
+        def chat_fn(prompt):
+            return "抱歉，我无法完成该任务。"
+
+        self.assertEqual(extract_skills_llm("简历文本", chat_fn), [])
 
 
 class ResumeFileModelTests(TestCase):
@@ -210,6 +237,42 @@ class AdvancedSearchTests(TestCase):
         self.assertEqual(result["total"], 1)
         self.assertEqual(result["records"][0]["name"], "Alice")
 
+    def test_skills_filter_matches_resume_text(self):
+        """新架构：技能不再是结构化字段（新简历 skills 恒空）——「按技能搜索」改为
+        结构化技能字段 OR 简历原文/正文命中；无技能字段的候选人按正文关键词仍能搜到。"""
+        carol = Candidate.objects.create(
+            name="Carol", workspace_id="workspace-a", skills=[],
+        )
+        KnowledgeFolder.objects.get_or_create(id="default", defaults={"name": "default", "workspace_id": "default"})
+        knowledge = Knowledge.objects.create(
+            id=uuid.uuid7(), workspace_id="workspace-a", name="简历语义索引", desc="",
+            type=KnowledgeType.BASE.value,
+        )
+        document = Document.objects.create(
+            id=uuid.uuid7(), knowledge_id=knowledge.id, name="c.txt", char_length=10,
+        )
+        Paragraph.objects.create(
+            id=uuid.uuid7(), document_id=document.id, knowledge_id=knowledge.id,
+            title="工作经历", content="负责市场活动策划与品牌推广",
+        )
+        ResumeFile.objects.create(
+            workspace_id="workspace-a", candidate=carol, file_name="c.txt", extension="txt",
+            file_path="/tmp/c.txt", file_size=1, sha256="sha-carol-text", source_channel="OTHER",
+            status=ResumeStatus.SUCCESS, document_id=document.id, raw_text="市场营销 销售策划",
+        )
+        # 正文命中（Carol 无技能字段，靠段落/原文关键词命中）
+        result = self.service.page_candidates(1, 20, {"skills": "市场"})
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(result["records"][0]["name"], "Carol")
+        # 结构化技能字段命中不受影响（Bob 的 skills 字段）
+        result = self.service.page_candidates(1, 20, {"skills": "Java"})
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(result["records"][0]["name"], "Bob")
+        # 多词 AND：结构化字段与正文可混用命中（Carol 两个词都在原文/正文，Bob 无）
+        result = self.service.page_candidates(1, 20, {"skills": "市场,销售"})
+        self.assertEqual(result["total"], 1)
+        self.assertEqual(result["records"][0]["name"], "Carol")
+
     def test_degree_and_years_range_filter(self):
         result = self.service.page_candidates(1, 20, {"highest_degree": "硕士", "years_min": "2", "years_max": "4"})
         self.assertEqual(result["total"], 1)
@@ -253,6 +316,37 @@ class JobMatchTests(TestCase):
         result = self.service.match_job_candidates(self.job.id, 1, 20)
         scores = [item["match_score"] for item in result["records"]]
         self.assertEqual(scores, sorted(scores, reverse=True))
+
+    def test_match_keyword_recall_from_resume_content(self):
+        # 技能字段为空但简历正文含需求技能时，关键词召回应纳入匹配（修复：简历正文匹配不到营销候选人）
+        from knowledge.models import Knowledge, KnowledgeFolder, KnowledgeType, Paragraph
+
+        KnowledgeFolder.objects.get_or_create(id="default", defaults={"name": "default", "workspace_id": "default"})
+        carol = Candidate.objects.create(
+            name="Carol", workspace_id="workspace-a", skills=[], current_city="上海",
+            years_experience=2, status="ACTIVE",
+        )
+        knowledge = Knowledge.objects.create(
+            id=uuid.uuid7(), workspace_id="workspace-a", name="简历语义索引", desc="",
+            type=KnowledgeType.BASE.value,
+        )
+        document = Document.objects.create(
+            id=uuid.uuid7(), knowledge_id=knowledge.id, name="c.txt", char_length=10,
+        )
+        Paragraph.objects.create(
+            id=uuid.uuid7(), document_id=document.id, knowledge_id=knowledge.id,
+            title="工作经历", content="负责 Python 后端开发与系统设计",
+        )
+        ResumeFile.objects.create(
+            workspace_id="workspace-a", candidate=carol, file_name="c.txt", extension="txt",
+            file_path="/tmp/c.txt", file_size=1, sha256="sha-carol-kw", source_channel="OTHER",
+            status=ResumeStatus.SUCCESS, document_id=document.id,
+        )
+        result = self.service.match_job_candidates(self.job.id, 1, 20)
+        carol_row = next((r for r in result["records"] if r["name"] == "Carol"), None)
+        self.assertIsNotNone(carol_row)
+        self.assertEqual(carol_row["match_score"], 2)
+        self.assertIn("Python", carol_row["matched_skills"])
 
     def test_match_without_requirements_returns_empty(self):
         self.job.skill_requirements = []
@@ -1005,6 +1099,31 @@ class HrAccessApiTests(_HrApiBase):
         response = self._client(self.operator).get("/admin/api/workspace/workspace-a/hr/audit-logs")
         self.assertEqual(response.status_code, 403)
 
+    def test_members_endpoint_returns_all_active_users(self):
+        # 负责人/面试官下拉数据源：任意 HR 成员可读，包含 ADMIN 角色用户
+        response = self._client(self.operator).get("/admin/api/workspace/workspace-a/hr/members")
+        self.assertEqual(response.status_code, 200)
+        ids = {item["id"] for item in response.json()["data"]}
+        self.assertIn(str(self.admin.id), ids)
+        self.assertIn(str(self.operator.id), ids)
+
+    def test_members_endpoint_denies_non_hr_member(self):
+        response = self._client(self.member).get("/admin/api/workspace/workspace-a/hr/members")
+        self.assertEqual(response.status_code, 403)
+
+    def test_hr_members_fallback_when_kernel_members_empty(self):
+        # 精简部署下内核成员为空时，回退到全部活跃用户（排除内置系统管理员）
+        from unittest.mock import patch
+
+        from hr.serializers.access import hr_members
+
+        with patch("users.serializers.user.UserManageSerializer.get_user_members", return_value=[]):
+            members = hr_members("workspace-a")
+        by_id = {member["id"]: member for member in members}
+        self.assertIn(self.admin.id, by_id)
+        self.assertIn(self.operator.id, by_id)
+        self.assertNotIn("f0dd8f71-e4ee-11ee-8c84-a8a1595801ab", {str(i) for i in by_id})
+
     def test_access_me_returns_current_role(self):
         response = self._client(self.viewer).get("/admin/api/workspace/workspace-a/hr/access/me")
         self.assertEqual(response.status_code, 200)
@@ -1419,6 +1538,19 @@ class InterviewerMineApiTests(_HrApiBase):
             application["id"], {"interviewer_user_id": str(self.interviewer.id)}
         )
         self.interview_id = interview["id"]
+
+    def test_create_interview_with_member_when_kernel_members_empty(self):
+        # 精简部署下内核 get_user_members 返回空时，面试官校验应走 hr_members 回退，不再误报
+        from unittest.mock import patch
+
+        service = ApplicationService("workspace-a", self.admin.id, hr_role="ADMIN")
+        application = Application.objects.filter(workspace_id="workspace-a").first()
+        with patch("users.serializers.user.UserManageSerializer.get_user_members", return_value=[]):
+            interview = service.create_interview(
+                application.id, {"interviewer_user_id": str(self.interviewer.id)}
+            )
+        self.assertEqual(interview["interviewer_user_id"], str(self.interviewer.id))
+        self.assertEqual(interview["interviewer"], "面试官甲")
 
     def test_mine_returns_only_my_interviews(self):
         response = self._client(self.interviewer).get("/admin/api/workspace/workspace-a/hr/interviews/mine")
@@ -2293,6 +2425,29 @@ class ResumeSplitterTests(SimpleTestCase):
     @staticmethod
     def _stub(payload):
         return lambda prompt: payload
+
+    def test_split_with_skills_returns_chunks_and_skills_from_one_call(self):
+        from hr.services.resume_splitter import split_resume_with_skills
+
+        payload = (
+            '{"chunks": ['
+            '{"title": "基本信息", "start_line": 1, "end_line": 1},'
+            '{"title": "教育经历-北京师范大学", "start_line": 3, "end_line": 5},'
+            '{"title": "工作经历-深圳大运置业 后端", "start_line": 6, "end_line": 8}'
+            '], "skills": ["Python", "幕墙系统设计"]}'
+        )
+        chunks, skills, stats = split_resume_with_skills(self._RESUME, self._stub(payload))
+        self.assertEqual(len(chunks), 3)
+        self.assertEqual(skills, ["Python", "幕墙系统设计"])
+        self.assertEqual(stats.get("path"), "llm")
+
+    def test_split_with_skills_fallback_rules_returns_empty_skills(self):
+        from hr.services.resume_splitter import split_resume_with_skills
+
+        chunks, skills, stats = split_resume_with_skills(self._RESUME, self._stub("not a json"))
+        self.assertTrue(len(chunks) >= 1)
+        self.assertEqual(skills, [])
+        self.assertEqual(stats.get("path"), "rules")
 
     def test_sanitize_resume_text(self):
         from hr.services.resume_splitter import sanitize_resume_text
@@ -3311,8 +3466,9 @@ class ResumeSearchTests(TestCase):
         self.assertIn("李冠光", names)  # NULL 年限未被排除
         self.assertTrue(any(i["candidate"]["years_unknown"] for i in items))
 
-    def test_prefilter_skills_exists(self):
-        """T7：技能维度接入预筛——LLM 解析 1 个技能 → phrase 模式 → candidate_skill EXISTS 限定候选集。"""
+    def test_prefilter_skills_no_longer_gates(self):
+        """新架构：技能不再是结构化字段——即使 candidate_skill 有存量数据，技能词查询也不触发预筛，
+        改由语义/关键字腿在文本里命中（技能维度已移除；回归：存量回填数据曾把技能查询误杀成 prefilter_empty）。"""
         from hr.models import CandidateSkill
         from hr.services.resume_search import search_resumes
 
@@ -3331,8 +3487,8 @@ class ResumeSearchTests(TestCase):
             result = search_resumes(self.workspace_id, "会 java 的人", mode="auto",
                                     llm_model=Mock(), hr_role="ADMIN", user_id=self.user.id)
         self.assertEqual(result["meta"]["mode"], "phrase")  # 单技能 → 不升级 skills 模式
-        self.assertTrue(result["meta"]["prefilter"]["applied"])
-        self.assertEqual(result["meta"]["prefilter"]["candidate_count"], 1)  # 仅 java 候选人
+        self.assertFalse(result["meta"]["prefilter"]["applied"])  # 技能词不再触发结构化预筛（无年限/学历/城市）
+        self.assertNotEqual(result["meta"]["search_type"], "prefilter_empty")
         self.assertIn("李冠光", [i["candidate"]["name"] for i in result["items"]])
 
     def test_prefilter_skills_empty_table_fallback(self):
@@ -3836,6 +3992,83 @@ class ResumeSearchTests(TestCase):
         self.assertEqual(result["items"][0]["score"]["hit_vec"], [1, 1])  # java 语义 + python 结构化
         self.assertEqual(len(result["items"][0]["paragraphs"]), 1)  # 段落不重复
 
+    def test_keyword_recall_docs_returns_raw_text_and_paragraph_hits(self):
+        """关键字腿：查询词在简历原文/段落 OR 命中即纳入（混合检索第三条路）。"""
+        from hr.services.resume_search import _keyword_recall_docs
+
+        # 原文命中（raw_text）
+        self.resume.raw_text = "负责微博微信营销推广与品牌运营"
+        self.resume.save(update_fields=["raw_text", "update_time"])
+        self._paragraph("熟悉 Spark 与 Flink 大数据处理", title="工作经历-数据")
+
+        # 命中原文的词
+        hit, dropped = _keyword_recall_docs("微博", self.workspace_id, {})
+        self.assertIn(str(self.document.id), hit)
+        self.assertIn("微博", hit[str(self.document.id)]["terms"])
+        self.assertEqual(dropped, [])
+
+        # 命中段落的词
+        hit2, _ = _keyword_recall_docs("Flink", self.workspace_id, {})
+        self.assertIn(str(self.document.id), hit2)
+        self.assertTrue(hit2[str(self.document.id)]["paragraph"]["content"].startswith("熟悉 Spark"))
+
+    def test_keyword_recall_docs_drops_high_frequency_terms(self):
+        """keyword 腿词频过滤：命中面超过阈值的常见词剔除——否则 OR 语义 + 高频词
+        （如「开发」）会把不含查询主词的无关简历全部追加进结果。"""
+        from hr.services.resume_search import _keyword_recall_docs
+
+        # 让「开发」成为高频词：再建 40 个候选人都含「开发」，超过小语料下限 30
+        for index in range(40):
+            cand = Candidate.objects.create(
+                name=f"高频{index}", workspace_id=self.workspace_id,
+                skills=[], status="ACTIVE",
+            )
+            doc = Document.objects.create(
+                id=uuid.uuid7(), knowledge_id=self.knowledge.id,
+                name=f"h{index}.txt", char_length=10, user_id=self.user.id,
+            )
+            Paragraph.objects.create(
+                id=uuid.uuid7(), document_id=doc.id, knowledge_id=self.knowledge.id,
+                content="负责业务开发与系统维护", title="工作经历", is_active=True,
+            )
+            ResumeFile.objects.create(
+                workspace_id=self.workspace_id, file_name=f"h{index}.txt", extension="txt",
+                file_path=f"/tmp/h{index}.txt", file_size=1,
+                sha256="sha-hf-" + uuid.uuid7().hex, source_channel="OTHER",
+                status=ResumeStatus.SUCCESS, user_id=self.user.id,
+                candidate=cand, document_id=doc.id,
+            )
+        # 「开发」命中面 >50% 被剔除；「Python」命中 0 但保留（冷门词不剔除）
+        hit, dropped = _keyword_recall_docs("Python 开发", self.workspace_id, {})
+        self.assertIn("开发", dropped)
+        self.assertNotIn("Python", dropped)
+        # 剔除高频词后 keyword 腿只剩冷门词；Python 无命中 → 不追加任何简历
+        self.assertEqual(hit, {})
+
+    def test_search_keyword_leg_marks_and_appends_recall(self):
+        """端到端：关键字腿把语义未召回但原文命中的简历追加进结果并打标。"""
+        from unittest.mock import patch
+
+        from hr.services.resume_search import search_resumes
+
+        self.resume.raw_text = "只出现在原文里的冷门词：青铜铸造工艺"
+        self.resume.save(update_fields=["raw_text", "update_time"])
+        self._paragraph("与查询无关的内容", title="基本信息")
+        with patch("hr.services.resume_search.get_embedding_model_by_knowledge_id", return_value=self._fake_embedding_model()), \
+                patch("hr.services.resume_search._recall_dual", return_value={"dense": [], "sparse": [],
+                        "query_embedding": None, "sparse_failed": False}):
+            result = search_resumes(self.workspace_id, "青铜铸造", mode="dense", hr_role="ADMIN", user_id=self.user.id)
+        names = [item["candidate"]["name"] for item in result["items"] if item.get("candidate")]
+        self.assertIn("李冠光", names)
+        kw_item = next(i for i in result["items"] if i.get("keyword") and i["candidate"]["name"] == "李冠光")
+        self.assertTrue(kw_item["score"].get("keyword"))
+
+    def _stub_embeddings(self, results):
+        from unittest.mock import Mock
+
+        m = Mock()
+        m.handle.return_value = results
+        return m
 
 
 class ApplicationV2Tests(TestCase):
@@ -4006,6 +4239,18 @@ class JobCloseV2Tests(TestCase):
         self.assertEqual(page["records"][0]["active_assignment_count"], 1)
         detail = self.recruitment.get_job(self.job.id)
         self.assertEqual(detail["active_assignment_count"], 1)
+
+    def test_job_detail_assignments_aligns_with_frontend(self):
+        # 前端职位展开行候选人列表读取 assignments（含 application_id/current_stage/agent）
+        self._apply()
+        detail = self.recruitment.get_job(self.job.id)
+        self.assertIn("assignments", detail)
+        self.assertEqual(len(detail["assignments"]), 1)
+        row = detail["assignments"][0]
+        self.assertIn("application_id", row)
+        self.assertIn("candidate_name", row)
+        self.assertIn("current_stage", row)
+        self.assertIn("agent", row)
 
 class JobCloseApiTests(_HrApiBase):
     """R2 路由：close-preview / close STRICT|BULK 与权限"""
@@ -6523,4 +6768,241 @@ class HrOffboardingApiTests(_HrApiBase):
         self.assertFalse(HrOffboard.objects.filter(workspace_id=self.workspace).exists())
         self.assertTrue(Application.objects.filter(workspace_id=self.workspace).exists())
         self.assertTrue(Job.objects.filter(workspace_id=self.workspace).exists())
+
+
+class ResumeDatabaseCrudTests(_HrApiBase):
+    """B：ResumeDatabase 0 覆盖补齐（增删改查 + 上传带库 + ResumeFile.save 总库兜底）"""
+
+    def setUp(self):
+        self.workspace = "ws-resume-db-b"
+        self.other_workspace = "ws-resume-db-other"
+        self.admin = self._user("resume-db-admin", "Resume DB Admin")
+        self.operator = self._user("resume-db-operator", "Resume DB Operator")
+        self.viewer = self._user("resume-db-viewer", "Resume DB Viewer")
+        HrAccess.objects.create(workspace_id=self.workspace, user_id=self.admin.id, role="ADMIN")
+        HrAccess.objects.create(workspace_id=self.workspace, user_id=self.operator.id, role="OPERATOR")
+        HrAccess.objects.create(workspace_id=self.workspace, user_id=self.viewer.id, role="VIEWER")
+
+    def test_total_auto_created_on_list(self):
+        # 首次 list 应自动创建总库
+        self.assertEqual(ResumeDatabase.objects.filter(workspace_id=self.workspace).count(), 0)
+        resp = self._client(self.admin).get(f"/admin/api/workspace/{self.workspace}/hr/resume-databases")
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()["data"]
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]["name"], "总库")
+        self.assertTrue(data[0]["is_system"])
+        self.assertEqual(data[0]["status"], "ACTIVE")
+        # 再次创建总库同名应 400，同名业务库亦 400
+        dup = self._client(self.admin).post(
+            f"/admin/api/workspace/{self.workspace}/hr/resume-databases",
+            {"name": "总库", "description": "dup"},
+            format="json",
+        )
+        self.assertEqual(dup.json()["code"], 400)
+
+    def test_create_and_list_business_database(self):
+        # 先触发总库创建
+        self._client(self.admin).get(f"/admin/api/workspace/{self.workspace}/hr/resume-databases")
+        # 创建业务库
+        resp = self._client(self.admin).post(
+            f"/admin/api/workspace/{self.workspace}/hr/resume-databases",
+            {"name": "2026春招-后端", "description": "业务库"},
+            format="json",
+        )
+        self.assertEqual(resp.status_code, 200)
+        biz = resp.json()["data"]
+        self.assertEqual(biz["name"], "2026春招-后端")
+        self.assertFalse(biz["is_system"])
+        # 列表应含总库 + 业务库，按 is_system 排序
+        lst = self._client(self.admin).get(f"/admin/api/workspace/{self.workspace}/hr/resume-databases").json()["data"]
+        self.assertEqual(len(lst), 2)
+        self.assertEqual(lst[0]["name"], "总库")
+        self.assertEqual(lst[1]["name"], "2026春招-后端")
+        # 重复名 400
+        dup = self._client(self.admin).post(
+            f"/admin/api/workspace/{self.workspace}/hr/resume-databases",
+            {"name": "2026春招-后端"},
+            format="json",
+        )
+        self.assertEqual(dup.json()["code"], 400)
+        # VIEWER 无权创建 403
+        denied = self._client(self.viewer).post(
+            f"/admin/api/workspace/{self.workspace}/hr/resume-databases",
+            {"name": "viewer-db"},
+            format="json",
+        )
+        self.assertEqual(denied.status_code, 403)
+
+    def test_total_cannot_be_archived_and_business_archive(self):
+        self._client(self.admin).get(f"/admin/api/workspace/{self.workspace}/hr/resume-databases")
+        biz = self._client(self.admin).post(
+            f"/admin/api/workspace/{self.workspace}/hr/resume-databases",
+            {"name": "待归档库"},
+            format="json",
+        ).json()["data"]
+        total = ResumeDatabase.objects.get(workspace_id=self.workspace, is_system=True)
+        # 总库归档应 400
+        resp = self._client(self.admin).put(f"/admin/api/workspace/{self.workspace}/hr/resume-databases/{total.id}/archive")
+        self.assertEqual(resp.json()["code"], 400)
+        # 业务库归档 200
+        resp = self._client(self.admin).put(f"/admin/api/workspace/{self.workspace}/hr/resume-databases/{biz['id']}/archive")
+        self.assertEqual(resp.status_code, 200)
+        self.assertEqual(resp.json()["data"]["status"], "ARCHIVED")
+        # 归档后再次归档幂等 200
+        resp2 = self._client(self.admin).put(f"/admin/api/workspace/{self.workspace}/hr/resume-databases/{biz['id']}/archive")
+        self.assertEqual(resp2.status_code, 200)
+        # 跨工作区归档应 404（租户隔离）
+        other_admin = self._user("other-admin", "Other")
+        HrAccess.objects.create(workspace_id=self.other_workspace, user_id=other_admin.id, role="ADMIN")
+        other_client = self._client(other_admin)
+        # other workspace 首次 list 会建总库，但 biz 属于原 workspace，other 归档应 404
+        resp = other_client.put(f"/admin/api/workspace/{self.other_workspace}/hr/resume-databases/{biz['id']}/archive")
+        self.assertEqual(resp.status_code, 404)
+
+    @patch("hr.serializers.recruitment.parse_resume_task.delay")
+    def test_upload_with_business_database_creates_both_memberships(self, mock_delay):
+        # 准备总库 + 业务库
+        self._client(self.admin).get(f"/admin/api/workspace/{self.workspace}/hr/resume-databases")
+        biz = self._client(self.admin).post(
+            f"/admin/api/workspace/{self.workspace}/hr/resume-databases",
+            {"name": "业务库A"},
+            format="json",
+        ).json()["data"]
+        total = ResumeDatabase.objects.get(workspace_id=self.workspace, is_system=True)
+        # 上传 1 份 txt，指定业务库（总库由服务端强制追加）
+        content = "姓名：上传测试\n电话：13800001111\n工作经历：Python 后端".encode()
+        uploaded = SimpleUploadedFile("resume.txt", content, content_type="text/plain")
+        resp = self._client(self.operator).post(
+            f"/admin/api/workspace/{self.workspace}/hr/candidates/resumes",
+            {"files": uploaded, "resume_database_ids": str(biz["id"])},
+            format="multipart",
+        )
+        self.assertEqual(resp.status_code, 200)
+        data = resp.json()["data"][0]
+        self.assertEqual(set(data["resume_database_ids"]), {str(total.id), str(biz["id"])})
+        self.assertIn("总库", data["resume_database_names"])
+        self.assertIn("业务库A", data["resume_database_names"])
+        resume = ResumeFile.objects.get(id=data["resume_id"])
+        # resume_database 外键指向总库（兼容字段）
+        self.assertEqual(str(resume.resume_database_id), str(total.id))
+        # 成员关系应含 2 条
+        self.assertEqual(ResumeDatabaseMembership.objects.filter(resume_file=resume).count(), 2)
+        self.assertTrue(ResumeDatabaseMembership.objects.filter(resume_file=resume, resume_database=total).exists())
+        self.assertTrue(ResumeDatabaseMembership.objects.filter(resume_file=resume, resume_database_id=biz["id"]).exists())
+        # 解析任务已派发
+        mock_delay.assert_called_once()
+
+    @patch("hr.serializers.recruitment.parse_resume_task.delay")
+    def test_duplicate_upload_adds_missing_membership(self, mock_delay):
+        self._client(self.admin).get(f"/admin/api/workspace/{self.workspace}/hr/resume-databases")
+        biz = self._client(self.admin).post(
+            f"/admin/api/workspace/{self.workspace}/hr/resume-databases",
+            {"name": "业务库B"},
+            format="json",
+        ).json()["data"]
+        total = ResumeDatabase.objects.get(workspace_id=self.workspace, is_system=True)
+        content = b"duplicate content same sha"
+        # 第一次只进总库
+        uploaded1 = SimpleUploadedFile("dup.txt", content, content_type="text/plain")
+        resp1 = self._client(self.operator).post(
+            f"/admin/api/workspace/{self.workspace}/hr/candidates/resumes",
+            {"files": uploaded1},
+            format="multipart",
+        )
+        self.assertEqual(resp1.status_code, 200)
+        self.assertFalse(resp1.json()["data"][0]["duplicate"])
+        resume_id = resp1.json()["data"][0]["resume_id"]
+        self.assertEqual(ResumeDatabaseMembership.objects.filter(resume_file_id=resume_id).count(), 1)
+        # 第二次同内容（同 sha）上传到业务库，应复用文件且补充成员关系，不新建文件
+        uploaded2 = SimpleUploadedFile("dup2.txt", content, content_type="text/plain")
+        resp2 = self._client(self.operator).post(
+            f"/admin/api/workspace/{self.workspace}/hr/candidates/resumes",
+            {"files": uploaded2, "resume_database_ids": str(biz["id"])},
+            format="multipart",
+        )
+        self.assertEqual(resp2.status_code, 200)
+        self.assertTrue(resp2.json()["data"][0]["duplicate"])
+        self.assertEqual(resp2.json()["data"][0]["resume_id"], resume_id)
+        self.assertEqual(ResumeFile.objects.filter(workspace_id=self.workspace).count(), 1)
+        # 成员关系应增至 2
+        self.assertEqual(ResumeDatabaseMembership.objects.filter(resume_file_id=resume_id).count(), 2)
+        self.assertTrue(ResumeDatabaseMembership.objects.filter(resume_file_id=resume_id, resume_database_id=biz["id"]).exists())
+        self.assertTrue(ResumeDatabaseMembership.objects.filter(resume_file_id=resume_id, resume_database=total).exists())
+        # 去重上传不应再次触发解析
+        self.assertEqual(mock_delay.call_count, 1)
+
+    @patch("hr.serializers.recruitment.parse_resume_task.delay")
+    def test_archived_database_blocks_upload(self, mock_delay):
+        self._client(self.admin).get(f"/admin/api/workspace/{self.workspace}/hr/resume-databases")
+        biz = self._client(self.admin).post(
+            f"/admin/api/workspace/{self.workspace}/hr/resume-databases",
+            {"name": "归档阻断库"},
+            format="json",
+        ).json()["data"]
+        # 归档
+        self._client(self.admin).put(f"/admin/api/workspace/{self.workspace}/hr/resume-databases/{biz['id']}/archive")
+        content = b"archived db test"
+        uploaded = SimpleUploadedFile("archived.txt", content, content_type="text/plain")
+        resp = self._client(self.operator).post(
+            f"/admin/api/workspace/{self.workspace}/hr/candidates/resumes",
+            {"files": uploaded, "resume_database_ids": str(biz["id"])},
+            format="multipart",
+        )
+        # 归档库作为上传目标应 404
+        self.assertEqual(resp.status_code, 404)
+        self.assertEqual(ResumeFile.objects.filter(workspace_id=self.workspace).count(), 0)
+        mock_delay.assert_not_called()
+
+    def test_resumefile_save_low_level_ensures_total(self):
+        # 裸 ORM 创建：先建业务库（此时总库已由 list 触发创建）
+        self._client(self.admin).get(f"/admin/api/workspace/{self.workspace}/hr/resume-databases")
+        biz = self._client(self.admin).post(
+            f"/admin/api/workspace/{self.workspace}/hr/resume-databases",
+            {"name": "低层业务库"},
+            format="json",
+        ).json()["data"]
+        biz = ResumeDatabase.objects.get(id=biz["id"])
+        total = ResumeDatabase.objects.get(workspace_id=self.workspace, is_system=True)
+        # 场景 A：直接用 ResumeFile.objects.create 指定 business，总库成员应自动补齐
+        resume_a = ResumeFile.objects.create(
+            workspace_id=self.workspace,
+            file_name="lowlevel_a.txt",
+            extension="txt",
+            file_path="resume/lowlevel_a.txt",
+            file_size=10,
+            sha256="a" * 64,
+            source_channel="OTHER",
+            resume_database=biz,
+            status=ResumeStatus.PENDING,
+            user_id=self.admin.id,
+        )
+        self.assertEqual(ResumeDatabaseMembership.objects.filter(resume_file=resume_a).count(), 1)
+        self.assertTrue(ResumeDatabaseMembership.objects.filter(resume_file=resume_a, resume_database=total).exists())
+        # resume_database 外键保持业务库（多库以成员关系为准）
+        resume_a.refresh_from_db()
+        self.assertEqual(str(resume_a.resume_database_id), str(biz.id))
+        # 场景 B：全新 workspace 无总库时，裸 save 应自动创建总库
+        fresh_ws = "ws-fresh-total-ensure"
+        fresh_admin = self._user("fresh-admin", "Fresh")
+        HrAccess.objects.create(workspace_id=fresh_ws, user_id=fresh_admin.id, role="ADMIN")
+        self.assertEqual(ResumeDatabase.objects.filter(workspace_id=fresh_ws).count(), 0)
+        resume_b = ResumeFile(
+            workspace_id=fresh_ws,
+            file_name="lowlevel_b.txt",
+            extension="txt",
+            file_path="resume/lowlevel_b.txt",
+            file_size=10,
+            sha256="b" * 64,
+            source_channel="OTHER",
+            status=ResumeStatus.PENDING,
+            user_id=fresh_admin.id,
+        )
+        # 不传 resume_database，save 应自动指向新建总库并建成员关系
+        resume_b.save()
+        self.assertIsNotNone(resume_b.resume_database_id)
+        fresh_total = ResumeDatabase.objects.get(workspace_id=fresh_ws, is_system=True)
+        self.assertEqual(str(resume_b.resume_database_id), str(fresh_total.id))
+        self.assertTrue(ResumeDatabaseMembership.objects.filter(resume_file=resume_b, resume_database=fresh_total).exists())
+        self.assertEqual(fresh_total.name, "总库")
 

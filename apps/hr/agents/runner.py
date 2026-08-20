@@ -16,6 +16,7 @@ from django.utils import timezone
 
 from common.exception.app_exception import AppApiException
 from hr.agents import context, scoring
+from hr.agents.scope import candidate_document_ids, validate_resume_database_ids
 from hr.agents.proposals import expire_pending_proposals, propose
 from hr.models import (
     Application,
@@ -132,7 +133,7 @@ def structured_filter(job, candidate):
     return {"conditions": conditions, "hard_met": hard_met}
 
 
-def _collect_evidence(workspace_id, job, candidate, document_ids):
+def _collect_evidence(workspace_id, job, candidate, document_ids, resume_database_ids=None):
     """在该候选人简历文档集内做软条件语义检索（复用 RRF+rerank，召回入口限集）。"""
     queries = []
     if job.skill_requirements:
@@ -155,6 +156,7 @@ def _collect_evidence(workspace_id, job, candidate, document_ids):
                 rerank_model=None,
                 candidate_id=str(candidate.id),
                 document_ids=document_ids,
+                resume_database_ids=resume_database_ids,
             )
         except AppApiException:
             continue
@@ -295,7 +297,7 @@ def _guard_limits(workspace_id, config, agent_type=_AGENT_TYPE):
     return None
 
 
-def run_screening_agent(application_id, trigger_type=HrAgentTriggerType.EVENT, user_id=None, workspace_id=None):
+def run_screening_agent(application_id, trigger_type=HrAgentTriggerType.EVENT, user_id=None, workspace_id=None, resume_database_ids=None):
     """执行一次 Screening Agent 运行；任何失败 run=FAILED，业务零影响。
     workspace_id 由 API 传入时强制校验归属；事件触发可不传。"""
     application = Application.objects.filter(id=application_id).select_related(
@@ -306,6 +308,7 @@ def run_screening_agent(application_id, trigger_type=HrAgentTriggerType.EVENT, u
     if workspace_id is not None and str(application.workspace_id) != str(workspace_id):
         return None
     workspace_id = application.workspace_id
+    resume_database_ids = validate_resume_database_ids(workspace_id, resume_database_ids)
     actor_id = user_id or application.user_id or _SYSTEM_USER_ID
     config = _config(workspace_id)
     if not config.agent_enable_screening:
@@ -335,6 +338,7 @@ def run_screening_agent(application_id, trigger_type=HrAgentTriggerType.EVENT, u
             "candidate_id": str(application.candidate_id),
             "channel": application.channel,
             "stage_key": application.current_stage.key if application.current_stage else "",
+            "resume_database_ids": resume_database_ids or [],
         },
         prompt_version=_PROMPT_VERSION,
         user_id=actor_id,
@@ -359,21 +363,12 @@ def run_screening_agent(application_id, trigger_type=HrAgentTriggerType.EVENT, u
         filter_result = structured_filter(application.job, application.candidate)
         filter_ctx = context.structured_filter_to_llm(filter_result)
         trace.append({"tool": "structured_filter", "elapsed_ms": int((time.monotonic() - t0) * 1000), "rows": len(filter_result["conditions"])})
-        # 工具 ④ search_resumes（候选人文档集限定）
-        document_ids = [
-            str(doc_id) for doc_id in
-            application.candidate.resume_files.values_list("document_id", flat=True)
-        ] if hasattr(application.candidate, "resume_files") else []
-        from hr.models import ResumeFile
-
-        if not document_ids:
-            document_ids = [
-                str(doc_id) for doc_id in ResumeFile.objects.filter(
-                    candidate=application.candidate, document_id__isnull=False
-                ).values_list("document_id", flat=True)
-            ]
+        # 工具 ④ search_resumes（候选人文档集 + 可选简历库范围限定）
+        document_ids = candidate_document_ids(workspace_id, application.candidate_id, resume_database_ids)
         t0 = time.monotonic()
-        evidence = _collect_evidence(workspace_id, application.job, application.candidate, document_ids)
+        evidence = _collect_evidence(
+            workspace_id, application.job, application.candidate, document_ids, resume_database_ids
+        )
         allowed_paragraph_ids = _allowed_paragraph_ids(evidence)
         trace.append({"tool": "search_resumes", "elapsed_ms": int((time.monotonic() - t0) * 1000), "rows": len(evidence)})
 

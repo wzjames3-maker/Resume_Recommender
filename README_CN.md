@@ -11,8 +11,8 @@ MaxKB RAG 内核 + 传统 ATS 流程 + “提议-确认-执行”的 Agent
 ## 仓库状态
 
 - RAG：**已交付**（pgvector + tsvector、RRF、rerank、Small-to-Big）。
-- ATS：当前代码是旧固定状态机，目标模型为 `Application + JobStage + StageHistory`。
-- Agent：已完成设计，尚未实现。
+- ATS：当前代码以 `Application + JobStage + StageHistory` 为主链；旧固定状态机仅作迁移基线。
+- Agent：D1 Screening、D2 JD/Interview Copilot、D3 Sourcing/沟通草稿及 D4 Agent 工作台首版已实现；Screening 默认关闭，按 workspace 灰度启用；后续补跨页指标、原文定位和反馈重试表单。
 
 ## 权威文档
 
@@ -24,6 +24,7 @@ MaxKB RAG 内核 + 传统 ATS 流程 + “提议-确认-执行”的 Agent
 | `docs/ATS-DESIGN-SPEC.md` | 当前代码事实，仅迁移对照 |
 | `docs/PRD-AGENT-RAG.md` | Agent + RAG 设计 |
 | `docs/RAG-V2-DESIGN.md` | 已交付简历 RAG 设计 |
+| `docs/RESUME-DATABASES.md` | 总库、多业务库和库内页面设计 |
 
 ## 快速开始
 

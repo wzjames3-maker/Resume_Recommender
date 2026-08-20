@@ -22,8 +22,13 @@ from hr.models import (
     Job,
     JobCloseReason,
     JobStatus,
+    Offer,
+    OnboardingHandoff,
     RelationType,
     ResumeChannel,
+    ResumeDatabase,
+    ResumeDatabaseMembership,
+    ResumeDatabaseStatus,
     ResumeFile,
     ResumeStatus,
     TerminationReason,
@@ -36,7 +41,6 @@ from hr.services.application_service import create_default_stages
 from hr.services.storage import get_storage
 from hr.task.resume import parse_resume_task
 from users.models.user import User
-from users.serializers.user import UserManageSerializer
 
 CANDIDATE_EXPORT_FIELDS = [
     "name",
@@ -66,6 +70,118 @@ class RecruitmentService:
         if candidate is None:
             raise NotFound404(404, "Resource not found")
         return candidate
+
+    def _resume_database(self, database_id, active_only=True):
+        try:
+            database_uuid = uuid.UUID(str(database_id))
+        except (ValueError, TypeError) as exc:
+            raise AppApiException(400, "resume_database_id is invalid") from exc
+        queryset = ResumeDatabase.objects.filter(id=database_uuid, workspace_id=self.workspace_id)
+        if active_only:
+            queryset = queryset.filter(status=ResumeDatabaseStatus.ACTIVE)
+        database = queryset.first()
+        if database is None:
+            raise NotFound404(404, "Resume database not found")
+        return database
+
+    def _default_resume_database(self):
+        database = ResumeDatabase.objects.filter(
+            workspace_id=self.workspace_id, status=ResumeDatabaseStatus.ACTIVE, is_system=True
+        ).first()
+        if database is None:
+            database = ResumeDatabase.objects.filter(
+                workspace_id=self.workspace_id, status=ResumeDatabaseStatus.ACTIVE, is_default=True
+            ).first()
+        if database is None:
+            database = ResumeDatabase.objects.create(
+                workspace_id=self.workspace_id, name="总库", is_default=True, is_system=True, user_id=self.user_id
+            )
+        elif not database.is_system:
+            database.is_system = True
+            if database.name == "默认简历库":
+                database.name = "总库"
+            database.save(update_fields=["is_system", "name", "update_time"])
+        return database
+
+    def _resume_databases(self, database_ids=None, include_total=True):
+        if database_ids is None:
+            requested_ids = []
+        elif isinstance(database_ids, str):
+            requested_ids = [value.strip() for value in database_ids.split(",") if value.strip()]
+        elif isinstance(database_ids, (list, tuple, set)):
+            requested_ids = [str(value).strip() for value in database_ids if str(value).strip()]
+        else:
+            raise AppApiException(400, "resume_database_ids must be an array")
+        databases = []
+        seen = set()
+        if include_total:
+            total = self._default_resume_database()
+            databases.append(total)
+            seen.add(str(total.id))
+        for database_id in requested_ids:
+            database = self._resume_database(database_id)
+            if str(database.id) not in seen:
+                databases.append(database)
+                seen.add(str(database.id))
+        if not databases and include_total:
+            databases.append(self._default_resume_database())
+        return databases
+
+    @staticmethod
+    def _attach_resume_databases(resume, databases):
+        ResumeDatabaseMembership.objects.bulk_create(
+            [ResumeDatabaseMembership(resume_file=resume, resume_database=database) for database in databases],
+            ignore_conflicts=True,
+        )
+
+    @staticmethod
+    def _resume_database_output(database):
+        return {
+            "id": str(database.id),
+            "name": database.name,
+            "description": database.description,
+            "status": database.status,
+            "is_default": database.is_default,
+            "is_system": database.is_system,
+            "resume_count": getattr(database, "resume_count", database.resume_memberships.count()),
+            "candidate_count": getattr(database, "candidate_count", database.resume_memberships.values("resume_file__candidate_id").distinct().count()),
+            "pending_count": getattr(database, "pending_count", database.resume_memberships.filter(resume_file__status=ResumeStatus.PENDING).count()),
+            "create_time": database.create_time,
+            "update_time": database.update_time,
+        }
+
+    def list_resume_databases(self):
+        self._default_resume_database()
+        databases = ResumeDatabase.objects.filter(workspace_id=self.workspace_id).annotate(
+            resume_count=Count("resume_memberships__resume_file", distinct=True),
+            candidate_count=Count("resume_memberships__resume_file__candidate", distinct=True),
+            pending_count=Count("resume_memberships__resume_file", filter=Q(resume_memberships__resume_file__status=ResumeStatus.PENDING), distinct=True),
+        ).order_by("-is_system", "-is_default", "create_time")
+        return [self._resume_database_output(database) for database in databases]
+
+    def create_resume_database(self, data):
+        self._require_manage()
+        name = self._required_string(data, "name", 128)
+        if ResumeDatabase.objects.filter(workspace_id=self.workspace_id, name=name).exists():
+            raise AppApiException(400, "同名简历库已存在")
+        description = self._optional_string(data, "description", 512)
+        database = ResumeDatabase.objects.create(
+            workspace_id=self.workspace_id, name=name, description=description, is_default=False, is_system=False, user_id=self.user_id
+        )
+        write_audit_log(self.workspace_id, self.user_id, "CREATE", "OTHER", database.id, detail="resume database created")
+        return self._resume_database_output(database)
+
+    def archive_resume_database(self, database_id):
+        self._require_manage()
+        database = self._resume_database(database_id, active_only=False)
+        if database.is_system or database.is_default:
+            raise AppApiException(400, "总库不能归档")
+        if database.status == ResumeDatabaseStatus.ARCHIVED:
+            return self._resume_database_output(database)
+        database.status = ResumeDatabaseStatus.ARCHIVED
+        database.save(update_fields=["status", "update_time"])
+        write_audit_log(self.workspace_id, self.user_id, "ARCHIVE", "OTHER", database.id, detail="resume database archived")
+        return self._resume_database_output(database)
 
     def _job(self, job_id):
         job = Job.objects.filter(id=job_id, workspace_id=self.workspace_id).first()
@@ -152,7 +268,9 @@ class RecruitmentService:
             user_id = uuid.UUID(str(value))
         except (ValueError, TypeError) as exc:
             raise AppApiException(400, "interviewer_user_id is invalid") from exc
-        member_ids = {member["id"] for member in UserManageSerializer().get_user_members(self.workspace_id)}
+        from hr.serializers.access import hr_members
+
+        member_ids = {member["id"] for member in hr_members(self.workspace_id)}
         if user_id not in member_ids:
             raise AppApiException(400, "User is not a workspace member")
         return user_id
@@ -329,6 +447,17 @@ class RecruitmentService:
         years_max = query.get("years_max")
         source = query.get("source")
         highest_degree = query.get("highest_degree")
+        resume_database_ids = query.getlist("resume_database_ids") if hasattr(query, "getlist") else []
+        if not resume_database_ids:
+            resume_database_ids = query.get("resume_database_ids") or query.get("resume_database_id")
+        if resume_database_ids:
+            databases = self._resume_databases(resume_database_ids, include_total=False)
+            if not databases:
+                queryset = queryset.none()
+            else:
+                queryset = queryset.filter(
+                    resumefile__database_memberships__resume_database_id__in=[database.id for database in databases]
+                ).distinct()
         if name:
             queryset = queryset.filter(name__icontains=name)
         if city:
@@ -343,10 +472,33 @@ class RecruitmentService:
         else:
             queryset = queryset.exclude(status=CandidateStatus.DELETED)
         if skills:
-            for skill in skills.split(","):
-                skill = skill.strip()
-                if skill:
-                    queryset = queryset.filter(skills__contains=[skill])
+            # 新架构（LLM 只切片、正则只抽身份字段）：技能不再是结构化字段，新简历 skills 恒空。
+            # 「按技能搜索」改为每个技能词命中 结构化技能字段 OR 简历原文/正文（raw_text 优先，
+            # 段落兜底覆盖无 raw_text 的存量简历），多词 AND 语义。
+            terms = [term.strip() for term in skills.split(",") if term.strip()]
+            if terms:
+                from knowledge.models import Paragraph
+                skills_q = Q()
+                resume_doc_ids = list(
+                    ResumeFile.objects.filter(workspace_id=self.workspace_id, document_id__isnull=False)
+                    .values_list("document_id", flat=True)
+                )
+                for term in terms:
+                    text_doc_ids = list(
+                        Paragraph.objects.filter(
+                            document_id__in=resume_doc_ids, content__icontains=term, is_active=True
+                        ).values_list("document_id", flat=True)
+                    )
+                    text_candidate_ids = set(
+                        ResumeFile.objects.filter(document_id__in=text_doc_ids)
+                        .values_list("candidate_id", flat=True)
+                    )
+                    text_candidate_ids.update(
+                        ResumeFile.objects.filter(workspace_id=self.workspace_id, raw_text__icontains=term)
+                        .values_list("candidate_id", flat=True)
+                    )
+                    skills_q &= Q(skills__contains=[term]) | Q(id__in=text_candidate_ids)
+                queryset = queryset.filter(skills_q).distinct()
         if highest_degree:
             queryset = queryset.filter(highest_degree=highest_degree)
         if years_min:
@@ -383,13 +535,17 @@ class RecruitmentService:
         return {"total": total, "records": records}
 
     def _attach_duplicate_ids(self, records, candidates):
+        # 批量预取：phone 精确匹配 1 次查询，email 逐条 iexact（大小写不敏感，页内最多 20 条）
+        candidates = list(candidates)
+        phones = {c.phone for c in candidates if c.phone}
+        phone_map = {}
+        if phones:
+            for cand_id, phone in Candidate.objects.filter(workspace_id=self.workspace_id, phone__in=phones).values_list("id", "phone"):
+                phone_map.setdefault(phone, set()).add(cand_id)
         for record, candidate in zip(records, candidates):
             dupes = set()
-            if candidate.phone:
-                dupes.update(
-                    Candidate.objects.filter(workspace_id=self.workspace_id, phone=candidate.phone)
-                    .exclude(id=candidate.id).values_list("id", flat=True)
-                )
+            if candidate.phone and candidate.phone in phone_map:
+                dupes.update(phone_map[candidate.phone] - {candidate.id})
             if candidate.email:
                 dupes.update(
                     Candidate.objects.filter(workspace_id=self.workspace_id, email__iexact=candidate.email)
@@ -696,6 +852,8 @@ class RecruitmentService:
         for record in application_records:
             record["agent"] = proposal_by_target.get(record["application_id"])
         result["applications"] = application_records
+        # 前端职位展开行候选人列表读取 assignments（与 candidates 详情保持一致）
+        result["assignments"] = application_records
         write_audit_log(self.workspace_id, self.user_id, "VIEW_DETAIL", "JOB", job.id)
         return result
 
@@ -766,6 +924,9 @@ class RecruitmentService:
 
     @staticmethod
     def _resume_output(resume):
+        memberships = list(
+            ResumeDatabaseMembership.objects.filter(resume_file=resume).select_related("resume_database")
+        )
         return {
             "id": str(resume.id),
             "file_name": resume.file_name,
@@ -773,6 +934,10 @@ class RecruitmentService:
             "file_size": resume.file_size,
             "sha256": resume.sha256,
             "source_channel": resume.source_channel,
+            "resume_database_id": str(resume.resume_database_id),
+            "resume_database_name": resume.resume_database.name if resume.resume_database_id else "",
+            "resume_database_ids": [str(item.resume_database_id) for item in memberships],
+            "resume_database_names": [item.resume_database.name for item in memberships],
             "status": resume.status,
             "error_message": resume.error_message,
             "document_id": str(resume.document_id) if resume.document_id else None,
@@ -781,8 +946,12 @@ class RecruitmentService:
             "update_time": resume.update_time,
         }
 
-    def upload_resumes(self, files, source_channel):
+    def upload_resumes(self, files, source_channel, resume_database_ids=None):
         self._require_operator()
+        databases = self._resume_databases(resume_database_ids, include_total=True)
+        resume_database = databases[0]
+        database_ids = [str(database.id) for database in databases]
+        database_names = [database.name for database in databases]
         if source_channel not in ResumeChannel.values:
             raise AppApiException(400, "source_channel is invalid")
         records = []
@@ -799,6 +968,8 @@ class RecruitmentService:
             sha256 = digest.hexdigest()
             existing = ResumeFile.objects.filter(workspace_id=self.workspace_id, sha256=sha256).first()
             if existing:
+                self._attach_resume_databases(existing, databases)
+                os.remove(file_path)
                 log_flow(self.workspace_id, "UPLOAD", resume_id=existing.id,
                          detail={"file_name": file_name, "file_size": size, "sha256": sha256,
                                   "extension": extension, "duplicate": True})
@@ -806,6 +977,10 @@ class RecruitmentService:
                     "resume_id": str(existing.id),
                     "file_name": existing.file_name,
                     "status": existing.status,
+                    "resume_database_id": str(existing.resume_database_id),
+                    "resume_database_name": "、".join(database_names),
+                    "resume_database_ids": database_ids,
+                    "resume_database_names": database_names,
                     "sha256": existing.sha256,
                     "duplicate": True,
                     "candidate_id": str(existing.candidate_id) if existing.candidate_id else None,
@@ -820,8 +995,10 @@ class RecruitmentService:
             resume = ResumeFile.objects.create(
                 workspace_id=self.workspace_id, file_name=file_name, extension=extension,
                 file_path=stored, file_size=size, sha256=sha256,
-                source_channel=source_channel, status=ResumeStatus.PENDING, user_id=self.user_id,
+                source_channel=source_channel, resume_database=resume_database,
+                status=ResumeStatus.PENDING, user_id=self.user_id,
             )
+            self._attach_resume_databases(resume, databases)
             log_flow(self.workspace_id, "UPLOAD", resume_id=resume.id,
                      detail={"file_name": file_name, "file_size": size, "sha256": sha256,
                              "extension": extension, "duplicate": False})
@@ -841,6 +1018,10 @@ class RecruitmentService:
                 "resume_id": str(resume.id),
                 "file_name": resume.file_name,
                 "status": status,
+                "resume_database_id": str(resume.resume_database_id),
+                "resume_database_name": "、".join(database_names),
+                "resume_database_ids": database_ids,
+                "resume_database_names": database_names,
                 "sha256": resume.sha256,
                 "duplicate": False,
                 "candidate_id": None,
@@ -991,6 +1172,9 @@ class RecruitmentService:
             primary.save()
             ResumeFile.objects.filter(candidate=secondary).update(candidate=primary)
             Application.objects.filter(candidate=secondary).update(candidate=primary)
+            # 审查修复 #2：先迁移 Offer/OnboardingHandoff 归属再删 secondary，防止 CASCADE 静默销毁
+            Offer.objects.filter(candidate=secondary).update(candidate=primary)
+            OnboardingHandoff.objects.filter(candidate=secondary).update(candidate=primary)
             secondary.delete()
         write_audit_log(self.workspace_id, self.user_id, "MERGE", "CANDIDATE", primary.id, detail=str(secondary_id))
         return self.get_candidate(primary_id)
@@ -1020,13 +1204,26 @@ class RecruitmentService:
         requirements = job.skill_requirements
         requirement_lower = [skill.lower() for skill in requirements]
         candidates = Candidate.objects.filter(workspace_id=self.workspace_id, status=CandidateStatus.ACTIVE)
+        # 简历正文关键词召回：skills 字段常为空/为长句，只要简历正文出现需求技能即纳入匹配
+        # （保证召回，不依赖语义排名与脏技能表）。
+        keyword_hit_ids = self._keyword_match_candidate_ids(requirements)
         records = []
+        scored_ids = set()
         for candidate in candidates:
             score = 0
             matched = []
             candidate_skills_lower = [skill.lower() for skill in candidate.skills]
+            candidate_id_str = str(candidate.id)
             for index, skill in enumerate(requirement_lower):
                 if skill in candidate_skills_lower:
+                    score += 2
+                    matched.append(requirements[index])
+                elif any(skill in csk for csk in candidate_skills_lower):
+                    # 简历解析出的技能常为长短语（如「2.根据市场营销计划」），子串命中更贴合实际
+                    score += 1
+                    matched.append(requirements[index])
+                elif candidate_id_str in keyword_hit_ids.get(skill, ()):
+                    # 简历正文包含需求技能关键词（ILike），确保匹配召回
                     score += 2
                     matched.append(requirements[index])
             if job.city:
@@ -1042,11 +1239,98 @@ class RecruitmentService:
                     "skills": candidate.skills,
                     "match_score": score,
                     "matched_skills": matched,
+                    "create_time": candidate.create_time,
                 })
-        records.sort(key=lambda item: item["match_score"], reverse=True)
+                scored_ids.add(str(candidate.id))
+        # 语义补充：skills 字段常缺失/为长句，结构化匹配会漏掉简历正文相关的候选人。
+        # 用 dense 模式检索简历知识库（显式 dense 跳过结构化技能预筛，避免脏技能表误杀），
+        # 命中简历正文的候选人并入匹配结果；知识库/模型缺失时优雅跳过，不影响结构化结果。
+        semantic_records = self._semantic_match_candidates(job, requirements, scored_ids)
+        # 语义命中补充 create_time（同分时按导入时间排序，近期导入优先展示）
+        if semantic_records:
+            time_map = dict(
+                Candidate.objects.filter(
+                    id__in=[record["candidate_id"] for record in semantic_records]
+                ).values_list("id", "create_time")
+            )
+            for record in semantic_records:
+                record["create_time"] = time_map.get(uuid.UUID(record["candidate_id"]))
+        records.extend(semantic_records)
+        from datetime import datetime as _datetime
+
+        records.sort(
+            key=lambda item: (item["match_score"], item.get("create_time") or _datetime.min),
+            reverse=True,
+        )
         total = len(records)
         start = (current_page - 1) * page_size
         return {"total": total, "records": records[start:start + page_size]}
+
+    def _keyword_match_candidate_ids(self, requirements):
+        """按需求技能在简历正文（paragraph）中做 ILike 关键词召回，返回 {skill_lower: set(candidate_id_str)}。"""
+        from knowledge.models import Paragraph
+
+        result = {}
+        for skill in requirements:
+            if not skill or not skill.strip():
+                continue
+            doc_ids = list(
+                Paragraph.objects.filter(content__icontains=skill).values_list("document_id", flat=True)
+            )
+            if not doc_ids:
+                continue
+            candidate_ids = set(
+                str(cid)
+                for cid in ResumeFile.objects.filter(
+                    workspace_id=self.workspace_id, document_id__in=doc_ids
+                ).values_list("candidate_id", flat=True)
+            )
+            if candidate_ids:
+                result[skill.lower()] = candidate_ids
+        return result
+
+    def _semantic_match_candidates(self, job, requirements, exclude_ids):
+        query_parts = [skill for skill in requirements if skill and skill.strip()]
+        if job.description:
+            query_parts.append(job.description)
+        query = " ".join(query_parts).strip()[:200]
+        if not query:
+            return []
+        try:
+            from hr.services.resume_search import search_resumes
+
+            result = search_resumes(
+                self.workspace_id, query, top_k=20, mode="dense",
+                hr_role=self.hr_role, user_id=self.user_id,
+            )
+        except Exception:
+            return []
+        items = result.get("items", []) if isinstance(result, dict) else []
+        added = []
+        seen = set()
+        for item in items:
+            candidate = item.get("candidate")
+            if not isinstance(candidate, dict):
+                continue
+            cid = str(candidate.get("id") or "")
+            if not cid or cid in exclude_ids or cid in seen:
+                continue
+            seen.add(cid)
+            score_map = item.get("score") or {}
+            raw = score_map.get("rerank") or score_map.get("dense") or score_map.get("resume") or 0
+            # 语义得分映射为与结构化分同量纲的整数（2 分=一项技能精确命中）
+            mapped = min(2, max(1, round(float(raw) * 6))) if raw else 1
+            added.append({
+                "candidate_id": cid,
+                "name": candidate.get("name") or "",
+                "current_city": candidate.get("current_city") or "",
+                "target_city": candidate.get("target_city") or "",
+                "years_experience": candidate.get("years_experience"),
+                "skills": candidate.get("skills") or [],
+                "match_score": mapped,
+                "matched_skills": [skill for skill in requirements if skill and skill.strip()],
+            })
+        return added
 
     @staticmethod
     def _interview_output(interview):
@@ -1089,6 +1373,69 @@ class RecruitmentService:
             interview.scheduled_at = data["scheduled_at"] or None
         interview.save()
         return self._interview_output(interview)
+
+    def list_interviews(self, params):
+        """HR 全局面试列表（OPERATOR+）：按状态/候选人/职位/面试官筛选，分页返回。"""
+        try:
+            current_page = max(1, int(params.get("current_page", 1)))
+            page_size = min(100, max(1, int(params.get("page_size", 20))))
+        except (TypeError, ValueError) as exc:
+            raise AppApiException(400, "current_page and page_size must be integers") from exc
+        queryset = (
+            Interview.objects.filter(workspace_id=self.workspace_id)
+            .select_related("application__candidate", "application__job")
+            .order_by("-scheduled_at")
+        )
+        status = params.get("status")
+        if status:
+            if status not in InterviewStatus.values:
+                raise AppApiException(400, "status is invalid")
+            queryset = queryset.filter(status=status)
+        search = str(params.get("search") or "").strip()
+        if search:
+            queryset = queryset.filter(
+                Q(application__candidate__name__icontains=search)
+                | Q(application__job__name__icontains=search)
+                | Q(interviewer__icontains=search)
+            )
+        interviewer = str(params.get("interviewer") or "").strip()
+        if interviewer:
+            queryset = queryset.filter(interviewer__icontains=interviewer)
+        overdue = params.get("overdue")
+        if overdue in ("1", "true", "True"):
+            now = timezone.now()
+            queryset = queryset.filter(
+                status=InterviewStatus.PENDING, feedback_deadline__lt=now
+            )
+        total = queryset.count()
+        start = (current_page - 1) * page_size
+        records = []
+        now = timezone.now()
+        for interview in queryset[start:start + page_size]:
+            application = interview.application
+            is_overdue = (
+                interview.status == InterviewStatus.PENDING
+                and interview.feedback_deadline is not None
+                and interview.feedback_deadline < now
+            )
+            records.append({
+                "interview_id": str(interview.id),
+                "application_id": str(interview.application_id) if interview.application_id else None,
+                "candidate_id": str(application.candidate_id) if application else None,
+                "candidate_name": application.candidate.name if application else "",
+                "job_id": str(application.job_id) if application else None,
+                "job_name": application.job.name if application else "",
+                "round_no": interview.round_no,
+                "interviewer": interview.interviewer,
+                "scheduled_at": interview.scheduled_at,
+                "status": interview.status,
+                "is_overdue": is_overdue,
+                "feedback_deadline": interview.feedback_deadline,
+                "feedback_submitted_at": interview.feedback_submitted_at,
+                "feedback": interview.feedback,
+                "create_time": interview.create_time,
+            })
+        return {"total": total, "records": records, "current_page": current_page, "page_size": page_size}
 
     def list_my_interviews(self):
         """面试官视角：仅返回本人被指派的面试，最小字段（不含 PII/简历/技能）。"""

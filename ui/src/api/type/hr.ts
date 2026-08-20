@@ -54,6 +54,31 @@ export interface MyInterview {
   job_name: string
 }
 
+export interface InterviewAdminRecord {
+  interview_id: string
+  application_id: string | null
+  candidate_id: string | null
+  candidate_name: string
+  job_id: string | null
+  job_name: string
+  round_no: number
+  interviewer: string
+  scheduled_at: string | null
+  status: InterviewStatus
+  is_overdue: boolean
+  feedback_deadline: string | null
+  feedback_submitted_at: string | null
+  feedback: string
+  create_time: string
+}
+
+export interface InterviewAdminPage {
+  total: number
+  records: InterviewAdminRecord[]
+  current_page: number
+  page_size: number
+}
+
 export interface Candidate {
   id: string
   name: string
@@ -276,6 +301,75 @@ export interface AgentProposal {
   update_time: string
 }
 
+export interface AgentWorkbenchEvidence {
+  path: string
+  paragraph_id: string | null
+  excerpt: string
+  relevance: number | null
+}
+
+export interface AgentWorkbenchEvidenceDetail {
+  paragraph_id: string
+  document_id: string
+  resume_id: string
+  candidate_id: string | null
+  file_name: string
+  title: string
+  position: number
+  content: string
+}
+
+export interface AgentWorkbenchRun {
+  id: string
+  workspace_id: string
+  agent_type: string
+  trigger_type: string
+  ref_object_type: string
+  ref_object_id: string
+  status: 'PENDING' | 'RUNNING' | 'SUCCEEDED' | 'FAILED' | 'SKIPPED'
+  input_meta: Record<string, unknown>
+  error: string
+  llm_model: string
+  prompt_tokens: number
+  completion_tokens: number
+  total_tokens: number
+  prompt_version: string
+  duration_ms: number
+  proposal_count: number | null
+  create_time: string
+  update_time: string
+  tool_trace?: Record<string, unknown>[]
+  output?: unknown
+}
+
+export interface AgentWorkbenchProposal extends AgentProposal {
+  run_agent_type?: string | null
+  summary: string
+  evidence_count: number
+  evidence: AgentWorkbenchEvidence[]
+}
+
+export interface AgentWorkbenchSummary {
+  total_runs: number
+  status_counts: Record<string, number>
+  total_tokens: number
+  total_duration_ms: number
+}
+
+export interface AgentWorkbenchPage<T> {
+  records: T[]
+  total: number
+  current_page: number
+  page_size: number
+  summary?: AgentWorkbenchSummary
+}
+
+export interface AgentWorkbenchRunDetail {
+  run: AgentWorkbenchRun
+  proposals: AgentWorkbenchProposal[]
+  evidence: AgentWorkbenchEvidence[]
+}
+
 export interface Application {
   id: string
   candidate_id: string
@@ -449,6 +543,21 @@ export interface PageResult<T> {
 
 export type ResumeStatus = 'PENDING' | 'SUCCESS' | 'FAILED'
 export type ResumeChannel = 'REFERRAL' | 'JOB_SITE' | 'HEADHUNTER' | 'CAMPUS' | 'OTHER'
+export type ResumeDatabaseStatus = 'ACTIVE' | 'ARCHIVED'
+
+export interface ResumeDatabase {
+  id: string
+  name: string
+  description: string
+  status: ResumeDatabaseStatus
+  is_default: boolean
+  is_system: boolean
+  resume_count: number
+  candidate_count: number
+  pending_count: number
+  create_time: string
+  update_time: string
+}
 
 export interface ResumeFile {
   id: string
@@ -457,6 +566,10 @@ export interface ResumeFile {
   file_size: number
   sha256: string
   source_channel: ResumeChannel
+  resume_database_id: string
+  resume_database_name: string
+  resume_database_ids?: string[]
+  resume_database_names?: string[]
   status: ResumeStatus
   error_message: string
   document_id: string | null
@@ -468,6 +581,10 @@ export interface ResumeFile {
 export interface ResumeUploadResult {
   resume_id: string
   file_name: string
+  resume_database_id: string
+  resume_database_name: string
+  resume_database_ids?: string[]
+  resume_database_names?: string[]
   status: ResumeStatus
   sha256: string
   duplicate: boolean
@@ -543,6 +660,7 @@ export interface ResumeSearchMeta {
   elapsed_ms?: Record<string, number>
   query?: { length: number; truncated: boolean }
   name_matched?: number
+  scope?: { applied: boolean; database_count?: number; resume_database_ids?: string[]; document_count?: number; restricted_count?: number }
 }
 
 export interface ResumeSearchResponse {

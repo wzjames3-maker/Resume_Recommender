@@ -2,6 +2,11 @@ import type { Result } from '@/request/Result'
 import { exportFile, exportFilePost, del, get, post, put } from '@/request'
 import type {
   AgentStats,
+  AgentWorkbenchPage,
+  AgentWorkbenchEvidenceDetail,
+  AgentWorkbenchProposal,
+  AgentWorkbenchRun,
+  AgentWorkbenchRunDetail,
   AiConditions,
   AgentProposal,
   Application,
@@ -24,6 +29,7 @@ import type {
   HandoffRecord,
   ImportReport,
   Interview,
+  InterviewAdminPage,
   Job,
   JobClosePreview,
   JobCloseReason,
@@ -35,6 +41,7 @@ import type {
   Offer,
   PageResult,
   ResumeBatchStatus,
+  ResumeDatabase,
   ResumeFile,
   ResumeFlowLog,
   ResumeSearchMode,
@@ -54,6 +61,15 @@ Object.defineProperty(prefix, 'value', {
 
 const getCandidates = (page: pageRequest, params?: Record<string, unknown>) =>
   get(`${prefix.value}/candidates/${page.current_page}/${page.page_size}`, params) as Promise<Result<PageResult<Candidate>>>
+
+const getResumeDatabases = () =>
+  get(`${prefix.value}/resume-databases`) as Promise<Result<ResumeDatabase[]>>
+
+const createResumeDatabase = (data: { name: string; description?: string }) =>
+  post(`${prefix.value}/resume-databases`, data) as Promise<Result<ResumeDatabase>>
+
+const archiveResumeDatabase = (databaseId: string) =>
+  put(`${prefix.value}/resume-databases/${databaseId}/archive`) as Promise<Result<ResumeDatabase>>
 
 const createCandidate = (data: Partial<Candidate>) =>
   post(`${prefix.value}/candidates`, data) as Promise<Result<Candidate>>
@@ -94,9 +110,6 @@ const getJob = (jobId: string) => get(`${prefix.value}/jobs/${jobId}`) as Promis
 
 const updateJob = (jobId: string, data: Partial<Job>) =>
   put(`${prefix.value}/jobs/${jobId}`, data) as Promise<Result<Job>>
-
-const closeJob = (jobId: string, closeReason: JobCloseReason) =>
-  put(`${prefix.value}/jobs/${jobId}/close`, { close_reason: closeReason }) as Promise<Result<{ closed_count: number }>>
 
 const reopenJob = (jobId: string) => put(`${prefix.value}/jobs/${jobId}/reopen`) as Promise<Result<Job>>
 
@@ -154,8 +167,11 @@ const acceptProposal = (proposalId: string, data: Record<string, unknown>) =>
 const dismissProposal = (proposalId: string, data: Record<string, unknown>) =>
   post(`${prefix.value}/proposals/${proposalId}/dismiss`, data) as Promise<Result<AgentProposal>>
 
-const runScreeningAgent = (applicationId: string) =>
-  post(`${prefix.value}/agents/SCREENING/run`, { application_id: applicationId }) as Promise<Result<Record<string, unknown>>>
+const runScreeningAgent = (applicationId: string, resumeDatabaseIds: string[] = []) =>
+  post(`${prefix.value}/agents/SCREENING/run`, {
+    application_id: applicationId,
+    ...(resumeDatabaseIds.length ? { resume_database_ids: resumeDatabaseIds } : {}),
+  }) as Promise<Result<Record<string, unknown>>>
 
 const runJdDraftAgent = (jobId: string) =>
   post(`${prefix.value}/agents/JD_DRAFT/run`, { job_id: jobId }) as Promise<Result<Record<string, unknown>>>
@@ -172,8 +188,11 @@ const getInterviewProposals = (interviewId: string) =>
 const getJobSourcingProposals = (jobId: string) =>
   get(`${prefix.value}/jobs/${jobId}/proposals`) as Promise<Result<SourcingProposal[]>>
 
-const runSourcingAgent = (jobId: string) =>
-  post(`${prefix.value}/agents/SOURCING/run`, { job_id: jobId }) as Promise<Result<Record<string, unknown>>>
+const runSourcingAgent = (jobId: string, resumeDatabaseIds: string[] = []) =>
+  post(`${prefix.value}/agents/SOURCING/run`, {
+    job_id: jobId,
+    ...(resumeDatabaseIds.length ? { resume_database_ids: resumeDatabaseIds } : {}),
+  }) as Promise<Result<Record<string, unknown>>>
 
 const runCommunicationDraft = (applicationId: string, data: Record<string, unknown>) =>
   post(`${prefix.value}/agents/COMMUNICATION_DRAFT/run`, { application_id: applicationId, ...data }) as Promise<Result<Record<string, unknown>>>
@@ -183,6 +202,21 @@ const getCommunicationDrafts = (applicationId: string) =>
 
 const getAgentStats = () => get(`${prefix.value}/agents/stats`) as Promise<Result<AgentStats>>
 
+const getAgentRuns = (params: Record<string, unknown>) =>
+  get(`${prefix.value}/agents/runs`, params) as Promise<Result<AgentWorkbenchPage<AgentWorkbenchRun>>>
+
+const getAgentRun = (runId: string) =>
+  get(`${prefix.value}/agents/runs/${runId}`) as Promise<Result<AgentWorkbenchRunDetail>>
+
+const getAgentEvidenceParagraph = (paragraphId: string) =>
+  get(`${prefix.value}/agents/evidence/${paragraphId}`) as Promise<Result<AgentWorkbenchEvidenceDetail>>
+
+const retryAgentRun = (runId: string, data: Record<string, unknown> = {}) =>
+  post(`${prefix.value}/agents/runs/${runId}/retry`, data) as Promise<Result<Record<string, unknown>>>
+
+const getAgentProposalInbox = (params: Record<string, unknown>) =>
+  get(`${prefix.value}/agents/proposals`, params) as Promise<Result<AgentWorkbenchPage<AgentWorkbenchProposal>>>
+
 const createAssignment = (jobId: string, candidateId: string, note = '', extra: Partial<Assignment> = {}) =>
   post(`${prefix.value}/jobs/${jobId}/assignments`, {
     candidate_id: candidateId,
@@ -190,13 +224,11 @@ const createAssignment = (jobId: string, candidateId: string, note = '', extra: 
     ...extra,
   }) as Promise<Result<Assignment>>
 
-const updateAssignment = (assignmentId: string, data: Partial<Assignment>) =>
-  put(`${prefix.value}/assignments/${assignmentId}`, data) as Promise<Result<Assignment>>
-
-const uploadResumes = (files: File[], sourceChannel: string) => {
+const uploadResumes = (files: File[], sourceChannel: string, resumeDatabaseIds: string[]) => {
   const formData = new FormData()
   files.forEach((file) => formData.append('files', file))
   formData.append('source_channel', sourceChannel)
+  resumeDatabaseIds.forEach((databaseId) => formData.append('resume_database_ids', databaseId))
   return post(`${prefix.value}/candidates/resumes`, formData) as Promise<Result<ResumeUploadResult[]>>
 }
 
@@ -208,34 +240,20 @@ const deleteResume = (resumeId: string) => del(`${prefix.value}/resumes/${resume
 const getJobMatches = (jobId: string, page: pageRequest) =>
   get(`${prefix.value}/jobs/${jobId}/matches/${page.current_page}/${page.page_size}`) as Promise<Result<JobMatchPage>>
 
-const createInterview = (assignmentId: string, data: Record<string, unknown>) =>
-  post(`${prefix.value}/assignments/${assignmentId}/interviews`, data) as Promise<Result<Interview>>
-
-const getInterviews = (assignmentId: string) =>
-  get(`${prefix.value}/assignments/${assignmentId}/interviews`) as Promise<Result<Interview[]>>
-
 const updateInterview = (interviewId: string, data: Partial<Interview>) =>
   put(`${prefix.value}/interviews/${interviewId}`, data) as Promise<Result<Interview>>
 
 const getMyInterviews = () =>
   get(`${prefix.value}/interviews/mine`) as Promise<Result<MyInterview[]>>
 
+const getInterviewsAdmin = (params: Record<string, unknown>) =>
+  get(`${prefix.value}/interviews`, params) as Promise<Result<InterviewAdminPage>>
+
 const submitInterviewFeedback = (interviewId: string, data: Record<string, unknown>) =>
   put(`${prefix.value}/interviews/${interviewId}/feedback`, data) as Promise<Result<Interview>>
 
-const getOffers = (assignmentId: string) =>
-  get(`${prefix.value}/assignments/${assignmentId}/offers`) as Promise<Result<Offer[]>>
-
 const getAllOffers = (page: pageRequest, params?: Record<string, unknown>) =>
   get(`${prefix.value}/offers/page/${page.current_page}/${page.page_size}`, params) as Promise<Result<PageResult<Offer>>>
-
-const createOffer = (assignmentId: string, data: Partial<Offer>) =>
-  post(`${prefix.value}/assignments/${assignmentId}/offers`, data) as Promise<Result<Offer>>
-
-const getOffer = (offerId: string) => get(`${prefix.value}/offers/${offerId}`) as Promise<Result<Offer>>
-
-const updateOffer = (offerId: string, data: Partial<Offer>) =>
-  put(`${prefix.value}/offers/${offerId}`, data) as Promise<Result<Offer>>
 
 const approveOffer = (offerId: string, data: Record<string, unknown>) =>
   put(`${prefix.value}/offers/${offerId}/approve`, data) as Promise<Result<Offer>>
@@ -300,6 +318,8 @@ const searchResumes = (data: {
   recall_k?: number
   similarity?: number
   mode?: ResumeSearchMode
+  resume_database_id?: string
+  resume_database_ids?: string[]
 }) =>
   post(`${prefix.value}/resumes/search`, data) as Promise<Result<ResumeSearchResponse>>
 
@@ -311,6 +331,8 @@ const checkDuplicate = (data: Record<string, unknown>) =>
 
 const mergeCandidates = (primaryId: string, secondaryId: string) =>
   post(`${prefix.value}/candidates/${primaryId}/merge`, { secondary_id: secondaryId }) as Promise<Result<CandidateDetail>>
+
+const getMembers = () => get(`${prefix.value}/members`) as Promise<Result<HrAccessMember[]>>
 
 const getAccess = () => get(`${prefix.value}/access`) as Promise<Result<HrAccessMember[]>>
 
@@ -335,7 +357,6 @@ export default {
   approveOffer,
   archiveCandidate,
   checkDuplicate,
-  closeJob,
   closeJobV2,
   createApplication,
   createInterviewByApplication,
@@ -343,8 +364,14 @@ export default {
   getApplicationEvents,
   getApplicationProposals,
   getAgentStats,
+  getAgentRuns,
+  getAgentRun,
+  getAgentEvidenceParagraph,
+  retryAgentRun,
+  getAgentProposalInbox,
   getApplications,
   getCommunicationDrafts,
+  getInterviewsAdmin,
   getInterviewsByApplication,
   getInterviewProposals,
   getJobClosePreview,
@@ -363,9 +390,7 @@ export default {
   terminalApplication,
   createAssignment,
   createCandidate,
-  createInterview,
   createJob,
-  createOffer,
   deleteCandidate,
   deleteOfferAttachment,
   deleteResume,
@@ -381,17 +406,18 @@ export default {
   getCandidate,
   getCandidateResumes,
   getCandidates,
+  getResumeDatabases,
+  createResumeDatabase,
+  archiveResumeDatabase,
   getHandoffConfig,
   getHandoffs,
-  getInterviews,
   getJob,
   getJobMatches,
   getJobs,
+  getMembers,
   getMyHrRole,
   getMyInterviews,
-  getOffer,
   getAllOffers,
-  getOffers,
   getResumeBatchStatus,
   getResumeContent,
   getResumeFlowLogs,
@@ -407,11 +433,9 @@ export default {
   sendOffer,
   submitInterviewFeedback,
   updateAccess,
-  updateAssignment,
   updateCandidate,
   updateInterview,
   updateJob,
-  updateOffer,
   uploadOfferAttachment,
   uploadResumes,
   withdrawOffer,
