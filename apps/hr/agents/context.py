@@ -40,17 +40,12 @@ def job_to_llm(job):
 
 
 def candidate_to_llm(candidate):
-    """候选人投影：仅 id/姓名/城市/学历/年限/技能/状态；永不包含联系方式、备注、简历原文。"""
+    """候选人投影（0030 后仅 id/姓名/状态；城市/学历/年限/技能已移除，联系方式永不进 LLM）。"""
     if candidate is None:
         return None
     return {
         "id": str(candidate.id),
         "name": candidate.name,
-        "current_city": candidate.current_city,
-        "target_city": candidate.target_city,
-        "highest_degree": candidate.highest_degree,
-        "years_experience": candidate.years_experience,
-        "skills": candidate.skills,
         "status": candidate.status,
     }
 
@@ -89,10 +84,6 @@ def search_to_llm(search_result):
             "candidate": {
                 "id": candidate.get("id"),
                 "name": candidate.get("name"),
-                "current_city": candidate.get("current_city"),
-                "highest_degree": candidate.get("highest_degree"),
-                "years_experience": candidate.get("years_experience"),
-                "skills": candidate.get("skills"),
                 "status": candidate.get("status"),
                 "phone": _mask_phone(candidate.get("phone")),
                 "email": _mask_email(candidate.get("email")),

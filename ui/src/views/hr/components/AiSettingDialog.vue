@@ -45,16 +45,25 @@ const llmModels = ref<Model[]>([])
 const rerankModels = ref<Model[]>([])
 
 function loadOptions() {
-  ModelApi.getSelectModelList({ model_type: 'LLM' }).then((response) => {
-    llmModels.value = response.data
-  })
-  ModelApi.getSelectModelList({ model_type: 'RERANKER' }).then((response) => {
-    rerankModels.value = response.data
-  })
-  KnowledgeApi.getKnowledgeList().then((response) => {
-    const rows = Array.isArray(response.data) ? response.data : response.data?.records || []
-    kbOptions.value = rows.map((row: { id: string; name: string }) => ({ id: row.id, name: row.name }))
-  })
+  ModelApi.getSelectModelList({ model_type: 'LLM' })
+    .then((response) => {
+      llmModels.value = response.data
+    })
+    .catch(() => {})
+  ModelApi.getSelectModelList({ model_type: 'RERANKER' })
+    .then((response) => {
+      rerankModels.value = response.data
+    })
+    .catch(() => {})
+  KnowledgeApi.getKnowledgeList()
+    .then((response) => {
+      const rows = Array.isArray(response.data) ? response.data : response.data?.records || []
+      kbOptions.value = rows.map((row: { id: string; name: string }) => ({ id: row.id, name: row.name }))
+    })
+    .catch(() => {
+      // 知识库列表加载失败时静默降级为空列表，避免“Folder not found”等全局错误 toast 阻塞职位等 HR 页面
+      kbOptions.value = []
+    })
 }
 
 onMounted(loadOptions)

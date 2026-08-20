@@ -8,7 +8,7 @@ MaxKB v2 精简内核 + 多租户人事招聘工作台：
 Workspace
    ├─ ResumeDatabase（总库 + 业务库）
    │    └─ ResumeDatabaseMembership → ResumeFile → Candidate
-   └─ Candidate（人才库）
+   └─ Candidate（人才库，仅 姓名/电话/邮箱，简历原文通过 RAG 检索）
         └─ Application（候选人在某职位的流程）
              ├─ JobStage（可配置招聘 Pipeline）
              ├─ Application.status（ACTIVE / HIRED / REJECTED / WITHDRAWN / CLOSED）

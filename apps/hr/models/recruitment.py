@@ -70,21 +70,6 @@ class Candidate(models.Model):
     name = models.CharField(max_length=128, db_index=True)
     email = models.EmailField(null=True, blank=True)
     phone = models.CharField(max_length=20, blank=True, default="")
-    current_city = models.CharField(max_length=64, blank=True, default="")
-    target_city = models.CharField(max_length=64, blank=True, default="")
-    highest_degree = models.CharField(max_length=32, blank=True, default="")
-    years_experience = models.PositiveSmallIntegerField(null=True, blank=True)
-    skills = models.JSONField(default=list)
-    source = models.CharField(max_length=64, blank=True, default="")
-    source_type = models.CharField(max_length=20, choices=ResumeChannel.choices, default=ResumeChannel.OTHER)
-    source_detail = models.CharField(max_length=128, blank=True, default="")
-    collected_at = models.DateTimeField(null=True, blank=True)
-    consent_status = models.CharField(max_length=16, choices=ConsentStatus.choices, default=ConsentStatus.UNKNOWN)
-    consent_version = models.CharField(max_length=32, blank=True, default="")
-    contact_preference = models.CharField(
-        max_length=16, choices=ContactPreference.choices, default=ContactPreference.UNSPECIFIED
-    )
-    note = models.TextField(blank=True, default="")
     status = models.CharField(max_length=16, choices=CandidateStatus.choices, default=CandidateStatus.ACTIVE)
     user_id = models.UUIDField(null=True, blank=True)
     create_time = models.DateTimeField(auto_now_add=True)
@@ -92,21 +77,6 @@ class Candidate(models.Model):
 
     class Meta:
         db_table = "hr_candidate"
-
-
-class CandidateSkill(models.Model):
-    """技能归一表（T5）：candidate.skills 的归一化展平，支撑 Skill-AND 的 SQL 精确匹配。"""
-
-    id = models.UUIDField(primary_key=True, default=uuid.uuid7, editable=False)
-    candidate = models.ForeignKey(Candidate, on_delete=models.CASCADE, related_name="skill_rows")
-    skill_norm = models.CharField(max_length=128, db_index=True)
-    skill_raw = models.CharField(max_length=128)
-
-    class Meta:
-        db_table = "hr_candidate_skill"
-        constraints = [
-            models.UniqueConstraint(fields=["candidate", "skill_norm"], name="hr_candidate_skill_uniq")
-        ]
 
 
 class Job(models.Model):

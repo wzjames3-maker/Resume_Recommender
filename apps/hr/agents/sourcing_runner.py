@@ -255,10 +255,7 @@ def run_sourcing_agent(job_id, trigger_type=HrAgentTriggerType.MANUAL, user_id=N
             candidates.append({
                 **row,
                 "name": candidate.get("name"),
-                "current_city": candidate.get("current_city"),
-                "highest_degree": candidate.get("highest_degree"),
-                "years_experience": candidate.get("years_experience"),
-                "skills": candidate.get("skills"),
+                "skills": candidate.get("skills") or [],
                 "document_id": item.get("document_id"),
             })
         payload = {

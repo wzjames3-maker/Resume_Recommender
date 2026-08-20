@@ -21,7 +21,7 @@ from knowledge.vector.pg_vector import EmbeddingSearch, KeywordsSearch
 
 from common.exception.app_exception import AppApiException
 
-from hr.models import Candidate, CandidateSkill, CandidateStatus, ResumeDatabase, ResumeFile
+from hr.models import Candidate, CandidateStatus, ResumeDatabase, ResumeFile
 from hr.services.ai_parser import parse_search_skills
 from hr.services.audit import write_audit_log
 from hr.services.query_understand import degree_words, extract_slots, norm_city
@@ -88,20 +88,15 @@ def _mask_email(value):
 
 
 def _mask_for_role(candidate, hr_role):
-    """VIEWER 脱敏 phone/email；OPERATOR/ADMIN 原样。"""
+    """VIEWER 脱敏 phone/email；OPERATOR/ADMIN 原样。0030 后 Candidate 仅 name/phone/email。"""
     if candidate is None:
         return None
     out = {
         "id": str(candidate.id),
         "name": candidate.name,
-        "highest_degree": candidate.highest_degree,
-        "years_experience": candidate.years_experience,
-        "years_unknown": candidate.years_experience is None,
-        "skills": candidate.skills,
         "status": candidate.status,
         "phone": candidate.phone,
         "email": candidate.email,
-        "current_city": candidate.current_city,  # A2 复审：评测核对与前端展示用（城市非 PII）
     }
     if hr_role == "VIEWER":
         out["phone"] = _mask_phone(candidate.phone)
@@ -110,21 +105,8 @@ def _mask_for_role(candidate, hr_role):
 
 
 def _candidate_matches_hard_slots(candidate, slots):
-    """预筛超阈值跳过后的硬条件后置过滤（与 L1 SQL 语义一致）：
-    年限 NULL 按满足计（线上 R2 语义）；学历按词表层级；城市按归一形双向匹配。"""
-    if candidate is None:
-        return False
-    if slots["years_min"] is not None:
-        if candidate.years_experience is not None and candidate.years_experience < slots["years_min"]:
-            return False
-    if slots["degree_level"] is not None:
-        if candidate.highest_degree not in degree_words(slots["degree_level"]):
-            return False
-    for city in slots["cities"]:
-        norm = norm_city(city)
-        if norm_city(candidate.current_city or "") not in {norm, city, norm + "市"}:
-            return False
-    return True
+    """0030 后 Candidate 仅 name/phone/email，硬条件（年限/学历/城市）已移除，保留函数桩供历史调用兼容。"""
+    return candidate is not None
 
 
 def _parse_skills(query, llm_model):
@@ -401,30 +383,40 @@ def _search_skill_and(skills, workspace_id, knowledge, embedding_model, candidat
     # 结构化路（T5）：candidate_skill 归一表 SQL 查询 (candidate_id, skill_norm) 对 →
     # Python 重建 per-doc 命中向量（保留"有序技能优先"排序语义）；表为空时回退 Candidate.skills JSON 路径（迁移期兼容）
     structured_vec = {}    # document_id -> hit_vec（结构化命中）
+    # 0030 CandidateSkill 已 DROP：技能命中改为 候选人简历原文(raw_text) + 段落内容 的文本检索，按技能词分别命中后构向量
     norm_skills = [normalize_skill(skill) for skill in skills]
-    skill_rows = list(
-        QuerySet(CandidateSkill)
-        .filter(candidate__workspace_id=workspace_id, candidate__status=CandidateStatus.ACTIVE)
-        .values_list("candidate_id", "skill_norm")
-    )
-    hit_candidate_ids = []
-    if skill_rows:
-        norm_by_candidate = {}
-        for candidate_id, skill_norm in skill_rows:
-            norm_by_candidate.setdefault(str(candidate_id), set()).add(skill_norm)
-        for candidate_id, norms in norm_by_candidate.items():
-            vec = [1 if ns in norms else 0 for ns in norm_skills]
-            if any(vec):
-                hit_candidate_ids.append((candidate_id, vec))
-    else:
-        candidates = list(QuerySet(Candidate).filter(workspace_id=workspace_id, status=CandidateStatus.ACTIVE))
-        for candidate in candidates:
-            candidate_skills = {normalize_skill(s) for s in (candidate.skills or [])}
-            if not candidate_skills:
+    from knowledge.models import Paragraph as _Para
+    candidate_to_vec = {}
+    for idx, skill in enumerate(skills):
+        term = (skill or "").strip()
+        if not term:
+            continue
+        raw_ids = set(
+            QuerySet(ResumeFile)
+            .filter(workspace_id=workspace_id, raw_text__icontains=term)
+            .values_list("candidate_id", flat=True)
+        )
+        # 段落内容兜底（覆盖无 raw_text 的存量）
+        doc_ids_for_skill = set(
+            QuerySet(_Para).filter(content__icontains=term, is_active=True).values_list("document_id", flat=True)
+        )
+        if doc_ids_for_skill:
+            para_ids = set(
+                QuerySet(ResumeFile)
+                .filter(workspace_id=workspace_id, document_id__in=list(doc_ids_for_skill))
+                .values_list("candidate_id", flat=True)
+            )
+            raw_ids.update(para_ids)
+        for cid in raw_ids:
+            if cid is None:
                 continue
-            vec = [1 if ns in candidate_skills else 0 for ns in norm_skills]
-            if any(vec):
-                hit_candidate_ids.append((candidate.id, vec))
+            cid_str = str(cid)
+            vec = candidate_to_vec.get(cid_str)
+            if vec is None:
+                vec = [0] * len(skills)
+                candidate_to_vec[cid_str] = vec
+            vec[idx] = 1
+    hit_candidate_ids = [(cid, vec) for cid, vec in candidate_to_vec.items() if any(vec)]
     if hit_candidate_ids:
         resumes_qs = QuerySet(ResumeFile).filter(
             candidate_id__in=[candidate_id for candidate_id, _ in hit_candidate_ids], document_id__isnull=False)
@@ -656,13 +648,7 @@ def _search_resumes_impl(workspace_id, query, top_k=5, recall_k=None, similarity
 
     # ---------- 查询理解 v1（T4）：规则槽位（年限/学历/城市 + 语义词） ----------
     candidate_scope = {"resumefile__database_memberships__resume_database_id__in": selected_database_ids} if selected_database_ids else {}
-    city_list = list(
-        QuerySet(Candidate)
-        .filter(workspace_id=workspace_id, status=CandidateStatus.ACTIVE, **candidate_scope)
-        .exclude(current_city="")
-        .values_list("current_city", flat=True)
-        .distinct()
-    )
+    city_list = []  # 0030 current_city 已移除
     slots = extract_slots(query, city_list=city_list)
     meta["slots"] = {"years_min": slots["years_min"], "degree_level": slots["degree_level"],
                      "cities": slots["cities"]}
@@ -693,24 +679,14 @@ def _search_resumes_impl(workspace_id, query, top_k=5, recall_k=None, similarity
         mode = "phrase"
         meta["mode"] = "phrase"
 
-    # ---------- 结构化预筛（T4/T7，整句/混合/Skills 模式；G1：精确条件由 SQL 保证） ----------
-    # 新架构（LLM 只切片、正则只抽身份字段）：技能不再是结构化字段，技能词改由
-    # 关键字腿（原文/段落 ILIKE）+ 稀疏（BM25）+ 密集（语义）在文本里命中。
-    # 预筛只保留真实结构化硬条件（年限/学历/城市），不再 AND candidate_skill EXISTS——
-    # 否则存量回填技能数据会把技能词查询误杀成 prefilter_empty（技能维度移除）。
-    # 显式 dense 模式不接预筛（消融纯净性，评测口径依赖该契约）。
-    hard_slots = slots["years_min"] is not None or slots["degree_level"] is not None or bool(slots["cities"])
+    # ---------- 结构化预筛（0030 后已简化：Candidate 仅 name/phone/email，无年限/学历/城市结构化字段，不再预筛） ----------
+    # 0030 前曾按 years_experience/highest_degree/current_city + candidate_skill 做 SQL 精确过滤；
+    # 0030 后这些字段已物理删除，预筛改为仅库范围（已在 resume_file_scope 中体现），此处保留分支桩仅作历史对照。
+    hard_slots = False  # 0030 结构化字段已移除，无硬条件可预筛
     if hard_slots and mode in ("phrase", "hybrid", "skills"):
         q = Q()
         if selected_database_ids:
             q &= Q(id__in=QuerySet(ResumeFile).filter(**resume_file_scope).values_list("candidate_id", flat=True))
-        if slots["years_min"] is not None:
-            # 年限未知（NULL）纳入但排序靠后（years_unknown 标记），不静默消失（R2）
-            q &= Q(years_experience__gte=slots["years_min"]) | Q(years_experience__isnull=True)
-        if slots["degree_level"] is not None:
-            q &= Q(highest_degree__in=degree_words(slots["degree_level"]))
-        for city in slots["cities"]:
-            q &= Q(current_city=city) | Q(current_city=norm_city(city)) | Q(current_city=norm_city(city) + "市")
         candidate_ids = list(
             QuerySet(Candidate)
             .filter(workspace_id=workspace_id, status=CandidateStatus.ACTIVE)
@@ -744,7 +720,7 @@ def _search_resumes_impl(workspace_id, query, top_k=5, recall_k=None, similarity
                     QuerySet(ResumeFile)
                     .filter(candidate_id__in=candidate_ids, document_id__isnull=False, **resume_file_scope)
                     .select_related("candidate")
-                    .order_by(F("candidate__years_experience").desc(nulls_last=True), "-update_time")
+                    .order_by("-update_time")
                 )
                 items = []
                 seen = set()
@@ -902,7 +878,7 @@ def _search_resumes_impl(workspace_id, query, top_k=5, recall_k=None, similarity
             QuerySet(ResumeFile)
             .filter(document_id__in=prefilter_ids)
             .select_related("candidate")
-            .order_by(F("candidate__years_experience").desc(nulls_last=True), "-update_time")
+            .order_by("-update_time")
         )
         items = []
         seen = set()

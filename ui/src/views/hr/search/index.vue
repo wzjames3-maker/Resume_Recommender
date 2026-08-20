@@ -55,32 +55,15 @@
           <template #default="{ row }">
             <div v-if="row.candidate">
               <el-link type="primary" :underline="false" @click="goCandidate(row.candidate)">{{ row.candidate.name }}</el-link>
-              <div class="color-secondary text-12">
-                {{ row.candidate.highest_degree || '学历未知' }}
-                <template v-if="row.candidate.years_unknown">
-                  <el-tag size="small" type="info" class="ml-4">年限未知</el-tag>
-                </template>
-                <template v-else>
-                  · {{ row.candidate.years_experience == null ? '-' : `${row.candidate.years_experience} 年` }}
-                </template>
-              </div>
             </div>
             <span v-else>-</span>
           </template>
         </el-table-column>
-        <el-table-column label="联系方式" min-width="160">
+        <el-table-column label="联系方式" min-width="180">
           <template #default="{ row }">
             <template v-if="row.candidate">
               <div>{{ row.candidate.phone || '-' }}</div>
               <div class="color-secondary text-12">{{ row.candidate.email || '-' }}</div>
-            </template>
-            <span v-else>-</span>
-          </template>
-        </el-table-column>
-        <el-table-column label="技能" min-width="180" show-overflow-tooltip>
-          <template #default="{ row }">
-            <template v-if="row.candidate?.skills?.length">
-              <el-tag v-for="skill in row.candidate.skills" :key="skill" size="small" class="mr-4">{{ skill }}</el-tag>
             </template>
             <span v-else>-</span>
           </template>

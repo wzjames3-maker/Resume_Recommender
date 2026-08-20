@@ -1,12 +1,14 @@
 # ATS 精确设计规格（模糊点裁决与领域规范）
 
-> 文档状态：设计规格，2026-08-18。本文件解决 `docs/PRD.md` 中 ATS 设计「表述模糊、枚举不闭合、状态联动未定义、与实现脱节」的问题：以当前代码事实（v2 分支，2026-08-18 基线）为准把每个模糊点裁决为**唯一确定的行为**。
+> **【已归档 0030 前事实】** 本规格 §2 枚举（`ConsentStatus`/`ContactPreference`）与 §3.1/§3.2 的 `Candidate` 22列（含 `current_city/target_city/highest_degree/years_experience/skills/source…/consent…/note`）及 `CandidateSkill` 副表定义为 **0030 前代码事实**，已于 `apps/hr/migrations/0030_remove_candidate_legacy_fields.py` 物理删除（`hr_candidate 22→9列，hr_candidate_skill DROP`）。**现役口径以 `README-hr.md` + `docs/HR-FRONTEND-GUIDE.md` + `HANDOFF.md:140` 为准：`Candidate` 仅 `姓名/手机号/邮箱 + status` 7字段（`id/name/phone/email/status/create/update`），技能/城市/学历/年限等结构化字段改由 `ResumeFile.raw_text + Paragraph` 的 RAG 文本检索承载。**
+>
+> 文档状态：设计规格，2026-08-18（基线冻结于 0030 前）。本文件解决 `docs/PRD.md` 中 ATS 设计「表述模糊、枚举不闭合、状态联动未定义、与实现脱节」的问题：以当时代码事实（v2 分支，2026-08-18 基线）为准把每个模糊点裁决为**唯一确定的行为**。
 >
 > 标注约定：
 > - **【F】事实**：代码已如此实现，本规格固化；修改须走规格变更评审。
 > - **【R】裁决**：本规格新裁决、代码尚未实现的行为，汇总于 §11 待实现清单（附验收标准）。
 >
-> 权威顺序：**代码实现 > 本规格 > PRD.md（产品意图）**。与本规格冲突的 PRD 表述按 §10 清单回写修订。本规格只记录当前代码事实；目标态见 `docs/ATS-STATE-MACHINE-V2.md`，Agent/RAG 层设计见 `docs/PRD-AGENT-RAG.md`。
+> 权威顺序：**代码实现 > 本规格 > PRD.md（产品意图）**。与本规格冲突的 PRD 表述按 §10 清单回写修订。本规格只记录当时代码事实；目标态见 `docs/ATS-STATE-MACHINE-V2.md`，Agent/RAG 层设计见 `docs/PRD-AGENT-RAG.md`。
 
 ## 1. 模糊点裁决总表
 
@@ -41,8 +43,8 @@
 | `JobCloseReason` | `FILLED` 招满 / `CANCELLED` 取消 / `DUPLICATE` 重复需求 / `OTHER` 其他 | 职位 `close_reason` | 仅 CLOSED 可非空 |
 | `AssignmentStatus` | `PENDING_SCREEN` / `SCREEN_PASSED` / `INTERVIEWING` / `OFFER` / `HIRED` / `REJECTED` / `WITHDRAWN` / `CLOSED` | 关联 `status` | 前四为活跃态，后四为终态（HIRED 亦终态） |
 | `TerminationReason` | `NOT_FIT` 不适合 / `SALARY` 薪酬 / `UNREACHABLE` 无法联系 / `CANDIDATE_WITHDRAW` 候选人退出 / `JOB_CLOSED` 职位关闭 / `MERGED` 合并 / `OTHER` 其他 | 关联 `termination_reason` | 与终态的适配见 §4.3（R） |
-| `ConsentStatus` 告知状态 | `UNKNOWN` / `NOTIFIED` 已告知 / `CONSENTED` 已同意 / `NOT_REQUIRED` 无需 | 候选人 `consent_status` | |
-| `ContactPreference` | `EMAIL` / `PHONE` / `NO_CONTACT` 勿联 / `UNSPECIFIED` | 候选人 `contact_preference` | |
+| `ConsentStatus` 告知状态 | `UNKNOWN` / `NOTIFIED` 已告知 / `CONSENTED` 已同意 / `NOT_REQUIRED` 无需 | 候选人 `consent_status` | **0030 已随 Candidate 13列删除** |
+| `ContactPreference` | `EMAIL` / `PHONE` / `NO_CONTACT` 勿联 / `UNSPECIFIED` | 候选人 `contact_preference` | **0030 已随 Candidate 13列删除** |
 | `InterviewStatus` | `PENDING` / `PASSED` / `FAILED` / `NO_SHOW` / `CANCELLED` | 面试 `status` | 见 §4.5 设置权限 |
 | `OfferStatus` | `DRAFT` / `SENT` / `ACCEPTED` / `REJECTED` / `WITHDRAWN` | Offer `status` | |
 | `OfferApprovalStatus` | `PENDING` / `APPROVED` / `REJECTED` | Offer `approval_status` | |
@@ -58,28 +60,30 @@
 
 类型为 Django 字段类型；「必填」指服务端校验口径。所有表均含 `workspace_id`（租户隔离，服务端从认证主体派生，不信任 URL）；`user_id` 为创建人；`create_time/update_time` 为审计时间戳。
 
-### 3.1 Candidate（`hr_candidate`）
+### 3.1 Candidate（`hr_candidate`）【0030 前 22列，已归档】
+
+> **0030 后现役 Candidate 仅 7 字段：`id/name/phone/email/status/create_time/update_time`（`workspace_id/user_id` 为租户与审计）。下列 `current_city/target_city/highest_degree/years_experience/skills/source…/consent…/note` 13列已于 `0030` `RemoveField` 物理删除，检索改由 `ResumeFile.raw_text + Paragraph` RAG 承载，下表仅为历史对照。**
 
 | 字段 | 类型 | 必填 | 约束/说明 |
 |---|---|---|---|
 | name | Char(128) | 是 | 索引 |
 | email | Email | 否 | 查重按 `iexact`；VIEWER 脱敏 `ab***@domain` |
 | phone | Char(20) | 否（见 §11-E1） | 查重按精确等值；VIEWER 脱敏 `138****1234` |
-| current_city / target_city | Char(64) | 否 | 筛选时两字段 OR 匹配 |
-| highest_degree | Char(32) | 否 | 自由文本（不做枚举，历史数据不可控） |
-| years_experience | PositiveSmallInt | 否 | |
-| skills | JSON 数组 | 否 | 非空字符串数组；归一副表见 3.2 |
-| source | Char(64) | 否 | 自由文本补充 |
-| source_type | `ResumeChannel` | 默认 OTHER | 人才库首次来源 |
-| source_detail | Char(128) | 否 | 来源=OTHER 时的详情 |
-| collected_at | DateTime | 否 | 收集日期 |
-| consent_status / consent_version / contact_preference | 见 §2 | 默认 UNKNOWN/空/UNSPECIFIED | 合规元数据 |
-| note | Text | 否 | 4096 上限；禁止记录敏感属性（PRD §2.2） |
+| current_city / target_city | Char(64) | 否 | **0030 已删除**，筛选时两字段 OR 匹配（历史） |
+| highest_degree | Char(32) | 否 | **0030 已删除**，自由文本（不做枚举，历史数据不可控） |
+| years_experience | PositiveSmallInt | 否 | **0030 已删除** |
+| skills | JSON 数组 | 否 | **0030 已删除**，非空字符串数组；归一副表见 3.2 |
+| source | Char(64) | 否 | **0030 已删除**，自由文本补充 |
+| source_type | `ResumeChannel` | 默认 OTHER | **0030 已删除**，人才库首次来源 |
+| source_detail | Char(128) | 否 | **0030 已删除**，来源=OTHER 时的详情 |
+| collected_at | DateTime | 否 | **0030 已删除**，收集日期 |
+| consent_status / consent_version / contact_preference | 见 §2 | 默认 UNKNOWN/空/UNSPECIFIED | **0030 已删除**，合规元数据 |
+| note | Text | 否 | **0030 已删除**，4096 上限；禁止记录敏感属性（PRD §2.2） |
 | status | `CandidateStatus` | 默认 ACTIVE | |
 
-### 3.2 CandidateSkill（`hr_candidate_skill`，技能归一副表）
+### 3.2 CandidateSkill（`hr_candidate_skill`，技能归一副表）【0030 已 DROP】
 
-`candidate` FK(CASCADE)、`skill_norm`（归一形，索引）、`skill_raw`（原文）；唯一约束 (candidate, skill_norm)。由解析/导入写入，支撑 Skill-AND 的 SQL 精确匹配；`skills` JSON 为展示真源。
+> **本表已于 `0030` `DeleteModel` 物理删除。历史定义：** `candidate` FK(CASCADE)、`skill_norm`（归一形，索引）、`skill_raw`（原文）；唯一约束 (candidate, skill_norm)。由解析/导入写入，支撑 Skill-AND 的 SQL 精确匹配；`skills` JSON 为展示真源。**现役技能命中改由 `ResumeFile.raw_text` + `Paragraph.content` 文本检索（多词 AND），见 `apps/hr/services/resume_search.py:wrapper keyword腿`。**
 
 ### 3.3 Job（`hr_job`）
 
@@ -242,7 +246,7 @@ DRAFT→OPEN 无字段完整性前置校验【F，维持：DRAFT 是轻量草稿
 |---|---|---|
 | owner_id | 当前用户 | 「待我处理」语义；ADMIN 可传其他用户或 `all` |
 | status | 活跃四态 | `terminal=1` 时含终态（含 is_reapply 历史查询） |
-| job_id / channel / relation_type / city | 无 | city 匹配候选人 current/target_city |
+| job_id / channel / relation_type / city | 无 | city 为历史参数（0030 前匹配候选人 current/target_city，**0030 后 Candidate 已无城市字段，city 改由简历原文 RAG 检索**，该参数保留仅作历史兼容） |
 | q | 无 | 候选人姓名/手机/邮箱前缀定位（不依赖 AI） |
 
 返回行 = 关联 + candidate_name + job_name + 最新面试轮次（round_no/status/overdue）+ Agent 建议徽标（D1 后，见 PRD-AGENT-RAG §11）。排序 `update_time DESC`。现状替代品（候选人列表 owner 过滤）保留但语义不同（按候选人聚合），不得冒充队列。
@@ -253,7 +257,7 @@ DRAFT→OPEN 无字段完整性前置校验【F，维持：DRAFT 是轻量草稿
 |---|---|---|---|
 | 候选人：列表/详情/查重/AI 语义搜索 | ✓（phone/email 脱敏；DELETED 不可见） | ✓（明文） | ✓ |
 | 候选人：创建 | ✗ | ✓ | ✓ |
-| 候选人：主档编辑/归档/恢复/删除/合并/导出（白名单 14 字段）/CSV 导入 | ✗ | ✗ | ✓ |
+| 候选人：主档编辑（0030 后仅 name/phone/email）/归档/恢复/删除/合并/导出（白名单 0030 后 2字段，见 §8）/CSV 导入 | ✗ | ✗ | ✓ |
 | 简历：上传/下载/原文/批量状态/流转日志 | ✗ | ✓ | ✓ |
 | 简历：详情（含候选人口径） | ✗ | ✗ | ✓ |
 | 简历库：查看、库内候选人、库内检索 | ✓ | ✓ | ✓ |
@@ -273,10 +277,10 @@ DRAFT→OPEN 无字段完整性前置校验【F，维持：DRAFT 是轻量草稿
 - **查重**：phone 精确等值 OR email `iexact`；列表行附着 `duplicate_ids`；合并仅 ADMIN（保留主档，副档关联迁移）。
 - **简历 TTL**：上传 30 自然日未关联候选人 → 后台删除原件/文本/解析结果/语义索引，级联清理流转日志节点，记 LIFECYCLE 日志。
 - **简历库**：总库自动加入每份简历，业务库通过 ResumeDatabaseMembership 多对多归属；上传总库强制保留，重复 SHA-256 文件跨库复用；归档库不接收新上传和检索。
-- **导出白名单**（`CANDIDATE_EXPORT_FIELDS`，14 字段）：name/status/city×2/degree/years/skills/source×3/collected_at/consent_status/contact_preference/create_time——**不含联系方式与备注**。
+- **导出白名单**（`CANDIDATE_EXPORT_FIELDS`，0030 后 2 字段）：`name/status/create_time`（**0030 前 14 字段**含 `city×2/degree/years/skills/source×3/collected_at/consent_status/contact_preference` 已随 13列删除）——**不含联系方式与备注**。
 - **脱敏格式**：phone `前3****后4`；email `前2***@域名`。
 - **CSV 导入**：≤200 行 ≤2MB；逐行校验、失败原因报告、疑似重复标注。
-- **三类备注不得混用**：候选人 `note`（人才库通用）、关联 `note`（筛选过程）、面试 `feedback`（轮次评估）——各自归属各自展示，互不回落。
+- **三类备注不得混用（0030 后候选人 `note` 已随 13列删除）**：**0030 前**候选人 `note`（人才库通用）、关联 `note`（筛选过程）、面试 `feedback`（轮次评估）——各自归属各自展示，互不回落；**0030 后**仅保留关联 `note` 与面试 `feedback`，候选人通用备注已移除。
 
 ## 9. API 面清单（apps/hr/urls.py）
 

@@ -21,7 +21,6 @@ from hr.agents.proposals import expire_pending_proposals, propose
 from hr.models import (
     Application,
     ApplicationStatus,
-    CandidateSkill,
     HrAgentRun,
     HrAgentRunStatus,
     HrAgentTriggerType,
@@ -101,36 +100,9 @@ def _load_llm(workspace_id, config):
 
 
 def structured_filter(job, candidate):
-    """硬条件逐条核对（技能/城市；学历与年限职位未声明时跳过）。"""
-    conditions = []
-    skill_norms = {normalize_skill(skill) for skill in (job.skill_requirements or [])}
-    if skill_norms:
-        owned_raw = set(
-            CandidateSkill.objects.filter(candidate=candidate).values_list("skill_norm", flat=True)
-        )
-        if not owned_raw:
-            # 技能归一表未回填时回退候选人 skills 字段（与 resume_search 空表跳过口径一致）
-            owned_raw = {normalize_skill(skill) for skill in (candidate.skills or [])}
-        owned = owned_raw
-        matched = sorted(skill_norms & owned)
-        missing = sorted(skill_norms - owned)
-        conditions.append({
-            "requirement": "技能：" + "、".join(job.skill_requirements),
-            "field": "skills",
-            "met": bool(matched),
-            "detail": f"命中技能：{('、'.join(matched)) or '无'}；缺失：{('、'.join(missing)) or '无'}",
-        })
-    if job.city:
-        cities = {candidate.current_city, candidate.target_city}
-        met = bool(cities & {job.city})
-        conditions.append({
-            "requirement": f"城市：{job.city}",
-            "field": "city",
-            "met": met,
-            "detail": f"候选人现居 {candidate.current_city or '未知'}，目标城市 {candidate.target_city or '未知'}",
-        })
-    hard_met = all(condition["met"] for condition in conditions)
-    return {"conditions": conditions, "hard_met": hard_met}
+    """硬条件逐条核对（0030 后 Candidate 仅 name/phone/email，技能/城市等硬条件改由简历原文 RAG 检索判断，此处不再做 SQL 精确过滤）。"""
+    # 0030 CandidateSkill 已 DROP，城市/学历/年限等结构化字段已移除，硬条件核对留空，交由 LLM 基于证据判断
+    return {"conditions": [], "hard_met": True}
 
 
 def _collect_evidence(workspace_id, job, candidate, document_ids, resume_database_ids=None):

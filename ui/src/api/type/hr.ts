@@ -84,19 +84,6 @@ export interface Candidate {
   name: string
   email: string | null
   phone: string
-  current_city: string
-  target_city: string
-  highest_degree: string
-  years_experience: number | null
-  skills: string[]
-  source: string
-  source_type: ResumeChannel
-  source_detail: string
-  collected_at: string | null
-  consent_status: ConsentStatus
-  consent_version: string
-  contact_preference: ContactPreference
-  note: string
   status: CandidateStatus
   create_time: string
   update_time: string
@@ -210,12 +197,9 @@ export interface Job {
 export interface JobMatchCandidate {
   candidate_id: string
   name: string
-  current_city: string
-  target_city: string
-  years_experience: number | null
-  skills: string[]
   match_score: number
   matched_skills: string[]
+  create_time?: string
 }
 
 export interface JobMatchPage {
@@ -441,9 +425,6 @@ export type CopilotProposal = AgentProposal & { payload: CopilotPayload }
 export interface SourcingCandidate {
   candidate_id: string
   name: string
-  current_city: string | null
-  highest_degree: string | null
-  years_experience: number | null
   skills: string[]
   match_reason: string
   risk: string
@@ -606,10 +587,6 @@ export interface ResumeSearchCandidate {
   name: string
   phone: string
   email: string | null
-  highest_degree: string
-  years_experience: number | null
-  years_unknown?: boolean
-  skills: string[]
   status: string
 }
 
@@ -696,6 +673,7 @@ export interface AiConditions {
   years_max: number | null
   highest_degree: string | null
   status: string | null
+  // 0030 后 city/degree/years 仅作 RAG 语义提示，不再作为 Candidate 结构化过滤
 }
 
 export interface DuplicateCheckCandidate {
@@ -703,7 +681,6 @@ export interface DuplicateCheckCandidate {
   name: string
   phone: string
   email: string | null
-  current_city: string
 }
 
 export type HrRole = 'VIEWER' | 'OPERATOR' | 'ADMIN'

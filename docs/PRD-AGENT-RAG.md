@@ -25,7 +25,7 @@ PRD 的业务模型、数据边界、PII/审计/生命周期部分是**资产，
 
 1. **可解释 > 黑盒打分**：Agent 每个结论必须携带证据引用（脱敏简历 chunk + 结构化字段核对结果）。无证据不给高分；证据摘录可点击回溯简历原文。
 2. **提议-审批（propose-approve），即「人工决策优先」的工程化形态**：Agent 的唯一写出口是 `HrAgentProposal` 工件；一切状态变更由人审批后调 **ATS v2 命令层**执行（操作者=审批人，沿用 ApplicationEvent 时间线与 ATS 命令审计）。零风险产出（报告、草稿、标签）免审批；有风险动作（婉拒、推进）默认必审；D3 才评估对「低风险+高一致性」分带开放可配置免审，且保留审计与人工回滚。
-3. **双表示简历**：结构化字段（`Candidate`/`CandidateSkill`，SQL 精确过滤硬条件）+ 语义分块（既有简历语义索引，软条件匹配）——已实现，直接复用，不重复建设。
+3. **双表示简历（0030 后已调整）**：**0030 前**为结构化字段（`Candidate`/`CandidateSkill`，SQL 精确过滤硬条件）+ 语义分块；**0030 后** `Candidate` 仅 `name/phone/email`（`CandidateSkill` 已 `DROP`，13列已删除），硬条件（技能/城市/学历/年限）改由 `ResumeFile.raw_text + Paragraph` 的文本检索 + 语义召回承载，结构化预筛仅保留真实硬条件（详见 `resume_search.py:wrapper keyword腿` 与 `0030` 迁移）。——已实现，直接复用，不重复建设。
 4. **中心化编排**：不引入 LangGraph/多 Agent 自由协作。Agent = Django 服务 + Celery 任务 + 显式触发器；流程锚定在当前 ATS 的 `Application` 阶段与 `ApplicationEvent` 上，可控、可审计、可重放（`HrAgentRun` 全量留痕）。
 
 ## 3. 总体架构
@@ -101,8 +101,8 @@ HrAgentProposal(PENDING) + HrAuditLog(trace_id=run.id) + record_prompt_version
 | 工具 | 包装的既有实现 | 读/写 | 说明 |
 |---|---|---|---|
 | `get_job(job_id)` | Job 序列化 | 读 | 含 requirements/skill_requirements；进入 LLM 前做 PII 扫描 |
-| `get_candidate_overview(candidate_id)` | Candidate + CandidateSkill | 读 | 仅 id/姓名/城市/学历/年限/技能/状态；**永不包含联系方式、备注、简历原文** |
-| `structured_filter(job_id, candidate_id)` | Candidate/CandidateSkill SQL | 读 | 硬条件逐条核对（技能/年限/城市/学历） |
+| `get_candidate_overview(candidate_id)` | Candidate（0030 后仅 id/姓名/状态，见 `apps/hr/agents/context.py`） | 读 | 仅 id/姓名/状态；**永不包含联系方式、备注、简历原文**（0030 后城市/学历/年限/技能已移除） |
+| `structured_filter(job_id, candidate_id)` | 0030 后已简化为空核对（见 `runner.py:structured_filter`），硬条件改由 RAG 文本检索判断 | 读 | 0030 前为技能/年限/城市/学历逐条 SQL 核对；0030 后 Candidate 极简，该工具返回空条件 `hard_met=True`，交由 LLM 基于证据判断 |
 | `search_resumes(query, filters, candidate_id=None, document_ids=None, resume_database_ids=None)` | `resume_search` 服务 | 读 | 复用双路召回→RRF→rerank→Small-to-Big；支持候选人文档集和 resume_database_ids 多库范围限定，默认行为不变 |
 | `search_knowledge(kb_ids, query)` | MaxKB 知识库检索 | 读 | 仅 HrConfig 白名单；结果经 PII 扫描与摘要化后才进入 LLM |
 | `similar_jobs(job_id)` | SQL 相似 + HIRED 关联聚合 | 读 | 历史录用画像对标；输出不含候选人联系方式 |
@@ -151,9 +151,9 @@ HrAgentProposal(PENDING) + HrAuditLog(trace_id=run.id) + record_prompt_version
 
 ```
 新建 Application(ACTIVE, Stage=APPLIED) → 信号 → Celery → Runner
-  ① get_job：拆出硬条件（技能/年限/城市/学历 → 结构化核对）
+  ① get_job：拆出硬条件与软条件（0030 前硬条件=技能/年限/城市/学历 → 结构化核对；0030 后硬条件改由简历原文 RAG 判断，structured_filter 已简化为空）
              与软条件（职责/领域/项目经验 → 语义匹配）
-  ② structured_filter：硬条件逐条核对，输出满足/缺失明细
+  ② structured_filter：0030 前硬条件逐条核对，输出满足/缺失明细；0030 后返回空条件（hard_met=True，见 runner.py）
   ③ search_resumes(query, candidate_id=候选人ID, document_ids=该候选人已索引简历文档集)：
              对每条软条件仅在该候选人简历内检索脱敏 chunk 证据（复用 RRF+rerank，召回入口限集）
   ④ similar_jobs（可选）：历史录用画像对标
@@ -167,7 +167,9 @@ LLM 只输出评估事实，**不输出 score / suggested_action**；两者由�
 
 ```json
 {
-  "hard_conditions": [{"requirement": "≥5 年", "field": "years_experience", "met": true}],
+  // 0030 前示例：{"requirement": "≥5 年", "field": "years_experience", "met": true}
+  // 0030 后 Candidate 仅 name/phone/email，hard_conditions 已简化为空（hard_met=True），示例仅作历史对照
+  "hard_conditions": [],
   "dimensions": [
     {"name": "技能匹配", "verdict": "...",
      "evidence": [{"resume_file_id": "", "paragraph_id": "", "excerpt": "（脱敏摘录）", "relevance": 0.83}],

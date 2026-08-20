@@ -195,7 +195,7 @@ def run_sourcing_agent(job_id, trigger_type=HrAgentTriggerType.MANUAL, user_id=N
         for row in facts.candidates[:_MAX_CANDIDATES]:
             item = by_id[row.candidate_id]
             candidate = item.get("candidate") or {}
-            candidates.append({**row.model_dump(), "name": candidate.get("name"), "current_city": candidate.get("current_city"), "highest_degree": candidate.get("highest_degree"), "years_experience": candidate.get("years_experience"), "skills": candidate.get("skills"), "document_id": item.get("document_id")})
+            candidates.append({**row.model_dump(), "name": candidate.get("name"), "skills": candidate.get("skills") or [], "document_id": item.get("document_id")})
         payload = {"scope": {"job_id": str(job.id), "job_name": job.name}, "candidates": candidates, "summary": facts.summary}
         proposal = propose(workspace_id, run, str(job.id), action="DRAFT", payload_json=payload, target_type="JOB")
         run.output_json = payload

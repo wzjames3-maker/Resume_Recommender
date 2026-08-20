@@ -94,13 +94,6 @@ def parse_resume_task(resume_id):
                 name=parsed["name"] or resume.file_name,
                 email=parsed["email"] or None,
                 phone=parsed["phone"],
-                current_city=parsed["current_city"],
-                target_city=parsed["target_city"],
-                highest_degree=parsed["highest_degree"],
-                years_experience=parsed["years_experience"],
-                skills=parsed["skills"],
-                source=resume.source_channel,
-                note=parsed["note"],
             )
             resume.candidate = candidate
             resume.status = ResumeStatus.SUCCESS

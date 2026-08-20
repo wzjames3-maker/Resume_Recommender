@@ -2,7 +2,7 @@
 
 import uuid_utils.compat as uuid
 from django.db import transaction
-from django.db.models import QuerySet, Q, Func, F, TextField
+from django.db.models import QuerySet, Q, TextField
 from django.db.models.functions import Cast
 from django.utils.translation import gettext_lazy as _
 from rest_framework import serializers
@@ -333,6 +333,17 @@ class FolderTreeSerializer(serializers.Serializer):
         source = self.data.get('source')
 
         Folder = get_folder_type(source)  # noqa
+
+        # 兼容缺失根目录的工作区：自动创建根文件夹，保证前端知识库/应用列表可正常加载
+        if not Folder.objects.filter(id=workspace_id, workspace_id=workspace_id).exists():
+            try:
+                Folder.objects.get_or_create(
+                    id=workspace_id,
+                    defaults={"name": _("Root folder"), "workspace_id": workspace_id},
+                )
+            except Exception:
+                # 并发创建冲突时忽略，交给后续查询
+                pass
 
         # 检查特定工作空间的树结构完整性
         workspace_folders = Folder.objects.filter(workspace_id=workspace_id)

@@ -10,6 +10,8 @@ export const channelLabels: Record<string, string> = {
   OTHER: '其他',
 }
 
+// 0030 已废止：Candidate 13列（city/degree/skills/source/consent 等）已物理删除，CandidateSkill 表已 DROP。
+// 以下常量仅为历史兼容保留，勿在新代码中使用；相关 UI（候选人列表/详情）已于 0030 移除合规待补展示。
 export const consentStatusLabels: Record<string, string> = {
   UNKNOWN: '未知',
   NOTIFIED: '已告知',
@@ -26,8 +28,8 @@ export const contactPreferenceLabels: Record<string, string> = {
 
 export const highestDegreeOptions = ['博士', '硕士', '本科', '大专', '中专', '高中']
 
-/** 返回候选人合规信息缺失项；空数组表示已完善 */
-export function getComplianceMissing(candidate: {
+/** @deprecated 0030 后 Candidate 已无合规字段，仅保留历史兼容；始终返回空数组 */
+export function getComplianceMissing(_candidate: {
   phone?: string | null
   email?: string | null
   collected_at?: string | null
@@ -35,13 +37,7 @@ export function getComplianceMissing(candidate: {
   consent_version?: string
   contact_preference?: string
 }): string[] {
-  const missing: string[] = []
-  if (!candidate.phone && !candidate.email) missing.push('联系方式')
-  if (!candidate.collected_at) missing.push('收集日期')
-  if (!candidate.consent_status || candidate.consent_status === 'UNKNOWN') missing.push('告知状态')
-  if (!candidate.consent_version) missing.push('告知版本')
-  if (!candidate.contact_preference || candidate.contact_preference === 'UNSPECIFIED') missing.push('联系偏好')
-  return missing
+  return []
 }
 
 // ---------- 职位 ----------

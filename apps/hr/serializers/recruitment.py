@@ -15,8 +15,6 @@ from hr.models import (
     HrAgentProposal,
     Candidate,
     CandidateStatus,
-    ConsentStatus,
-    ContactPreference,
     Interview,
     InterviewStatus,
     Job,
@@ -45,16 +43,6 @@ from users.models.user import User
 CANDIDATE_EXPORT_FIELDS = [
     "name",
     "status",
-    "current_city",
-    "target_city",
-    "highest_degree",
-    "years_experience",
-    "skills",
-    "source_type",
-    "source_detail",
-    "collected_at",
-    "consent_status",
-    "contact_preference",
     "create_time",
 ]
 
@@ -237,13 +225,6 @@ class RecruitmentService:
         return value.strip()
 
     @staticmethod
-    def _skills(data):
-        skills = data.get("skills", [])
-        if not isinstance(skills, list) or any(not isinstance(skill, str) or not skill.strip() for skill in skills):
-            raise AppApiException(400, "skills must be a list of non-empty strings")
-        return [skill.strip() for skill in skills]
-
-    @staticmethod
     def _skill_requirements(data):
         value = data.get("skill_requirements", [])
         if not isinstance(value, list) or any(not isinstance(skill, str) or not skill.strip() for skill in value):
@@ -297,39 +278,6 @@ class RecruitmentService:
         return value
 
     @staticmethod
-    def _source_type(data):
-        value = data.get("source_type", ResumeChannel.OTHER)
-        if value not in ResumeChannel.values:
-            raise AppApiException(400, "source_type is invalid")
-        return value
-
-    @staticmethod
-    def _collected_at(data):
-        value = data.get("collected_at")
-        if value in (None, ""):
-            return None
-        if isinstance(value, datetime):
-            return value
-        try:
-            return datetime.fromisoformat(str(value).replace("Z", "+00:00"))
-        except ValueError as exc:
-            raise AppApiException(400, "collected_at is invalid") from exc
-
-    @staticmethod
-    def _consent_status(data):
-        value = data.get("consent_status", ConsentStatus.UNKNOWN)
-        if value not in ConsentStatus.values:
-            raise AppApiException(400, "consent_status is invalid")
-        return value
-
-    @staticmethod
-    def _contact_preference(data):
-        value = data.get("contact_preference", ContactPreference.UNSPECIFIED)
-        if value not in ContactPreference.values:
-            raise AppApiException(400, "contact_preference is invalid")
-        return value
-
-    @staticmethod
     def _applied_at(data):
         value = data.get("applied_at")
         if value in (None, ""):
@@ -366,19 +314,6 @@ class RecruitmentService:
             "name": candidate.name,
             "email": self._masked_email(candidate.email) if masked else candidate.email,
             "phone": self._masked_phone(candidate.phone) if masked else candidate.phone,
-            "current_city": candidate.current_city,
-            "target_city": candidate.target_city,
-            "highest_degree": candidate.highest_degree,
-            "years_experience": candidate.years_experience,
-            "skills": candidate.skills,
-            "source": candidate.source,
-            "source_type": candidate.source_type,
-            "source_detail": candidate.source_detail,
-            "collected_at": candidate.collected_at,
-            "consent_status": candidate.consent_status,
-            "consent_version": candidate.consent_version,
-            "contact_preference": candidate.contact_preference,
-            "note": candidate.note,
             "status": candidate.status,
             "create_time": candidate.create_time,
             "update_time": candidate.update_time,
@@ -411,42 +346,15 @@ class RecruitmentService:
             name=self._required_string(data, "name", 128),
             email=data.get("email") or None,
             phone=self._optional_string(data, "phone", 20),
-            current_city=self._optional_string(data, "current_city", 64),
-            target_city=self._optional_string(data, "target_city", 64),
-            highest_degree=self._optional_string(data, "highest_degree", 32),
-            years_experience=self._years_experience(data),
-            skills=self._skills(data),
-            source=self._optional_string(data, "source", 64),
-            source_type=self._source_type(data),
-            source_detail=self._optional_string(data, "source_detail", 128),
-            collected_at=self._collected_at(data),
-            consent_status=self._consent_status(data),
-            consent_version=self._optional_string(data, "consent_version", 32),
-            contact_preference=self._contact_preference(data),
-            note=self._optional_string(data, "note", 4096),
         )
         write_audit_log(self.workspace_id, self.user_id, "CREATE", "CANDIDATE", candidate.id)
         return self._candidate_output(candidate)
 
-    @staticmethod
-    def _years_experience(data):
-        value = data.get("years_experience")
-        if value in (None, ""):
-            return None
-        if isinstance(value, bool) or not isinstance(value, int) or value < 0 or value > 99:
-            raise AppApiException(400, "years_experience is invalid")
-        return value
-
     def _filter_candidates(self, query):
         queryset = Candidate.objects.filter(workspace_id=self.workspace_id)
         name = query.get("name")
-        city = query.get("city")
         status = query.get("status")
         skills = query.get("skills")
-        years_min = query.get("years_min")
-        years_max = query.get("years_max")
-        source = query.get("source")
-        highest_degree = query.get("highest_degree")
         resume_database_ids = query.getlist("resume_database_ids") if hasattr(query, "getlist") else []
         if not resume_database_ids:
             resume_database_ids = query.get("resume_database_ids") or query.get("resume_database_id")
@@ -459,9 +367,9 @@ class RecruitmentService:
                     resumefile__database_memberships__resume_database_id__in=[database.id for database in databases]
                 ).distinct()
         if name:
-            queryset = queryset.filter(name__icontains=name)
-        if city:
-            queryset = queryset.filter(Q(current_city__icontains=city) | Q(target_city__icontains=city))
+            queryset = queryset.filter(
+                Q(name__icontains=name) | Q(phone__icontains=name) | Q(email__icontains=name)
+            )
         if status:
             if status not in CandidateStatus.values:
                 raise AppApiException(400, "status is invalid")
@@ -472,9 +380,7 @@ class RecruitmentService:
         else:
             queryset = queryset.exclude(status=CandidateStatus.DELETED)
         if skills:
-            # 新架构（LLM 只切片、正则只抽身份字段）：技能不再是结构化字段，新简历 skills 恒空。
-            # 「按技能搜索」改为每个技能词命中 结构化技能字段 OR 简历原文/正文（raw_text 优先，
-            # 段落兜底覆盖无 raw_text 的存量简历），多词 AND 语义。
+            # 0030 后 Candidate 仅 name/phone/email：技能搜索改为 纯简历原文/正文 命中（raw_text 优先 + 段落兜底），多词 AND。
             terms = [term.strip() for term in skills.split(",") if term.strip()]
             if terms:
                 from knowledge.models import Paragraph
@@ -497,24 +403,8 @@ class RecruitmentService:
                         ResumeFile.objects.filter(workspace_id=self.workspace_id, raw_text__icontains=term)
                         .values_list("candidate_id", flat=True)
                     )
-                    skills_q &= Q(skills__contains=[term]) | Q(id__in=text_candidate_ids)
+                    skills_q &= Q(id__in=text_candidate_ids)
                 queryset = queryset.filter(skills_q).distinct()
-        if highest_degree:
-            queryset = queryset.filter(highest_degree=highest_degree)
-        if years_min:
-            try:
-                years_min = int(years_min)
-            except (TypeError, ValueError) as exc:
-                raise AppApiException(400, "years_min is invalid") from exc
-            queryset = queryset.filter(years_experience__gte=years_min)
-        if years_max:
-            try:
-                years_max = int(years_max)
-            except (TypeError, ValueError) as exc:
-                raise AppApiException(400, "years_max is invalid") from exc
-            queryset = queryset.filter(years_experience__lte=years_max)
-        if source:
-            queryset = queryset.filter(source=source)
         owner_id = query.get("owner_id")
         if owner_id:
             owner_id = self._owner_id({"owner_id": owner_id})
@@ -581,45 +471,22 @@ class RecruitmentService:
         candidate = self._candidate(candidate_id)
         if candidate.status == CandidateStatus.DELETED:
             raise AppApiException(400, "deleted candidate cannot be edited")
-        fields = {
-            "name": (self._required_string, 128),
-            "phone": (self._optional_string, 20),
-            "current_city": (self._optional_string, 64),
-            "target_city": (self._optional_string, 64),
-            "highest_degree": (self._optional_string, 32),
-            "source": (self._optional_string, 64),
-            "source_detail": (self._optional_string, 128),
-            "consent_version": (self._optional_string, 32),
-            "note": (self._optional_string, 4096),
-        }
         update_fields = []
-        for field, (validator, maximum) in fields.items():
-            if field in data:
-                setattr(candidate, field, validator(data, field, maximum))
-                update_fields.append(field)
+        if "name" in data:
+            candidate.name = self._required_string(data, "name", 128)
+            update_fields.append("name")
+        if "phone" in data:
+            candidate.phone = self._optional_string(data, "phone", 20)
+            update_fields.append("phone")
         if "email" in data:
-            candidate.email = data["email"] or None
+            email = data.get("email")
+            candidate.email = email or None
+            if candidate.email and "@" not in candidate.email:
+                raise AppApiException(400, "email is invalid")
             update_fields.append("email")
-        if "years_experience" in data:
-            candidate.years_experience = self._years_experience(data)
-            update_fields.append("years_experience")
-        if "skills" in data:
-            candidate.skills = self._skills(data)
-            update_fields.append("skills")
-        if "source_type" in data:
-            candidate.source_type = self._source_type(data)
-            update_fields.append("source_type")
-        if "collected_at" in data:
-            candidate.collected_at = self._collected_at(data)
-            update_fields.append("collected_at")
-        if "consent_status" in data:
-            candidate.consent_status = self._consent_status(data)
-            update_fields.append("consent_status")
-        if "contact_preference" in data:
-            candidate.contact_preference = self._contact_preference(data)
-            update_fields.append("contact_preference")
-        if update_fields:
-            candidate.save(update_fields=[*update_fields, "update_time"])
+        if not update_fields:
+            return self._candidate_output(candidate)
+        candidate.save(update_fields=[*update_fields, "update_time"])
         write_audit_log(self.workspace_id, self.user_id, "UPDATE", "CANDIDATE", candidate.id)
         return self._candidate_output(candidate)
 
@@ -695,17 +562,8 @@ class RecruitmentService:
         candidate.name = "已删除候选人"
         candidate.email = None
         candidate.phone = ""
-        candidate.current_city = ""
-        candidate.target_city = ""
-        candidate.highest_degree = ""
-        candidate.years_experience = None
-        candidate.skills = []
-        candidate.source = ""
-        candidate.source_detail = ""
-        candidate.consent_version = ""
-        candidate.note = ""
         candidate.status = CandidateStatus.DELETED
-        candidate.save()
+        candidate.save(update_fields=["name", "email", "phone", "status", "update_time"])
         write_audit_log(self.workspace_id, self.user_id, "DELETE", "CANDIDATE", candidate.id)
         return self._candidate_output(candidate)
 
@@ -714,16 +572,6 @@ class RecruitmentService:
         return {
             "name": candidate.name,
             "status": candidate.status,
-            "current_city": candidate.current_city,
-            "target_city": candidate.target_city,
-            "highest_degree": candidate.highest_degree,
-            "years_experience": candidate.years_experience if candidate.years_experience is not None else "",
-            "skills": "、".join(candidate.skills),
-            "source_type": candidate.source_type,
-            "source_detail": candidate.source_detail,
-            "collected_at": candidate.collected_at.isoformat() if candidate.collected_at else "",
-            "consent_status": candidate.consent_status,
-            "contact_preference": candidate.contact_preference,
             "create_time": candidate.create_time.isoformat(),
         }
 
@@ -1123,7 +971,6 @@ class RecruitmentService:
                     "name": row.name,
                     "phone": self._masked_phone(row.phone) if self.hr_role == "VIEWER" else row.phone,
                     "email": self._masked_email(row.email) if self.hr_role == "VIEWER" else row.email,
-                    "current_city": row.current_city,
                 }
                 for row in matches[:20]
             ]
@@ -1157,19 +1004,7 @@ class RecruitmentService:
                 primary.email = secondary.email
             if not primary.phone:
                 primary.phone = secondary.phone
-            if not primary.current_city:
-                primary.current_city = secondary.current_city
-            if not primary.target_city:
-                primary.target_city = secondary.target_city
-            if not primary.highest_degree:
-                primary.highest_degree = secondary.highest_degree
-            if primary.years_experience is None:
-                primary.years_experience = secondary.years_experience
-            if not primary.source:
-                primary.source = secondary.source
-            primary.skills = primary.skills + [skill for skill in secondary.skills if skill not in primary.skills]
-            primary.note = "\n".join(part for part in [primary.note, secondary.note] if part)
-            primary.save()
+            primary.save(update_fields=["name", "email", "phone", "update_time"])
             ResumeFile.objects.filter(candidate=secondary).update(candidate=primary)
             Application.objects.filter(candidate=secondary).update(candidate=primary)
             # 审查修复 #2：先迁移 Offer/OnboardingHandoff 归属再删 secondary，防止 CASCADE 静默销毁
@@ -1204,39 +1039,22 @@ class RecruitmentService:
         requirements = job.skill_requirements
         requirement_lower = [skill.lower() for skill in requirements]
         candidates = Candidate.objects.filter(workspace_id=self.workspace_id, status=CandidateStatus.ACTIVE)
-        # 简历正文关键词召回：skills 字段常为空/为长句，只要简历正文出现需求技能即纳入匹配
-        # （保证召回，不依赖语义排名与脏技能表）。
+        # 0030 后 Candidate 仅 name/phone/email：匹配仅依赖 简历正文关键词召回（paragraph ILike）与语义补充，不再读 candidate.skills/城市。
         keyword_hit_ids = self._keyword_match_candidate_ids(requirements)
         records = []
         scored_ids = set()
         for candidate in candidates:
             score = 0
             matched = []
-            candidate_skills_lower = [skill.lower() for skill in candidate.skills]
             candidate_id_str = str(candidate.id)
             for index, skill in enumerate(requirement_lower):
-                if skill in candidate_skills_lower:
+                if candidate_id_str in keyword_hit_ids.get(skill, ()):
                     score += 2
                     matched.append(requirements[index])
-                elif any(skill in csk for csk in candidate_skills_lower):
-                    # 简历解析出的技能常为长短语（如「2.根据市场营销计划」），子串命中更贴合实际
-                    score += 1
-                    matched.append(requirements[index])
-                elif candidate_id_str in keyword_hit_ids.get(skill, ()):
-                    # 简历正文包含需求技能关键词（ILike），确保匹配召回
-                    score += 2
-                    matched.append(requirements[index])
-            if job.city:
-                if candidate.current_city == job.city or candidate.target_city == job.city:
-                    score += 2
             if score > 0:
                 records.append({
                     "candidate_id": str(candidate.id),
                     "name": candidate.name,
-                    "current_city": candidate.current_city,
-                    "target_city": candidate.target_city,
-                    "years_experience": candidate.years_experience,
-                    "skills": candidate.skills,
                     "match_score": score,
                     "matched_skills": matched,
                     "create_time": candidate.create_time,
@@ -1267,26 +1085,35 @@ class RecruitmentService:
         return {"total": total, "records": records[start:start + page_size]}
 
     def _keyword_match_candidate_ids(self, requirements):
-        """按需求技能在简历正文（paragraph）中做 ILike 关键词召回，返回 {skill_lower: set(candidate_id_str)}。"""
+        """按需求技能在简历原文（raw_text + paragraph）中做 ILike 关键词召回，返回 {skill_lower: set(candidate_id_str)}。"""
         from knowledge.models import Paragraph
 
         result = {}
         for skill in requirements:
-            if not skill or not skill.strip():
+            term = (skill or "").strip()
+            if not term:
                 continue
+            candidate_ids: set[str] = set()
+            # raw_text 优先：覆盖未建 paragraph / document_id 缺口的简历
+            raw_ids = ResumeFile.objects.filter(
+                workspace_id=self.workspace_id, raw_text__icontains=term
+            ).values_list("candidate_id", flat=True)
+            for cid in raw_ids:
+                if cid:
+                    candidate_ids.add(str(cid))
+            # paragraph 兜底：覆盖 raw_text 为空的存量简历
             doc_ids = list(
-                Paragraph.objects.filter(content__icontains=skill).values_list("document_id", flat=True)
+                Paragraph.objects.filter(content__icontains=term).values_list("document_id", flat=True)
             )
-            if not doc_ids:
-                continue
-            candidate_ids = set(
-                str(cid)
-                for cid in ResumeFile.objects.filter(
+            if doc_ids:
+                para_ids = ResumeFile.objects.filter(
                     workspace_id=self.workspace_id, document_id__in=doc_ids
                 ).values_list("candidate_id", flat=True)
-            )
+                for cid in para_ids:
+                    if cid:
+                        candidate_ids.add(str(cid))
             if candidate_ids:
-                result[skill.lower()] = candidate_ids
+                result[term.lower()] = candidate_ids
         return result
 
     def _semantic_match_candidates(self, job, requirements, exclude_ids):
@@ -1323,10 +1150,6 @@ class RecruitmentService:
             added.append({
                 "candidate_id": cid,
                 "name": candidate.get("name") or "",
-                "current_city": candidate.get("current_city") or "",
-                "target_city": candidate.get("target_city") or "",
-                "years_experience": candidate.get("years_experience"),
-                "skills": candidate.get("skills") or [],
                 "match_score": mapped,
                 "matched_skills": [skill for skill in requirements if skill and skill.strip()],
             })

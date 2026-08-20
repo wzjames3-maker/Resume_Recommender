@@ -160,12 +160,12 @@ RAG API 支持 resume_database_ids 多选范围：
 ## 8. 关键实现位置
 
 - 模型和成员关系：apps/hr/models/recruitment.py
-- 数据迁移：apps/hr/migrations/0028_resumedatabasemembership.py
-- 库、上传和统计服务：apps/hr/serializers/recruitment.py
+- 数据迁移：apps/hr/migrations/0028_resumedatabasemembership.py、0030_remove_candidate_legacy_fields.py（Candidate 13列删除 + CandidateSkill DROP）
+- 库、上传和统计服务：apps/hr/serializers/recruitment.py（0030 后 Candidate 仅 name/phone/email，库筛选仅以 Membership + name/phone/email 模糊为准）
 - RAG 库范围：apps/hr/services/resume_search.py
 - 库接口和上传接口：apps/hr/views/recruitment.py、apps/hr/urls.py
 - 多库总览：ui/src/views/hr/resumes/index.vue
-- 库内候选人：ui/src/views/hr/candidates/index.vue
+- 库内候选人：ui/src/views/hr/candidates/index.vue（0030 后仅三字段表/单框筛选/480px 弹窗，见 HR-FRONTEND-GUIDE:4.4）
 - 库管理：ui/src/views/hr/resumes/databases.vue
 - 上传页：ui/src/views/hr/resumes/upload.vue
 - RAG 页面：ui/src/views/hr/search/index.vue

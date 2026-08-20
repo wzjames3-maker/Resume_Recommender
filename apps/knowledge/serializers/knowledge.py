@@ -249,12 +249,23 @@ class KnowledgeSerializer(serializers.Serializer):
                 ).filter(auth_target_type="KNOWLEDGE", workspace_id=workspace_id, user_id=self.data.get("user_id"))
             return query_set_dict
 
+        def _ensure_root_folder(self, folder_id: str):
+            """Return root folder, auto-creating workspace root when missing for compatibility."""
+            root = KnowledgeFolder.objects.filter(id=folder_id).first()
+            if root:
+                return root
+            if folder_id == self.data.get("workspace_id"):
+                root, _created = KnowledgeFolder.objects.get_or_create(
+                    id=folder_id,
+                    defaults={"name": _("Root folder"), "workspace_id": folder_id},
+                )
+                return root
+            raise serializers.ValidationError(_("Folder not found"))
+
         def page(self, current_page: int, page_size: int):
             self.is_valid(raise_exception=True)
-            folder_id = self.data.get("folder_id", self.data.get("workspace_id"))
-            root = KnowledgeFolder.objects.filter(id=folder_id).first()
-            if not root:
-                raise serializers.ValidationError(_("Folder not found"))
+            folder_id = self.data.get("folder_id") or self.data.get("workspace_id")
+            self._ensure_root_folder(folder_id)
             workspace_manage = is_workspace_manage_permission_read(
                 self.data.get("user_id"), self.data.get("workspace_id"), "KNOWLEDGE:READ"
             )
@@ -280,12 +291,8 @@ class KnowledgeSerializer(serializers.Serializer):
 
         def list(self):
             self.is_valid(raise_exception=True)
-            folder_id = self.data.get("folder_id")
-            if not folder_id:
-                folder_id = self.data.get("workspace_id")
-            root = KnowledgeFolder.objects.filter(id=folder_id).first()
-            if not root:
-                raise serializers.ValidationError(_("Folder not found"))
+            folder_id = self.data.get("folder_id") or self.data.get("workspace_id")
+            self._ensure_root_folder(folder_id)
             workspace_manage = is_workspace_manage_permission_read(
                 self.data.get("user_id"), self.data.get("workspace_id"), "KNOWLEDGE:READ"
             )

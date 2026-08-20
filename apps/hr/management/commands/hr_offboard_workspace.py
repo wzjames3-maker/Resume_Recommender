@@ -26,7 +26,6 @@ from hr.models import (
     ApplicationEvent,
     ApplicationStatus,
     Candidate,
-    CandidateSkill,
     HrAccess,
     HrAgentProposal,
     HrAgentRun,
@@ -105,7 +104,7 @@ class Command(BaseCommand):
             "job_stages": JobStage.objects.filter(workspace_id=workspace_id).count(),
             "jobs": Job.objects.filter(workspace_id=workspace_id).count(),
             "candidates": Candidate.objects.filter(workspace_id=workspace_id).count(),
-            "candidate_skills": CandidateSkill.objects.filter(candidate__workspace_id=workspace_id).count(),
+            "candidate_skills": 0,  # 0030 CandidateSkill 已 DROP
             "resume_files": ResumeFile.objects.filter(workspace_id=workspace_id).count(),
             "knowledge_documents": len(document_ids),
             "knowledge_paragraphs": (
@@ -145,10 +144,7 @@ class Command(BaseCommand):
             rows.append({
                 "id": str(c.id), "name": c.name,
                 "email": _masked_email(c.email), "phone": _masked_phone(c.phone),
-                "current_city": c.current_city, "target_city": c.target_city,
-                "highest_degree": c.highest_degree, "years_experience": c.years_experience,
-                "skills": c.skills, "source": c.source, "source_type": c.source_type,
-                "consent_status": c.consent_status, "status": c.status,
+                "status": c.status,
                 "create_time": c.create_time.isoformat() if c.create_time else None,
                 "update_time": c.update_time.isoformat() if c.update_time else None,
             })

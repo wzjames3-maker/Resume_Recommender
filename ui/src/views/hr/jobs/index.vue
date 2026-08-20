@@ -98,7 +98,6 @@
                     <el-table-column label="命中技能" min-width="160">
                       <template #default="{ row: match }">{{ match.matched_skills.join('、') || '-' }}</template>
                     </el-table-column>
-                    <el-table-column prop="current_city" label="现居" width="100"><template #default="{ row: match }">{{ match.current_city || '-' }}</template></el-table-column>
                     <el-table-column label="操作" width="110">
                       <template #default="{ row: match }">
                         <el-button v-if="isHrOperator" link type="primary" size="small" :disabled="row.status === 'CLOSED'" @click="addMatchToJob(row, match)">加入职位</el-button>
@@ -270,9 +269,9 @@
         <div v-for="(candidate, idx) in sourcingProposal.payload.candidates || []" :key="candidate.candidate_id" class="ai-block mb-16">
           <div class="flex-between">
             <span class="ai-title">{{ idx + 1 }}. {{ candidate.name || '-' }}</span>
-            <span class="color-secondary text-12">{{ candidate.current_city || '-' }} · {{ candidate.years_experience != null ? candidate.years_experience + ' 年' : '年限未知' }} · {{ candidate.highest_degree || '-' }}</span>
+            <span class="color-secondary text-12">评分清单 · 详见匹配理由与证据</span>
           </div>
-          <div class="mt-8">
+          <div v-if="candidate.skills?.length" class="mt-8">
             <el-tag v-for="skill in candidate.skills || []" :key="skill" class="mr-8" size="small">{{ skill }}</el-tag>
           </div>
           <div class="mt-8">匹配理由：{{ candidate.match_reason || '-' }}</div>

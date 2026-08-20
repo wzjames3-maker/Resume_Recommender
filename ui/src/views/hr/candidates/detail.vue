@@ -16,53 +16,13 @@
       </div>
     </div>
 
-    <el-alert
-      v-if="candidate && complianceMissing(candidate).length"
-      type="warning"
-      :closable="false"
-      class="mb-16"
-      :title="`合规信息待补：${complianceMissing(candidate).join('、')}`"
-      description="请在编辑候选人时补充完整，处理真实 PII 前应满足 PRD 合规要求。"
-    />
-
     <el-card v-if="candidate" class="mb-16" style="--el-card-padding: 0">
       <template #header><span>基本信息</span></template>
-      <el-descriptions :column="2" border class="p-16">
+      <el-descriptions :column="1" border class="p-16">
         <el-descriptions-item label="姓名">{{ candidate.name }}</el-descriptions-item>
-        <el-descriptions-item label="状态">
-          <el-tag :type="candidate.status === 'ACTIVE' ? 'success' : 'info'" size="small">
-            {{ candidate.status === 'ACTIVE' ? '在库' : '已归档' }}
-          </el-tag>
-        </el-descriptions-item>
-        <el-descriptions-item label="邮箱">{{ candidate.email || '-' }}</el-descriptions-item>
         <el-descriptions-item label="手机号">{{ candidate.phone || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="当前城市">{{ candidate.current_city || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="目标城市">{{ candidate.target_city || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="最高学历">{{ candidate.highest_degree || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="工作年限">{{ candidate.years_experience == null ? '-' : `${candidate.years_experience} 年` }}</el-descriptions-item>
-        <el-descriptions-item label="来源">{{ candidate.source || '-' }}</el-descriptions-item>
-        <el-descriptions-item label="技能" :span="2">
-          <template v-if="candidate.skills?.length">
-            <el-tag v-for="skill in candidate.skills" :key="skill" size="small" class="mr-8 mb-8">{{ skill }}</el-tag>
-          </template>
-          <span v-else>-</span>
-        </el-descriptions-item>
-        <el-descriptions-item label="备注" :span="2">{{ candidate.note || '-' }}</el-descriptions-item>
+        <el-descriptions-item label="邮箱">{{ candidate.email || '-' }}</el-descriptions-item>
       </el-descriptions>
-      <el-collapse v-model="systemCollapse" class="p-16">
-        <el-collapse-item title="系统与合规信息" name="system">
-          <el-descriptions :column="2" border>
-            <el-descriptions-item label="来源类型">{{ channelLabels[candidate.source_type] || candidate.source_type || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="来源详情">{{ candidate.source_detail || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="收集日期">{{ formatDateTime(candidate.collected_at) }}</el-descriptions-item>
-            <el-descriptions-item label="告知状态">{{ consentStatusLabels[candidate.consent_status] || candidate.consent_status || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="告知版本">{{ candidate.consent_version || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="联系偏好">{{ contactPreferenceLabels[candidate.contact_preference] || candidate.contact_preference || '-' }}</el-descriptions-item>
-            <el-descriptions-item label="创建时间">{{ formatDateTime(candidate.create_time) }}</el-descriptions-item>
-            <el-descriptions-item label="更新时间">{{ formatDateTime(candidate.update_time) }}</el-descriptions-item>
-          </el-descriptions>
-        </el-collapse-item>
-      </el-collapse>
     </el-card>
 
     <el-card v-if="candidate" class="mb-16" style="--el-card-padding: 0">
@@ -124,16 +84,12 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import HrApi from '@/api/hr/recruitment'
-import type { Candidate, CandidateDetail, ResumeFile } from '@/api/type/hr'
+import type { CandidateDetail, ResumeFile } from '@/api/type/hr'
 import {
   assignmentStatusLabels,
   assignmentTagType,
   channelLabels,
-  consentStatusLabels,
-  contactPreferenceLabels,
-  formatDateTime,
   formatFileSize,
-  getComplianceMissing,
   relationTypeLabels,
 } from '@/views/hr/constants'
 import useStore from '@/stores'
@@ -149,7 +105,6 @@ const isHrOperator = computed(() => user.getHrRole() === 'OPERATOR' || user.getH
 const loading = ref(false)
 const members = ref<Array<{ id: string; nick_name: string }>>([])
 const candidate = ref<CandidateDetail | null>(null)
-const systemCollapse = ref<string[]>([])
 const resumes = ref<ResumeFile[]>([])
 const resumeLoading = ref(false)
 const contentVisible = ref(false)
@@ -164,10 +119,6 @@ function loadMembers() {
   HrApi.getMembers().then((response) => {
     members.value = response.data || []
   }).catch(() => {})
-}
-
-function complianceMissing(candidate: CandidateDetail) {
-  return getComplianceMissing(candidate)
 }
 
 function loadDetail() {

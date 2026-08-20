@@ -22,7 +22,7 @@ from django.db import transaction
 from django.utils import timezone
 
 from hr.agents.runner import run_screening_agent
-from hr.models import Application, Candidate, CandidateSkill, HrAgentRun, HrConfig, Job, JobStage, ResumeFile
+from hr.models import Application, Candidate, HrAgentRun, HrConfig, Job, JobStage, ResumeFile
 from hr.services.application_service import create_default_stages
 from hr.services.skill_normalize import normalize_skill
 from knowledge.models import Paragraph
@@ -103,16 +103,7 @@ class Command(BaseCommand):
             return 0
         if not skills:
             return 0
-        candidate.skills = skills
-        candidate.save(update_fields=["skills", "update_time"])
-        CandidateSkill.objects.filter(candidate=candidate).delete()
-        seen = set()
-        for skill in skills:
-            norm = normalize_skill(skill) or skill
-            if norm in seen:
-                continue
-            seen.add(norm)
-            CandidateSkill.objects.create(candidate=candidate, skill_norm=norm, skill_raw=skill)
+        # 0030 后 Candidate 仅 name/phone/email，技能不再落库，RAG 直接检索简历原文
         row["skills"] = skills
         return 1
 

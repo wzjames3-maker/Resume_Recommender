@@ -75,7 +75,7 @@ L0 路由层   意图分类+槽位抽取（1 次 LLM，规则兜底）
 |---|---|---|
 | dense | chunks 派生自 `"{title}\\n{content}"` | **杠杆 B（推荐，HR 侧零内核改动）**：`resume_index` 创建段落后补写 `chunks=["{title}\\n"+c for c in text_to_chunk(content)]`；content 保持原文（保真/展示/回溯不受影响）。杠杆 A（内核 1 行）：`ParagraphSerializer` chunks 派生时并入 title（L255/L426），与 list_embedding_text.sql 的 text 列意图一致化，但影响全部知识库，需重嵌+评测，后置 |
 | sparse | 同上 + Termbase | **Termbase 在 HR 稀疏路已自动接入**（`KeywordsSearch().handle` 内部按 knowledge_id 查 Termbase，pg_vector.py:294-298；入库侧 `_batch_save` 同样生效）。落地 = 向 HR 知识库插入技能同义词词条 + **全量重嵌**（使 search_vector 分词与查询侧一致）。注意 `_sparse_query` 停用词表硬编码（经验/工作/熟悉/精通等），词条设计需避开 |
-| 结构化 | Candidate 字段 + 新增 `candidate_skill(candidate_id, skill_norm, skill_raw)` 归一表 | Skill-AND 从逐技能向量召回 + Python 过滤，改为 SQL EXISTS；归一映射由字典冻结机制治理 |
+| 结构化 | Candidate 字段 + 新增 `candidate_skill(candidate_id, skill_norm, skill_raw)` 归一表 | **0030 已 DROP**：Skill-AND 从逐技能向量召回 + Python 过滤改为 SQL EXISTS 的设计已废止，现改为 `raw_text + paragraph` 文本检索 |
 
 ### 3.4 L0 查询理解
 
@@ -83,9 +83,11 @@ L0 路由层   意图分类+槽位抽取（1 次 LLM，规则兜底）
 - 规则兜底（LLM 不可用）：正则抽年限（`(\\d+)\\s*年`）、学历/城市词表；intent 缺省 browse。
 - semantic_query = 去掉精确条件后的剩余语义词（避免"5 年以上 Java"整句 embed 稀释语义）。
 
-### 3.5 L1 结构化预筛（G1 的保证）
+### 3.5 L1 结构化预筛（G1 的保证）【0030 已调整，技能/城市等结构化字段已移除】
 
-- SQL：`status=ACTIVE AND years_experience>=n AND highest_degree∈(...) AND current_city∈(...) AND EXISTS(技能)`。
+> **0030 前**：`status=ACTIVE AND years_experience>=n AND highest_degree∈(...) AND current_city∈(...) AND EXISTS(技能)`（技能经 `CandidateSkill` 归一表）。**0030 后**：`Candidate` 仅 `name/phone/email`，上述结构化字段（`years_experience/highest_degree/current_city/skills/CandidateSkill`）已物理删除，**预筛已简化为仅 `status=ACTIVE` + 库范围**；技能/年限/学历/城市改由 `ResumeFile.raw_text + Paragraph` 的文本检索与语义召回承载（见 `resume_search.py:wrapper keyword腿` 及 `0030` 后预筛移除技能维度的修复）。结构化技能预筛已废止，本节仅作历史对照。
+
+- SQL（0030 前）：`status=ACTIVE AND years_experience>=n AND highest_degree∈(...) AND current_city∈(...) AND EXISTS(技能)`。
 - 接入点（自审修正）：**HR `_recall_dual` 自建 query_set（resume_search.py:103）追加 `.filter(document_id__in=预筛文档集)`**；内核 `pg_vector.query` 虽有 document_id_list 参数，但 HR 路径不经由它。候选->文档映射经 ResumeFile.document_id。
 - 边界：预筛为空 -> 返回空+meta（明确"无满足条件候选人"，不做语义兜底误导）；预筛 > 阈值（建议 2000）-> 放弃预筛转 browse+检索后过滤。
 
@@ -135,7 +137,7 @@ rerank 挂  -> RRF 序（现有）
 | Phase | 内容 | 量级 |
 |---|---|---|
 | P1 快赢 | title 入 chunks（杠杆 B）；PII 掩码前置；证据合成聚合；查询理解 v1（规则槽位） | 1-2 天 |
-| P2 结构化 | candidate_skill 归一表 + Skill-AND SQL 化；Termbase 词条 + 全量重嵌；L1 预筛接入 | 3-5 天 |
+| P2 结构化 | candidate_skill 归一表 + Skill-AND SQL 化；Termbase 词条 + 全量重嵌；L1 预筛接入 | 3-5 天 | **（0030 后 candidate_skill 已 DROP，P2 结构化技能预筛已废止）** |
 | P3 演进 | LLM 合并调用（切片+字段抽取）；section 显式加权；增量更新；分类型评测自动化 | 后置 |
 
 每 Phase 过单测基线（当前 367）+ 评测集复测，独立提交。

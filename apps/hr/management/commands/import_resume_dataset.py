@@ -4,7 +4,7 @@
     @file： import_resume_dataset.py
     @date：2026/8/17
     @desc: D1 评测语料导入：天池人才简历数据集（数据集/train.json，2000 份脱敏结构化简历）
-           渲染为结构化文本 → Candidate + CandidateSkill + ResumeFile + 简历语义索引。
+           渲染为结构化文本 → Candidate + ResumeFile + 简历语义索引。
            结构化字段直接建档（零 LLM 解析）；切片由结构化节构造（零 LLM 切片，
            走 index_resume 的预切片通道）；技能用术语表规则抽取（零 LLM）。
            幂等：sha256 跳过，可断点续跑；同步向量化（不依赖 celery worker）。
@@ -21,7 +21,7 @@ from django.db import transaction
 from django.db.models import QuerySet
 
 from hr.management.commands.seed_resume_termbase import _EXTRA_TERMS
-from hr.models import Candidate, CandidateSkill, ResumeFile, ResumeStatus
+from hr.models import Candidate, ResumeFile, ResumeStatus
 from hr.services.resume_index import index_resume
 from hr.services.skill_normalize import normalize_skill
 from knowledge.models import Document, Knowledge
@@ -229,14 +229,9 @@ class Command(BaseCommand):
                         candidate = Candidate.objects.create(
                             workspace_id=workspace_id, name=str(record.get("姓名") or name),
                             phone=_mask_phone(str(record.get("电话") or "")),
-                            highest_degree=degree, years_experience=_years_experience(record.get("工作经历")),
-                            skills=skills, source="DATASET", note="天池人才简历数据集（脱敏）",
+                            email=str(record.get("邮箱") or "") or None,
                         )
-                        for skill in skills:
-                            norm = normalize_skill(skill) or skill
-                            if CandidateSkill.objects.filter(candidate=candidate, skill_norm=norm).exists():
-                                continue
-                            CandidateSkill.objects.create(candidate=candidate, skill_norm=norm, skill_raw=skill)
+                        # 0030 后 CandidateSkill 已 DROP，技能仅通过简历原文 RAG 检索
                     else:
                         # 断点续跑：上次失败的残留（无 document_id）复用重建
                         resume = existing
