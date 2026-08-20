@@ -30,7 +30,18 @@ const hasPermissionChild = (
     permission = (permission as PF)()
   }
   if (permission instanceof HrRole) {
-    return user.getHrRole() === permission.role
+    const userRole = user.getHrRole()
+    // 层级：ADMIN > OPERATOR > VIEWER
+    if (permission.role === 'VIEWER') {
+      return ['VIEWER', 'OPERATOR', 'ADMIN'].includes(userRole)
+    }
+    if (permission.role === 'OPERATOR') {
+      return ['OPERATOR', 'ADMIN'].includes(userRole)
+    }
+    if (permission.role === 'ADMIN') {
+      return userRole === 'ADMIN'
+    }
+    return userRole === permission.role
   }
   if (permission instanceof Role) {
     return role.includes(permission.role)

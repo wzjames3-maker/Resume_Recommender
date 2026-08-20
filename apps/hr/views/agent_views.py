@@ -11,6 +11,8 @@ import uuid as _uuid
 
 from rest_framework.views import APIView
 
+from django.conf import settings
+
 from common import result
 from common.auth import TokenAuth
 from common.exception.app_exception import AppApiException, AppUnauthorizedFailed, NotFound404
@@ -19,12 +21,28 @@ from hr.agents.draft_runner import run_communication_draft
 from hr.agents.jd_runner import run_jd_draft_agent
 from hr.agents.proposals import ProposalService
 from hr.agents.runner import run_screening_agent
-from hr.agents.sourcing_runner import run_sourcing_agent
 from hr.agents.scope import validate_resume_database_ids
+from hr.agents.sourcing_runner import run_sourcing_agent
 from hr.models import HrAgentTriggerType
 from hr.services.agent_stats import agent_feedback_stats
 from hr.services.agent_workbench import get_evidence_paragraph, get_run, list_proposals, list_runs, retry_run
 from hr.views.permissions import hr_access_required, hr_operator_required
+
+# Pydantic AI runners（Prompt 7 特性开关）
+try:
+    from hr.agents.copilot_runner_pydantic import run_interview_copilot as run_interview_copilot_pydantic
+    from hr.agents.draft_runner_pydantic import run_communication_draft as run_communication_draft_pydantic
+    from hr.agents.jd_runner_pydantic import run_jd_draft_agent as run_jd_draft_agent_pydantic
+    from hr.agents.runner_pydantic import run_screening_agent as run_screening_agent_pydantic
+    from hr.agents.sourcing_runner_pydantic import run_sourcing_agent as run_sourcing_agent_pydantic
+
+    _PYDANTIC_AVAILABLE = True
+except ImportError:
+    _PYDANTIC_AVAILABLE = False
+
+
+def _use_pydantic():
+    return _PYDANTIC_AVAILABLE and getattr(settings, "USE_PYDANTIC_AI", False)
 
 
 def _require_uuid(value, field_name="id"):
@@ -70,7 +88,8 @@ class AgentRunAPI(APIView):
                 raise AppApiException(400, "application_id is required")
             _require_uuid(application_id, "application_id")
             if agent_type == "SCREENING":
-                output = run_screening_agent(
+                runner = run_screening_agent_pydantic if _use_pydantic() else run_screening_agent
+                output = runner(
                     application_id,
                     trigger_type=HrAgentTriggerType.MANUAL,
                     user_id=request.user.id,
@@ -78,7 +97,8 @@ class AgentRunAPI(APIView):
                     resume_database_ids=resume_database_ids,
                 )
             else:
-                output = run_communication_draft(
+                runner = run_communication_draft_pydantic if _use_pydantic() else run_communication_draft
+                output = runner(
                     application_id,
                     data=request.data,
                     user_id=request.user.id,
@@ -91,12 +111,14 @@ class AgentRunAPI(APIView):
                 raise AppApiException(400, "job_id is required")
             _require_uuid(job_id, "job_id")
             if agent_type == "JD_DRAFT":
-                output = run_jd_draft_agent(
+                runner = run_jd_draft_agent_pydantic if _use_pydantic() else run_jd_draft_agent
+                output = runner(
                     job_id, trigger_type=HrAgentTriggerType.MANUAL, user_id=request.user.id,
                     workspace_id=workspace_id,
                 )
             else:
-                output = run_sourcing_agent(
+                runner = run_sourcing_agent_pydantic if _use_pydantic() else run_sourcing_agent
+                output = runner(
                     job_id, trigger_type=HrAgentTriggerType.MANUAL, user_id=request.user.id,
                     workspace_id=workspace_id,
                     data={"resume_database_ids": resume_database_ids},
@@ -106,7 +128,8 @@ class AgentRunAPI(APIView):
             if not interview_id:
                 raise AppApiException(400, "interview_id is required")
             _require_uuid(interview_id, "interview_id")
-            output = run_interview_copilot(
+            runner = run_interview_copilot_pydantic if _use_pydantic() else run_interview_copilot
+            output = runner(
                 interview_id,
                 data=request.data,
                 user_id=request.user.id,

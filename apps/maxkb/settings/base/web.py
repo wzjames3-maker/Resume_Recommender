@@ -196,3 +196,7 @@ SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
 
 if os.environ.get('MAXKB_REDIS_SENTINEL_SENTINELS') is not None:
     DJANGO_REDIS_CONNECTION_FACTORY = "django_redis.pool.SentinelConnectionFactory"
+
+# Pydantic AI 特性开关（Prompt 7）：True 时 Agent 走 Pydantic AI Runner，False 时回退原手写 Runner
+# 默认 False 保证老测试 0 改动通过；生产通过环境变量 USE_PYDANTIC_AI=true 开启
+USE_PYDANTIC_AI = os.environ.get("USE_PYDANTIC_AI", "false").lower() in ("true", "1", "yes", "on")

@@ -67,6 +67,35 @@ PRD 的业务模型、数据边界、PII/审计/生命周期部分是**资产，
 - **工具注册表**：白名单注册，纯函数包装既有服务；每个工具声明读/写与权限口径。LLM 只能见到注册表内的工具签名。
 - **模型配置**：扩展 `HrConfig`（`apps/hr/models/recruitment.py:336`），沿用其 `llm_model_id`/`rerank_model_id`，新增 Agent 开关与阈值（§8）。
 
+### 4.1.1 Pydantic AI 重构（2026-08-20 迁移，Prompt 0-7）
+
+```
+触发器 → guard_limits → expire_pending_proposals → HrAgentRun(RUNNING)
+    ↓
+get_pydantic_model(workspace_id) → OpenAIModel(provider=OpenAIProvider(base_url, api_key))
+    ↓
+Agent(model, deps_type=HrDeps, output_type=ScreeningFacts|JdDraftFacts|..., system_prompt, retries=1)
+    ├─ @agent.tool get_job(ctx: RunContext[HrDeps]) → context.job_to_llm
+    ├─ @agent.tool get_candidate_overview → context.candidate_to_llm
+    ├─ @agent.tool search_resumes(query) → search_resumes(candidate_id=document_ids, resume_database_ids) → context.search_to_llm
+    └─ [JD/Sourcing/Copilot 分别按需注册 search_knowledge/similar_jobs]
+    ↓
+Agent.run_sync(deps=HrDeps(workspace_id, user_id, hr_role, ...)) → ScreeningFacts(BaseModel) 校验
+    ├─ Field(description) 约束白名单维度
+    ├─ Evidence(paragraph_id, excerpt≤500, relevance 0-1) 校验
+    └─ ModelRetry(证据 paragraph_id 不在 allowed_set) → retries=1 自动重试
+    ↓
+scoring.derive_decision(facts, hard_met) → propose() → HrAgentRun(SUCCEEDED, prompt_tokens/completion_tokens, tool_trace, duration_ms)
+    ↓
+HrAgentProposal(PENDING) + HrAuditLog(trace_id=run.id) + record_prompt_version
+```
+
+- **Deps**：`HrDeps(workspace_id*, user_id, hr_role, application_id/job_id/interview_id, application/job/interview)`，`workspace_id` 服务端派生，跨租户 404
+- **Model**：经 `get_model_by_id(llm_model_id, workspace_id)` 取 `api_base/api_key/model_name` 自建 `OpenAIModel`，不走 `OPENAI_API_KEY`，与 `models_provider` OpenAI 兼容网关一致
+- **单次 LLM**：固定顺序工具 → 单次 `Agent.run_sync` → Pydantic `BaseModel` 校验，禁止 ReAct 循环（`retries=1` 仅用于校验修复）
+- **可观测**：`logfire` 透出 `agent.run` span（含 tool 耗时/token），与 `HrAgentRun.tool_trace`/`HrAuditLog` 同源
+- **开关**：`settings.USE_PYDANTIC_AI`（env `USE_PYDANTIC_AI=true`）按 `agent_views` 与 `task/agent.py` 路由，新旧 Runner 同签名，可秒回滚
+
 ### 4.2 工具清单（首期）
 
 | 工具 | 包装的既有实现 | 读/写 | 说明 |
