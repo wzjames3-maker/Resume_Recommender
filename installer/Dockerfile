@@ -18,7 +18,7 @@ RUN gcc -shared -fPIC -o ${MAXKB_SANDBOX_HOME}/lib/sandbox.so /opt/maxkb-app/ins
     pip install uv --break-system-packages && \
     python -m uv pip install -r pyproject.toml && \
     find /opt/maxkb-app  -depth \( -name ".git*" -o -name ".docker*" -o -name ".idea*" -o -name ".editorconfig*" -o -name ".prettierrc*" -o -name "README.md" -o -name "poetry.lock" -o -name "pyproject.toml"  \) -exec rm -rf {} + && \
-    python /opt/maxkb-app/apps/manage.py compilemessages && \
+    python /opt/maxkb-app/manage.py compilemessages && \  # 标准路径；apps/manage.py 仍为兼容 shim
     export PIP_TARGET=/opt/maxkb-app/sandbox/python-packages && \
     python -m uv pip install --target=$PIP_TARGET requests pymysql psycopg2-binary && \
     rm -rf /opt/maxkb-app/installer

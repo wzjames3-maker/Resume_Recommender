@@ -11,11 +11,14 @@ import errno
 
 import logging
 import os
+from pathlib import Path
 
 import yaml
 
-BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PROJECT_DIR = os.path.dirname(BASE_DIR)
+# 标准布局：maxkb 在项目根，PROJECT_DIR = 项目根，BASE_DIR = apps 目录（兼容旧常量）
+# resolve() 处理 symlink (apps/maxkb -> ../maxkb) 场景
+PROJECT_DIR = str(Path(__file__).resolve().parent.parent)
+BASE_DIR = os.path.join(PROJECT_DIR, 'apps')
 logger = logging.getLogger("maxkb.conf")
 
 

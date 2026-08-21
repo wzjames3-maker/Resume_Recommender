@@ -16,8 +16,8 @@
 | 口径 | 宽松一致率 = 正样本非 DECLINE + 负样本非 ADVANCE；严格一致率 = 正样本 ADVANCE + 负样本 DECLINE |
 | 门控 | `RUN_REAL_MODEL=1`，防 CI 误跑 |
 
-复现：`RUN_REAL_MODEL=1 uv run python apps/manage.py import_resume_dataset --limit 300` 后
-`RUN_REAL_MODEL=1 uv run python apps/manage.py eval_screening --limit 200 --report docs/screening-eval-YYYY-MM-DD.json`
+复现：`RUN_REAL_MODEL=1 uv run python manage.py import_resume_dataset --limit 300` 后
+`RUN_REAL_MODEL=1 uv run python manage.py eval_screening --limit 200 --report docs/screening-eval-YYYY-MM-DD.json`
 
 ## 2. 结果（200 例：正 100 / 负 100）
 

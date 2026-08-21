@@ -28,7 +28,7 @@
 
 ## 3. 命令形态（建议）
 
-    python apps/manage.py hr_offboard_workspace <workspace_id> [--dry-run] [--purge] [--export <dir>]
+    python manage.py hr_offboard_workspace <workspace_id> [--dry-run] [--purge] [--export <dir>]
 
 - 默认行为：审计+清理（physical delete）；`--export` 先输出 JSON 数据返还包（候选/职位/流程/审计摘要）再清理；
 - `--dry-run` 只统计不落库（逐表行数、文件 key 数、文档/向量数）；
@@ -74,5 +74,5 @@
   - 新增系统 API：`GET /workspace/{workspace_id}/offboarding/preview`、`GET /workspace/{workspace_id}/offboarding/export`、`POST /workspace/{workspace_id}/offboarding`；需要 Workspace ADMIN/平台 ADMIN，POST 要求 `confirm_workspace_id`，保留 `force` 明确确认非空工作区；
   - 新增 HR「租户注销」页面，支持预览、脱敏返还包下载、确认输入、force 和注销后自动下载返还包；
   - 验收：跨工作区隔离、默认工作区保护、导出不落库、核心失败时 HR/核心事务回滚、幂等重入测试通过；全量后端 501 tests OK，前端 `vue-tsc --build` 与 admin Vite build 通过。
-- ✅ 阶段 B3（2026-08-18）：对象存储失败重试闭环已完成：新增 `COMPLETED` / `STORAGE_PENDING` tombstone 状态、逐对象失败账本（key/尝试次数/最后错误/最后错误时间/完成时间）、`python apps/manage.py workspace_offboard_storage_retry <workspace_id>` 命令，以及 Workspace ADMIN 的 `GET/POST /workspace/{workspace_id}/offboarding/storage` 管理 API；失败不回滚数据库删除，重试成功后恢复 `COMPLETED`；system_manage 10 tests 与双工作区 staging-equivalent 演练通过。
+- ✅ 阶段 B3（2026-08-18）：对象存储失败重试闭环已完成：新增 `COMPLETED` / `STORAGE_PENDING` tombstone 状态、逐对象失败账本（key/尝试次数/最后错误/最后错误时间/完成时间）、`python manage.py workspace_offboard_storage_retry <workspace_id>` 命令，以及 Workspace ADMIN 的 `GET/POST /workspace/{workspace_id}/offboarding/storage` 管理 API；失败不回滚数据库删除，重试成功后恢复 `COMPLETED`；system_manage 10 tests 与双工作区 staging-equivalent 演练通过。
 - 后续：真实外部租户平台若存在独立 Workspace 删除事件，应调用 `system_manage.services.workspace_offboarding.offboard_workspace`，再编排本仓库之外的外部域；本仓库内部 B2/B3 已闭环。

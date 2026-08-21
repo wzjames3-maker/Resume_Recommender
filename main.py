@@ -11,7 +11,12 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 APP_DIR = os.path.join(BASE_DIR, 'apps')
 
 os.chdir(BASE_DIR)
+# 标准 Django 布局：maxkb 在项目根 (tob/maxkb)，业务 App 在 apps/
+# 兼容历史：apps/ 需加入 sys.path 以支持 `from hr...` 等导入
 sys.path.insert(0, APP_DIR)
+# 确保项目根也在 path（manage.py 已处理，此处兜底，供直接 python main.py 使用）
+if BASE_DIR not in sys.path:
+    sys.path.insert(0, BASE_DIR)
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "maxkb.settings")
 
 

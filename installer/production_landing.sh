@@ -19,23 +19,23 @@ WS_ARGS=""
 [ -n "$WORKSPACE" ] && WS_ARGS="--workspace $WORKSPACE"
 
 echo "==> [1/4] 应用数据库迁移（幂等）"
-$PY apps/manage.py migrate
-$PY apps/manage.py makemigrations --check --dry-run || echo "警告：存在未生成的迁移"
+$PY manage.py migrate  # 标准路径；apps/manage.py 仍为兼容 shim
+$PY manage.py makemigrations --check --dry-run || echo "警告：存在未生成的迁移"
 
 echo "==> [2/4] candidate_skill 技能回填（幂等，可重复跑）"
-$PY apps/manage.py backfill_candidate_skills $WS_ARGS
+$PY manage.py backfill_candidate_skills $WS_ARGS
 
 echo "==> [3/4] Termbase 技能词条（幂等）"
-$PY apps/manage.py seed_resume_termbase $WS_ARGS
+$PY manage.py seed_resume_termbase $WS_ARGS
 
 echo "==> [4/4] 全量重嵌（title 前缀 chunks + 词条分词一次生效）"
 if [ -n "$DRY" ]; then
-$PY apps/manage.py reindex_resume_knowledge $WS_ARGS --dry-run
+$PY manage.py reindex_resume_knowledge $WS_ARGS --dry-run
   echo "（--dry-run：仅预览文档数。确认后去掉该参数重跑）"
 else
   echo "即将重嵌全部简历文档；重嵌窗口检索降级为 seq scan（不失败），建议低峰执行。3 秒后可 Ctrl-C 取消。"
   sleep 3
-$PY apps/manage.py reindex_resume_knowledge $WS_ARGS
+$PY manage.py reindex_resume_knowledge $WS_ARGS
 fi
 
 echo

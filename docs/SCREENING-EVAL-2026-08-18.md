@@ -6,7 +6,7 @@
 ## 1. 执行
 
 ```bash
-RUN_REAL_MODEL=1 uv run python apps/manage.py eval_screening \
+RUN_REAL_MODEL=1 uv run python manage.py eval_screening \
   --workspace eval-ws --limit 200 --seed 7 \
   --report logs/screening_eval_200_2026-08-18.json
 ```

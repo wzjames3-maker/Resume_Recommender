@@ -49,7 +49,7 @@
 ## 4. 复现
 
     export RUN_REAL_MODEL=1
-    uv run python apps/manage.py eval_screening --workspace eval-ws --limit 200 --seed 7 \
+    uv run python manage.py eval_screening --workspace eval-ws --limit 200 --seed 7 \
       --report logs/screening_eval_200_v2.json
 
 （报告 JSON 落地 docs/screening-eval-2026-08-17b.json）

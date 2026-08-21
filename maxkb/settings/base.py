@@ -7,12 +7,12 @@
     @desc:
 """
 from pathlib import Path
-from ...const import CONFIG, PROJECT_DIR
+from ..const import CONFIG, PROJECT_DIR
 import os
 from django.utils.translation import gettext_lazy as _
 
-# Build paths inside the project like this: BASE_DIR / 'subdir'.
-BASE_DIR = Path(__file__).resolve().parent.parent.parent
+# 标准布局：maxkb/settings/base.py -> BASE_DIR 为 maxkb 包目录，PROJECT_DIR 为项目根
+BASE_DIR = Path(__file__).resolve().parent.parent
 
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
@@ -65,14 +65,15 @@ REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': ['common.auth.authenticate.AnonymousAuthentication']
 }
 STATICFILES_DIRS = [(os.path.join(PROJECT_DIR, 'ui', 'dist'))]
-STATIC_ROOT = os.path.join(BASE_DIR.parent, 'static')
+# 标准布局保持兼容：静态收集仍在 apps/static（历史路径），BASE_DIR 现为 maxkb
+STATIC_ROOT = os.path.join(PROJECT_DIR, 'apps', 'static')
 ROOT_URLCONF = 'maxkb.urls'
 APPS_DIR = os.path.join(PROJECT_DIR, 'apps')
 
 TEMPLATES = [
     {
         'BACKEND': 'django.template.backends.django.DjangoTemplates',
-        'DIRS': ["apps/static/admin"],
+        'DIRS': [os.path.join(PROJECT_DIR, "apps", "static", "admin")],
         'APP_DIRS': True,
         'OPTIONS': {
             'context_processors': [
@@ -85,7 +86,7 @@ TEMPLATES = [
     },
     {"NAME": "CHAT",
      'BACKEND': 'django.template.backends.django.DjangoTemplates',
-     'DIRS': ["apps/static/chat"],
+     'DIRS': [os.path.join(PROJECT_DIR, "apps", "static", "chat")],
      'APP_DIRS': True,
      'OPTIONS': {
          'context_processors': [
@@ -98,7 +99,7 @@ TEMPLATES = [
      },
     {"NAME": "DOC",
      'BACKEND': 'django.template.backends.django.DjangoTemplates',
-     'DIRS': ["apps/static/drf_spectacular_sidecar"],
+     'DIRS': [os.path.join(PROJECT_DIR, "apps", "static", "drf_spectacular_sidecar")],
      'APP_DIRS': True,
      'OPTIONS': {
          'context_processors': [
@@ -175,9 +176,10 @@ DATA_UPLOAD_MAX_NUMBER_FILES = 1000
 
 # 支持的语言
 LANGUAGES = CONFIG.get_languages()
-# 翻译文件路径
+# 翻译文件路径（兼容历史 apps/locales）
 LOCALE_PATHS = [
-    os.path.join(BASE_DIR.parent, 'locales')
+    os.path.join(PROJECT_DIR, 'apps', 'locales'),
+    os.path.join(PROJECT_DIR, 'locales'),
 ]
 
 # Static files (CSS, JavaScript, Images)

@@ -8,12 +8,18 @@ MaxKB (Max Knowledge Brain) fork: a slimmed MaxKB v2 core (RAG knowledge base) w
 
 ## Development Commands
 
-The backend is driven by a single entrypoint `main.py` (not `manage.py` directly). It sets `apps/` on `sys.path` and configures Django settings, so module imports are `from application...`, `from common...` — not `from apps.application...`.
+The backend is driven by `main.py` (production wrapper) and the standard `manage.py` at the project root. `manage.py` adds `apps/` to `sys.path` so module imports remain `from application...`, `from common...` — not `from apps.application...`. `apps/manage.py` is kept as a deprecated shim that forwards to the root.
 
 ```bash
 # Dev: runs collectstatic + migrate, then ONE service. You usually run both in separate terminals.
 python main.py dev            # web      (Django runserver on 0.0.0.0:8080)
 python main.py dev celery     # celery worker (queues: celery, model)
+
+# Standard Django entrypoint (preferred for all manage.py operations)
+python manage.py runserver 0.0.0.0:8080
+python manage.py makemigrations <app>
+python manage.py migrate
+python manage.py shell
 
 # Production-style start (spawns gunicorn + celery as watched daemons)
 python main.py start all -d
@@ -22,15 +28,13 @@ python main.py start task          # celery_default + celery_model
 python main.py stop all            # stop daemons
 python main.py status              # daemon status
 
-# Database / static
-python main.py upgrade_db          # run migrations (has PG-crash-recovery retry logic)
+# Database / static (via main.py wrapper, has PG-crash-recovery retry logic)
+python main.py upgrade_db          # run migrations
 python main.py collect_static      # collect static files (serves ui/dist)
-python apps/manage.py makemigrations <app>
-python apps/manage.py migrate
 
 # i18n — .po files live in apps/locales/{en_US,zh_CN,zh_Hant}/LC_MESSAGES/
-python apps/manage.py makemessages -l zh_Hant  # extract strings
-python apps/manage.py compilemessages            # compile .po -> .mo (required at build time)
+python manage.py makemessages -l zh_Hant  # extract strings
+python manage.py compilemessages            # compile .po -> .mo (required at build time)
 ```
 
 Frontend (`ui/`):
@@ -45,7 +49,7 @@ npm run lint         # eslint --fix
 npm run type-check   # vue-tsc
 ```
 
-Python linting: `ruff` (line-length 120, config in `pyproject.toml`). Tests: `uv run python apps/manage.py test hr.tests application.tests knowledge.tests models_provider.tests ops.tests --keepdb` (env vars and current baseline are documented in `HANDOFF.md` §2).
+Python linting: `ruff` (line-length 120, config in `pyproject.toml`). Tests: `uv run python manage.py test hr.tests application.tests knowledge.tests models_provider.tests ops.tests --keepdb` (compat: `apps/manage.py` still works as shim; env vars and current baseline are documented in `HANDOFF.md` §2).
 
 Dependencies are managed with `uv` (`uv.lock`, `pyproject.toml`). Python is pinned to `~=3.11.0`.
 
@@ -53,9 +57,9 @@ Dependencies are managed with `uv` (`uv.lock`, `pyproject.toml`). Python is pinn
 
 ### Settings: single runtime
 
-`apps/maxkb/settings/` is a single full Django app config in `base/web.py` (DB, cache, REST framework, all `INSTALLED_APPS`, templates, i18n); `settings/__init__.py` imports `base/*` (web + logging + auth + lib + mem). The former `base/model.py` local-embedding runtime was removed.
+`maxkb/settings/` is the standard Django settings package (`base.py` holds DB/cache/REST framework/`INSTALLED_APPS`/templates/i18n; `auth.py`/`celery.py`/`logging.py`/`mem.py` are split by concern; `celery.py` is the canonical name, `lib.py` is a deprecated shim). `settings/__init__.py` imports `base` + `logging` + `auth` + `celery` + `mem`. The former `base/model.py` local-embedding runtime was removed. Historical path `apps/maxkb/settings/base/web.py` is now `maxkb/settings/base.py`.
 
-All runtime config comes from the `CONFIG` singleton (`apps/maxkb/const.py` + `conf.py`). `MAXKB_CONFIG_TYPE=ENV` reads `MAXKB_*` env vars (the `.env` file uses this); otherwise it loads YAML from `/opt/maxkb/conf`. `CONFIG.get_db_setting()` / `get_cache_setting()` build the DB and Redis configs (with optional Redis Sentinel support).
+All runtime config comes from the `CONFIG` singleton (`maxkb/const.py` + `maxkb/conf.py`, compat shim `apps/maxkb` was removed). `MAXKB_CONFIG_TYPE=ENV` reads `MAXKB_*` env vars (the `.env` file uses this); otherwise it loads YAML from `/opt/maxkb/conf`. `CONFIG.get_db_setting()` / `get_cache_setting()` build the DB and Redis configs (with optional Redis Sentinel support).
 
 ### URL layout
 

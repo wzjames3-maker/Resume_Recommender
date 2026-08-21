@@ -6,13 +6,13 @@
 
 ```bash
 # 1) dry-run 预览
-uv run python apps/manage.py workspace_offboard ws-dbg --dry-run
+uv run python manage.py workspace_offboard ws-dbg --dry-run
 # 2) 活跃守卫拦截（有内核知识库资源 → 拒绝，需确认）
-uv run python apps/manage.py workspace_offboard ws-dbg
+uv run python manage.py workspace_offboard ws-dbg
 # 3) force 确认真实注销 + 导出脱敏返还包
-uv run python apps/manage.py workspace_offboard ws-dbg --force --export /tmp/offboard-drill
+uv run python manage.py workspace_offboard ws-dbg --force --export /tmp/offboard-drill
 # 4) 幂等重入
-uv run python apps/manage.py workspace_offboard ws-dbg --dry-run
+uv run python manage.py workspace_offboard ws-dbg --dry-run
 ```
 
 ## 2. 清理前清单（dry-run）

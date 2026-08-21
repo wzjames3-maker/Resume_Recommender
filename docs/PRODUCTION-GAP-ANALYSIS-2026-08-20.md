@@ -195,7 +195,7 @@ docs/
 - [ ] **真实 LLM 探针**：`hr_agent_probe`（`RUN_REAL_MODEL=1`）与 `installer/resume_splitter_dataset30.py` 的 30 例内容保真/LLM 路径/PII 扫描需进 CI 定时任务
 
 **P1**
-- [ ] **CI 流水线**：`uv run python apps/manage.py test hr.tests application.tests knowledge.tests models_provider.tests ops.tests common.tests --keepdb` + `ruff` + `vue-tsc` + `eslint` + `vite build` + `trivy` + 部署验证脚本的 GitHub Actions
+- [ ] **CI 流水线**：`uv run python manage.py test hr.tests application.tests knowledge.tests models_provider.tests ops.tests common.tests --keepdb` + `ruff` + `vue-tsc` + `eslint` + `vite build` + `trivy` + 部署验证脚本的 GitHub Actions
 - [ ] **契约测试**：`HrResumeSearchAPI` / `AgentRunAPI` / `ApplicationMoveStageAPI` 的 OpenAPI 快照与前端 `hr.ts` 类型对齐
 
 **P2**
@@ -285,4 +285,4 @@ docs/
 
 ---
 
-*生成于 2026-08-20，基于 `HANDOFF.md` 154 行 + `README-hr.md` + `PRD/PRD-AGENT-RAG/ATS-V2/RAG-V2/RESUME-DATABASES/DEPLOYMENT` 全量阅读与 `apps/hr` 代码抽样。后续应在冻结干净 HEAD 后用 `uv run python apps/manage.py test ... --keepdb` + `ruff` + `vue-tsc` + `vite build` 的全绿报告替换本节基线声明。*
+*生成于 2026-08-20，基于 `HANDOFF.md` 154 行 + `README-hr.md` + `PRD/PRD-AGENT-RAG/ATS-V2/RAG-V2/RESUME-DATABASES/DEPLOYMENT` 全量阅读与 `apps/hr` 代码抽样。后续应在冻结干净 HEAD 后用 `uv run python manage.py test ... --keepdb` + `ruff` + `vue-tsc` + `vite build` 的全绿报告替换本节基线声明。*

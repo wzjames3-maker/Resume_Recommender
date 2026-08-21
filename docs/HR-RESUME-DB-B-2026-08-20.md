@@ -25,8 +25,8 @@
 
 ```bash
 uv run ruff check apps/hr/tests.py  # All checks passed
-MAXKB_CONFIG_TYPE=ENV ... uv run python apps/manage.py test hr.tests.ResumeDatabaseCrudTests --keepdb -v 2  # 7 OK
-MAXKB_CONFIG_TYPE=ENV ... uv run python apps/manage.py test hr.tests --keepdb  # 466 OK
+MAXKB_CONFIG_TYPE=ENV ... uv run python manage.py test hr.tests.ResumeDatabaseCrudTests --keepdb -v 2  # 7 OK (兼容 apps/manage.py)
+MAXKB_CONFIG_TYPE=ENV ... uv run python manage.py test hr.tests --keepdb  # 466 OK
 pnpm exec vue-tsc --build  # 0
 ```
 

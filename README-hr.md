@@ -56,10 +56,10 @@ export MAXKB_CONFIG_TYPE=ENV \
 ```
 
 ```bash
-# 后端
-uv run python apps/manage.py test hr.tests application.tests knowledge.tests models_provider.tests ops.tests common.tests --keepdb
-uv run python apps/manage.py makemigrations --check --dry-run
-uv run python apps/manage.py migrate --check
+# 后端（标准入口为项目根 manage.py，apps/manage.py 仍为兼容 shim）
+uv run python manage.py test hr.tests application.tests knowledge.tests models_provider.tests ops.tests common.tests --keepdb
+uv run python manage.py makemigrations --check --dry-run
+uv run python manage.py migrate --check
 uv run ruff check apps/hr
 
 # 前端

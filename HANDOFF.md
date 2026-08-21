@@ -32,9 +32,9 @@ export MAXKB_CONFIG_TYPE=ENV \
   MAXKB_REDIS_HOST=127.0.0.1 MAXKB_REDIS_PORT=6379 MAXKB_REDIS_PASSWORD= \
   MAXKB_REDIS_DB=0 MAXKB_REDIS_MAX_CONNECTIONS=10
 
-uv run python apps/manage.py test hr.tests application.tests knowledge.tests models_provider.tests ops.tests common.tests --keepdb
-uv run python apps/manage.py makemigrations --check --dry-run
-uv run python apps/manage.py migrate --check
+uv run python manage.py test hr.tests application.tests knowledge.tests models_provider.tests ops.tests common.tests --keepdb  # 兼容：apps/manage.py 仍为 shim
+uv run python manage.py makemigrations --check --dry-run
+uv run python manage.py migrate --check
 uv run ruff check apps/hr
 ```
 
@@ -104,7 +104,7 @@ NODE_OPTIONS=--max-old-space-size=6144 pnpm exec vite build
   已在真实开发库端到端验证：offboard-e2e 工作区 23 行/1 存储文件清零、7 段导出 JSON 脱敏（138****5678 / e2***@example.com）、二次执行报已注销不重删。
 - 租户注销阶段 B1（2026-08-18）已完成：新增 `hr.services.offboarding` callback contract（preview/export/offboard），命令与 callback 共用无输出执行器；新增 HR ADMIN 范围内的 preview/export/purge Web API，POST 强制 `confirm_workspace_id`，可返回脱敏数据返还包；新增权限、跨工作区、导出不落库、确认、防误删与活跃守卫测试。当前精简内核没有统一 Workspace ORM/注销生命周期，因此 B2 仍需由实际内核生命周期调用该 callback，并补齐内核其它域与统一对象存储编排。
 - 租户注销阶段 B2（2026-08-18）已完成：新增 `WorkspaceOffboard` 统一跨域 tombstone、`WorkspaceOffboardingService` 与 `workspace_offboard` 命令；编排 application/knowledge/model/权限/映射/日志/chat/HR，按资源 ID 精确清理内核文件，外层事务提交后统一回收 HR 对象存储；新增 Workspace ADMIN 系统 API 与 HR「租户注销」页面，支持预览、脱敏返还包、确认、force、事务失败回滚和幂等；system_manage 针对性回归与 staging-equivalent 演练通过，全量 backend 498 tests OK，vue-tsc/admin/chat build OK。
-- 租户注销阶段 B3（2026-08-18）已完成：对象存储失败重试闭环；新增 `WorkspaceOffboard` 的 `storage_status`（`COMPLETED`/`STORAGE_PENDING`）、总尝试次数/最后错误/最后错误时间，新增 `WorkspaceOffboardStorageCleanup` 逐对象账本及迁移 0007/0008；失败不回滚跨域数据库删除，`python apps/manage.py workspace_offboard_storage_retry <workspace_id>` 可重试，管理 API `GET/POST /admin/api/workspace/{workspace_id}/offboarding/storage` 可查看失败对象并重新回收，注销页面已显示状态、失败 key、尝试次数和重试按钮；失败删除、客户端初始化失败、完成后重复 retry、API、双工作区 staging-equivalent 均有测试，system_manage 10 tests OK。S3 删除异常不再静默吞掉（兼容旧 HR 调用转换为 OSError）。
+- 租户注销阶段 B3（2026-08-18）已完成：对象存储失败重试闭环；新增 `WorkspaceOffboard` 的 `storage_status`（`COMPLETED`/`STORAGE_PENDING`）、总尝试次数/最后错误/最后错误时间，新增 `WorkspaceOffboardStorageCleanup` 逐对象账本及迁移 0007/0008；失败不回滚跨域数据库删除，`python manage.py workspace_offboard_storage_retry <workspace_id>`（兼容 `apps/manage.py`）可重试，管理 API `GET/POST /admin/api/workspace/{workspace_id}/offboarding/storage` 可查看失败对象并重新回收，注销页面已显示状态、失败 key、尝试次数和重试按钮；失败删除、客户端初始化失败、完成后重复 retry、API、双工作区 staging-equivalent 均有测试，system_manage 10 tests OK。S3 删除异常不再静默吞掉（兼容旧 HR 调用转换为 OSError）。
 - 本轮 staging-equivalent 验收已完成：双工作区完整资源/权限/文件、preview、返还包敏感字段扫描、目标对象删除失败→`STORAGE_PENDING`→重试恢复、另一工作区不受影响；MinIO 匿名 403/目标删除/另一租户对象保留；加密备份解密恢复 637 entries；隔离 Redis DB15 worker 注册 `celery:hr_run_screening_agent`、探针和真实 cleanup task 均通过。真实 staging 与外部 Workspace 生命周期仍需平台侧演练。
 - 简历多库与总库（2026-08-18）已完成：新增 ResumeDatabaseMembership 多对多关系和 0028 迁移；总库由服务端强制加入，业务库支持多选与归档，重复 SHA-256 简历跨库复用；候选人筛选、库统计和 RAG 全链路均按成员关系限界；前端改为 /hr/candidates 多库总览，点击库卡片进入 /hr/resumes/databases/:databaseId 库内候选人页面，库内上传和检索继承当前库；细节见 docs/RESUME-DATABASES.md。开发库验收：总库 261 份简历、261 位候选人、261 条总库成员关系；0028 已应用，vue-tsc、目标文件 ESLint、Vite production build 和 GUI HTTP 200 均通过。低层 ResumeFile.save 现在自动补齐总库和总库成员关系，未传 RAG 范围时保持原响应兼容。
 - 数据库恢复与 D4 修复（2026-08-18）：PostgreSQL/Redis/MinIO 原 Docker 容器（maxkb-slim-pg / maxkb-slim-redis / maxkb-slim-minio）恢复启动，HR 全量 453 tests OK；修复 D4 工作台两处真实缺陷——运行详情证据链改为合并 Proposal payload（不再只看 output_json）、日期筛选纯日期结束时间解析（Django parse_datetime 对纯日期补零导致 end=True 失效）。工作台 6 例回归测试通过。

@@ -2,7 +2,7 @@
 #
 import os
 
-from ..const import PROJECT_DIR, CONFIG, LOG_DIR
+from ..const import CONFIG, LOG_DIR
 
 MAX_KB_LOG_FILE = os.path.join(LOG_DIR, 'maxkb.log')
 DRF_EXCEPTION_LOG_FILE = os.path.join(LOG_DIR, 'drf_exception.log')
