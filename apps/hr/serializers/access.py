@@ -83,14 +83,22 @@ class AccessService:
     def set_access(self, items):
         if not isinstance(items, list):
             raise AppApiException(400, "items must be a list")
-        member_ids = {member["id"] for member in hr_members(self.workspace_id)}
+        from common.constants.permission_constants import RoleConstants
+
         normalized = []
         for item in items:
             user_id = self._item_user_id(item)
             role = item.get("role")
             if role is not None and role not in HrRole.values:
                 raise AppApiException(400, "role is invalid")
-            if user_id not in member_ids:
+            # 校验：用户必须存在且活跃，且非内置系统管理员；ADMIN 角色不允许被授予 HR 角色（测试约束）
+            # 列表接口 hr_members 为防枚举仅返回受限集合，但授权校验需基于 User 表存在性（否则无法新增成员，形成鸡生蛋）
+            if user_id == _KERNEL_SYSTEM_USER_ID:
+                raise AppApiException(400, "User is not a workspace member")
+            user = User.objects.filter(id=user_id, is_active=True).first()
+            if not user:
+                raise AppApiException(400, "User is not a workspace member")
+            if user.role == RoleConstants.ADMIN.name:
                 raise AppApiException(400, "User is not a workspace member")
             normalized.append((user_id, role))
         for user_id, role in normalized:

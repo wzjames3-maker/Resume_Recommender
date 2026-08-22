@@ -619,14 +619,9 @@ class UserManageSerializer(serializers.Serializer):
 
             # 将字典值转换为列表形式
             return list(user_dict.values())
-        user_list = User.objects.exclude(role=RoleConstants.ADMIN.name)
-        return [
-            {
-                'id': user.id,
-                'nick_name': user.nick_name,
-                'roles': [RoleConstants.USER.name]
-            } for user in user_list
-        ]
+        # 精简部署下工作区成员模型缺失：不再回退返回全平台用户（跨租户泄露），
+        # 返回空列表由上层（hr_members）用本工作区授权/指派交集兜底（P1-3）
+        return []
 
     class BatchDelete(serializers.Serializer):
         ids = serializers.ListField(required=True, label=_('User IDs'))

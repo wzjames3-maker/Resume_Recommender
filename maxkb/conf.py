@@ -22,6 +22,19 @@ BASE_DIR = os.path.join(PROJECT_DIR, 'apps')
 logger = logging.getLogger("maxkb.conf")
 
 
+def _parse_env_bool(value, default=False) -> bool:
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return default
+    s = str(value).strip().lower()
+    if s in ("true", "1", "yes", "on"):
+        return True
+    if s in ("false", "0", "no", "off", ""):
+        return False
+    return bool(value)
+
+
 class Config(dict):
     defaults = {
         # 数据库相关配置
@@ -50,7 +63,9 @@ class Config(dict):
     }
 
     def get_debug(self) -> bool:
-        return self.get("DEBUG") if "DEBUG" in self else True
+        if "DEBUG" not in self:
+            return True
+        return _parse_env_bool(self.get("DEBUG"), default=False)
 
     def get_time_zone(self) -> str:
         return self.get("TIME_ZONE") if "TIME_ZONE" in self else "Asia/Shanghai"
@@ -221,9 +236,16 @@ class ConfigManager:
                    """
         raise ImportError(msg)
 
+    _BOOL_KEYS = {"DEBUG"}
+
     def load_from_env(self):
         keys = os.environ.keys()
         config = {key.replace("MAXKB_", ""): os.environ.get(key) for key in keys if key.startswith("MAXKB_")}
+        # ENV 值均为字符串，对布尔语义键做归一化，避免 'false' 被当作 True（P0-1）
+        for k, v in list(config.items()):
+            if k in self._BOOL_KEYS or (k in self.config_class.defaults and isinstance(self.config_class.defaults[k], bool)):
+                if isinstance(v, str):
+                    config[k] = _parse_env_bool(v, default=self.config_class.defaults.get(k, False))
         if len(config.keys()) <= 0:
             msg = """
 

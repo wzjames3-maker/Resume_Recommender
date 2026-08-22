@@ -18,7 +18,27 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # See https://docs.djangoproject.com/en/4.2/howto/deployment/checklist/
 
 # SECURITY WARNING: keep the secret key used in production secret!
-SECRET_KEY = CONFIG.get("SECRET_KEY") or 'django-insecure-zm^1_^i5)3gp^&0io6zg72&z!a*d=9kf9o2%uft+27l)+t(#3e'
+_INSECURE_SECRET = 'django-insecure-zm^1_^i5)3gp^&0io6zg72&z!a*d=9kf9o2%uft+27l)+t(#3e'
+_PLACEHOLDERS = {"", "CHANGE_ME", "CHANGE_ME_RANDOM_50_CHARS", "CHANGE_ME_STRONG_PASSWORD", _INSECURE_SECRET}
+_secret = CONFIG.get("SECRET_KEY")
+if not _secret or str(_secret).strip() in _PLACEHOLDERS:
+    if not CONFIG.get_debug():
+        import sys as _sys
+
+        # 测试/迁移/检查等本地命令允许使用不安全密钥，避免“零配置测试”被阻断；生产服务（runserver/gunicorn/celery）仍 fail-closed
+        _allow_insecure = any(a in _sys.argv for a in ("test", "migrate", "collectstatic", "makemigrations", "shell", "check"))
+        # 也支持显式放行（CI）
+        if os.environ.get("MAXKB_ALLOW_INSECURE_SECRET") == "1":
+            _allow_insecure = True
+        if not _allow_insecure:
+            from django.core.exceptions import ImproperlyConfigured as _IC
+
+            raise _IC(
+                "MAXKB_SECRET_KEY must be set to a strong random value in production (DEBUG=false). "
+                "Generate with: python -c \"import secrets; print(secrets.token_urlsafe(50))\" and set MAXKB_SECRET_KEY."
+            )
+    _secret = _INSECURE_SECRET
+SECRET_KEY = _secret
 
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = CONFIG.get_debug()

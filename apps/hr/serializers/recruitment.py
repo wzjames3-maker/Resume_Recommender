@@ -249,10 +249,20 @@ class RecruitmentService:
             user_id = uuid.UUID(str(value))
         except (ValueError, TypeError) as exc:
             raise AppApiException(400, "interviewer_user_id is invalid") from exc
-        from hr.serializers.access import hr_members
+        # 校验基于 User 表存在性而非 hr_members 列表（防枚举的列表受限，需允许首次指派）
+        import uuid_utils.compat as _uuid
 
-        member_ids = {member["id"] for member in hr_members(self.workspace_id)}
-        if user_id not in member_ids:
+        from users.models import User
+
+        _KERNEL_SYSTEM_USER_ID = _uuid.UUID("f0dd8f71-e4ee-11ee-8c84-a8a1595801ab")
+        if user_id == _KERNEL_SYSTEM_USER_ID:
+            raise AppApiException(400, "User is not a workspace member")
+        user = User.objects.filter(id=user_id, is_active=True).first()
+        if not user:
+            raise AppApiException(400, "User is not a workspace member")
+        from common.constants.permission_constants import RoleConstants
+
+        if user.role == RoleConstants.ADMIN.name:
             raise AppApiException(400, "User is not a workspace member")
         return user_id
 
@@ -734,6 +744,10 @@ class RecruitmentService:
                 raise AppApiException(400, "status is invalid")
             if job.status == JobStatus.CLOSED and data["status"] != JobStatus.CLOSED:
                 raise AppApiException(400, "closed job must be reopened via reopen endpoint")
+            if data["status"] == JobStatus.CLOSED and job.status != JobStatus.CLOSED:
+                raise AppApiException(
+                    400, "Use POST /hr/jobs/{id}/close to close a job (requires close_reason and active application handling)"
+                )
             if data["status"] == JobStatus.CLOSED:
                 job.close_reason = self._close_reason(data)
                 update_fields.append("close_reason")

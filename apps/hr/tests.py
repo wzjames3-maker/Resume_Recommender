@@ -834,23 +834,29 @@ class CandidateMergeTests(TestCase):
         with self.assertRaisesRegex(AppApiException, "deleted candidate cannot be merged"):
             self.service.merge_candidates(str(self.primary.id), {"secondary_id": str(self.secondary.id)})
 class JobEditGuardTests(TestCase):
-    """A2 review: edit_job 收紧关闭语义，关闭走专用接口"""
+    """A2 review: edit_job 收紧关闭语义，关闭走专用接口（P1-11）"""
 
     def setUp(self):
         self.user_id = uuid.uuid7()
         self.service = RecruitmentService(workspace_id="workspace-a", user_id=self.user_id, hr_role="ADMIN")
+        # 关闭走专用接口，需 ApplicationService
+        from hr.services.application_service import ApplicationService
+
+        self.app_service = ApplicationService(workspace_id="workspace-a", user_id=self.user_id, hr_role="ADMIN")
         self.job = self.service.create_job({"name": "Engineer", "headcount": 1})
 
     def test_close_status_requires_close_reason(self):
-        with self.assertRaisesRegex(AppApiException, "close_reason"):
+        # edit_job 不再允许直接迁往 CLOSED，需走专用关闭接口（P1-11）
+        with self.assertRaisesRegex(AppApiException, "Use POST /hr/jobs"):
             self.service.edit_job(self.job["id"], {"status": "CLOSED"})
 
     def test_close_status_requires_valid_close_reason(self):
-        with self.assertRaisesRegex(AppApiException, "close_reason"):
+        # 同上：任何经 edit_job 迁往 CLOSED 的尝试均被拦截，不再校验 close_reason 枚举
+        with self.assertRaisesRegex(AppApiException, "Use POST /hr/jobs"):
             self.service.edit_job(self.job["id"], {"status": "CLOSED", "close_reason": "NOPE"})
 
     def test_closed_job_must_be_reopened_via_reopen_endpoint(self):
-        self.service.edit_job(self.job["id"], {"status": "CLOSED", "close_reason": "FILLED"})
+        self.app_service.close_job(self.job["id"], {"close_reason": "FILLED", "mode": "STRICT"})
         with self.assertRaisesRegex(AppApiException, "reopened via reopen"):
             self.service.edit_job(self.job["id"], {"status": "OPEN"})
 
@@ -859,7 +865,7 @@ class JobEditGuardTests(TestCase):
             self.service.edit_job(self.job["id"], {"close_reason": "FILLED"})
 
     def test_closed_job_edit_keeps_close_reason(self):
-        self.service.edit_job(self.job["id"], {"status": "CLOSED", "close_reason": "CANCELLED"})
+        self.app_service.close_job(self.job["id"], {"close_reason": "CANCELLED", "mode": "STRICT"})
         result = self.service.edit_job(self.job["id"], {"status": "CLOSED", "close_reason": "DUPLICATE"})
         self.assertEqual(result["status"], "CLOSED")
         self.assertEqual(result["close_reason"], "DUPLICATE")
@@ -980,7 +986,9 @@ class HrAccessApiTests(_HrApiBase):
         self.assertEqual(by_id[str(self.admin.id)]["hr_role"], "ADMIN")
         self.assertEqual(by_id[str(self.operator.id)]["hr_role"], "OPERATOR")
         self.assertEqual(by_id[str(self.viewer.id)]["hr_role"], "VIEWER")
-        self.assertIsNone(by_id[str(self.member.id)]["hr_role"])
+        # 精简部署下 hr_members 回退仅返回 HrAccess ∪ 已指派，plain-member 无授权且未指派，不应出现在成员列表（防枚举 P1-3）
+        self.assertNotIn(str(self.member.id), by_id)
+        self.assertEqual(len(by_id), 3)
 
     def test_put_access_grants_and_upgrades_role(self):
         response = self._client(self.admin).put(
