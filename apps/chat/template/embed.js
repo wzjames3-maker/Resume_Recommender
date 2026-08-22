@@ -19,16 +19,19 @@ const guideHtml=`
   <span class="maxkb-arrow" ></span>
 </div>
 `
-const chatButtonHtml=
-`<div class="maxkb-chat-button" >
-<img style="height:100%;width:100%;" src="{{float_icon}}">
-</div>`
-
-
+// 服务端已对 protocol/host 做允许列表校验并对 query 做了 URL 编码,此处再校验一次作为防御纵深
+const isValidProtocol=(protocol)=>protocol==='http'||protocol==='https'
+const isValidHost=(host)=>/^[A-Za-z0-9][A-Za-z0-9.-]*(?::\d{1,5})?$/.test(host)
+const isValidToken=(token)=>/^[A-Za-z0-9._~-]*$/.test(token)
+const isValidPrefix=(prefix)=>/^[A-Za-z0-9._~/-]*$/.test(prefix)
 
 const getChatContainerHtml=(protocol,host,token,query,prefix)=>{
+ if(!isValidProtocol(protocol)||!isValidHost(host)||!isValidToken(token)||!isValidPrefix(prefix)){
+   console.error('invalid parameter')
+   return ''
+ }
  return `<div id="maxkb-chat-container">
-<iframe id="maxkb-chat" allow="microphone" src=${protocol}://${host}${prefix}/${token}?mode=embed${query}></iframe>
+<iframe id="maxkb-chat" allow="microphone" src="${protocol}://${host}${prefix}/${token}?mode=embed${query}"></iframe>
 <div class="maxkb-operate"><div class="maxkb-closeviewport maxkb-viewportnone"><svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20" fill="none">
 <path d="M7.507 11.6645C7.73712 11.6645 7.94545 11.7578 8.09625 11.9086C8.24706 12.0594 8.34033 12.2677 8.34033 12.4978V16.7976C8.34033 17.0277 8.15378 17.2143 7.92366 17.2143H7.09033C6.86021 17.2143 6.67366 17.0277 6.67366 16.7976V14.5812L3.41075 17.843C3.24803 18.0057 2.98421 18.0057 2.82149 17.843L2.23224 17.2537C2.06952 17.091 2.06952 16.8272 2.23224 16.6645L5.56668 13.3311H3.19634C2.96622 13.3311 2.77967 13.1446 2.77967 12.9145V12.0811C2.77967 11.851 2.96622 11.6645 3.19634 11.6645H7.507ZM16.5991 2.1572C16.7619 1.99448 17.0257 1.99448 17.1884 2.1572L17.7777 2.74645C17.9404 2.90917 17.9404 3.17299 17.7777 3.33571L14.4432 6.66904H16.8136C17.0437 6.66904 17.2302 6.85559 17.2302 7.08571V7.91904C17.2302 8.14916 17.0437 8.33571 16.8136 8.33571H12.5029C12.2728 8.33571 12.0644 8.24243 11.9136 8.09163C11.7628 7.94082 11.6696 7.73249 11.6696 7.50237V3.20257C11.6696 2.97245 11.8561 2.7859 12.0862 2.7859H12.9196C13.1497 2.7859 13.3362 2.97245 13.3362 3.20257V5.419L16.5991 2.1572Z" fill="{{header_font_color}}"/>
 </svg></div>
@@ -59,10 +62,16 @@ const initGuide=(root)=>{
    close_icon.onclick=close_func
 }
 const initChat=(root)=>{
-  // 添加对话icon
-  root.insertAdjacentHTML("beforeend",chatButtonHtml)
-  // 添加对话框
-  root.insertAdjacentHTML('beforeend',getChatContainerHtml('{{protocol}}','{{host}}','{{token}}','{{query}}','{{prefix}}'))
+  // 添加对话icon(使用 DOM API 构建,避免 float_icon 经 insertAdjacentHTML 还原实体注入)
+  const button_element=document.createElement('div')
+  button_element.className='maxkb-chat-button'
+  const button_img=document.createElement('img')
+  button_img.style.cssText='height:100%;width:100%;'
+  button_img.src={{float_icon}}
+  button_element.appendChild(button_img)
+  root.appendChild(button_element)
+  // 添加对话框(动态部分已由服务端校验/编码)
+  root.insertAdjacentHTML('beforeend',getChatContainerHtml({{protocol}},{{host}},{{token}},{{query}},{{prefix}}))
   // 按钮元素
   const chat_button=root.querySelector('.maxkb-chat-button')
   const chat_button_img=root.querySelector('.maxkb-chat-button > img')
@@ -317,7 +326,7 @@ function initMaxkbStyle(root, maxkbId){
 }
 
 function embedChatbot() {
-  white_list_str='{{white_list_str}}'
+  white_list_str={{white_list_str}}
   white_list=white_list_str.split(',')
 
   if ({{is_auth}}&&({{white_active}}?white_list.includes(window.location.origin):true)) {

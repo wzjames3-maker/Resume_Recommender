@@ -6,11 +6,10 @@
     @date：2025/4/14 19:18
     @desc:
 """
-import datetime
 import json
 import os
-import random
 import re
+import secrets
 from collections import defaultdict
 
 import uuid_utils.compat as uuid
@@ -20,13 +19,12 @@ from common.constants.permission_constants import (
     Auth,
     ResourceAuthType,
     ResourcePermission,
-    ResourcePermissionRole,
     RoleConstants,
 )
 from common.database_model_manage.database_model_manage import DatabaseModelManage
 from common.db.search import page_search
 from common.exception.app_exception import AppApiException
-from common.utils.common import get_random_chars, password_encrypt, password_verify, valid_license
+from common.utils.common import password_encrypt, password_verify
 from common.utils.rsa_util import decrypt
 from django.core import validators
 from django.core.cache import cache
@@ -34,10 +32,8 @@ from django.core.mail import send_mail
 from django.core.mail.backends.smtp import EmailBackend
 from django.db import transaction
 from django.db.models import Q, QuerySet
-from django.utils import translation
-from django.utils.translation import get_language, to_locale
+from django.utils.translation import get_language
 from django.utils.translation import gettext_lazy as _
-from maxkb import settings
 from maxkb.conf import PROJECT_DIR
 from maxkb.const import CONFIG
 from rest_framework import serializers
@@ -54,6 +50,9 @@ PASSWORD_REGEX = re.compile(
 )
 
 version, get_key = Cache_Version.SYSTEM.value
+
+# P1-7: 邮箱验证码连续校验失败次数上限，达到上限后验证码立即失效，防止暴力枚举
+VERIFY_CODE_MAX_ERROR_COUNT = 5
 
 
 class UserProfileResponse(serializers.ModelSerializer):
@@ -551,7 +550,7 @@ class UserManageSerializer(serializers.Serializer):
                         decrypted_data = json.loads(decrypted_raw) if decrypted_raw else {}
                         if isinstance(decrypted_data, dict):
                             instance.update(decrypted_data)
-                    except Exception as e:
+                    except Exception:
                         raise AppApiException(500, _("Invalid encrypted data"))
                 UserManageSerializer.RePasswordInstance(data=instance).is_valid(raise_exception=True)
             user = User.objects.filter(id=self.data.get('id')).first()
@@ -976,14 +975,10 @@ class RePasswordSerializer(serializers.Serializer):
 
     def is_valid(self, *, raise_exception=False):
         super().is_valid(raise_exception=True)
-        email = self.data.get("email")
-        cache_code = cache.get(get_key(email + ':reset_password'), version=version)
         if self.data.get('password') != self.data.get('re_password'):
             raise AppApiException(ExceptionCodeConstants.PASSWORD_NOT_EQ_RE_PASSWORD.value.code,
                                   ExceptionCodeConstants.PASSWORD_NOT_EQ_RE_PASSWORD.value.message)
-        if cache_code != self.data.get('code'):
-            raise AppApiException(ExceptionCodeConstants.CODE_ERROR.value.code,
-                                  ExceptionCodeConstants.CODE_ERROR.value.message)
+        verify_email_code(self.data.get("email"), 'reset_password', self.data.get('code'))
         return True
 
     def reset_password(self):
@@ -1084,9 +1079,8 @@ class SendEmailSerializer(serializers.Serializer):
         """
         email = self.data.get("email")
         state = self.data.get("type")
-        # 生成随机验证码
-        code = "".join(list(map(lambda i: random.choice(['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'
-                                                         ]), range(6))))
+        # 生成随机验证码（P1-7: 使用加密安全随机数，保持6位数字）
+        code = ''.join(secrets.choice('0123456789') for _ in range(6))
         # 获取邮件模板
         language = get_language()
         file = open(
@@ -1119,11 +1113,44 @@ class SendEmailSerializer(serializers.Serializer):
                 html_message=f'{content.replace("${code}", code)}',
                 from_email=system_setting.meta.get('from_email'),
                 recipient_list=[email], fail_silently=False, connection=connection)
-        except Exception as e:
-            cache.delete(get_key(code_cache_key_lock))
+        except Exception:
+            cache.delete(get_key(code_cache_key_lock), version=version)
             return True
         cache.set(get_key(code_cache_key), code, timeout=60 * 30, version=version)
+        # 新验证码已下发，清除历史错误计数（P1-7）
+        cache.delete(get_key(code_cache_key + ":error_count"), version=version)
         return True
+
+
+def verify_email_code(email, state, code):
+    """
+    校验邮箱验证码（P1-7）
+    不区分“验证码不存在/已过期/验证码错误”，统一抛出验证码错误，避免通过本接口枚举邮箱或验证码；
+    连续校验失败 VERIFY_CODE_MAX_ERROR_COUNT 次后使验证码立即失效。
+    :param email: 邮箱
+    :param state: 用途 register|reset_password
+    :param code:  待校验的验证码
+    :return:      校验通过返回 True
+    :exception    AppApiException 验证码错误或已过期
+    """
+    code_cache_key = get_key(email + ":" + state)
+    error_count_cache_key = get_key(email + ":" + state + ":error_count")
+    cache_code = cache.get(code_cache_key, version=version)
+    if cache_code is not None and cache_code == code:
+        # 校验通过，清除错误计数
+        cache.delete(error_count_cache_key, version=version)
+        return True
+    # 校验失败：累计该验证码的错误次数
+    try:
+        error_count = cache.incr(error_count_cache_key, version=version)
+    except ValueError:
+        # 键不存在时初始化计数，有效期与验证码一致
+        cache.add(error_count_cache_key, 1, timeout=60 * 30, version=version)
+        error_count = 1
+    if error_count >= VERIFY_CODE_MAX_ERROR_COUNT:
+        # 错误次数达到上限，使验证码立即失效
+        cache.delete(code_cache_key, version=version)
+    raise ExceptionCodeConstants.CODE_ERROR.value.to_app_api_exception()
 
 
 class CheckCodeSerializer(serializers.Serializer):
@@ -1148,10 +1175,8 @@ class CheckCodeSerializer(serializers.Serializer):
 
     def is_valid(self, *, raise_exception=False):
         super().is_valid()
-        value = cache.get(get_key(self.data.get("email") + ":" + self.data.get("type")), version=version)
-        if value is None or value != self.data.get("code"):
-            raise ExceptionCodeConstants.CODE_ERROR.value.to_app_api_exception()
-        return True
+        # P1-7: 统一走 verify_email_code，不存在/过期/错误均返回同一错误，不泄露任何信息
+        return verify_email_code(self.data.get("email"), self.data.get("type"), self.data.get("code"))
 
 
 class SwitchLanguageSerializer(serializers.Serializer):

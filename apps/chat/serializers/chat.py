@@ -165,7 +165,11 @@ class DebugChatSerializers(serializers.Serializer):
         self.is_valid(raise_exception=True)
         chat_id = self.data.get('chat_id')
         chat_info: ChatInfo = ChatInfo.get_cache(chat_id)
+        if chat_info is None:
+            raise AppApiException(404, "Chat not found or expired")
         application = QuerySet(Application).filter(id=chat_info.application_id).first()
+        if application is None:
+            raise AppApiException(404, _("Application does not exist"))
         chat_info.application = application
         return ChatSerializers(data={
             'chat_id': chat_id, "chat_user_id": chat_info.chat_user_id,

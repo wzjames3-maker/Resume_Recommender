@@ -17,12 +17,14 @@ from application.api.application_chat import ApplicationChatQueryAPI, Applicatio
     ApplicationChatExportAPI
 from application.models import ChatUserType, Application
 from application.serializers.application_chat import ApplicationChatQuerySerializers
+from application.serializers.common import ChatInfo
 from chat.api.chat_api import ChatAPI, PromptGenerateAPI
 from chat.api.chat_authentication_api import ChatOpenAPI
 from chat.serializers.chat import OpenChatSerializers, DebugChatSerializers, PromptGenerateSerializer
 from common.auth import TokenAuth
-from common.auth.authentication import has_permissions
+from common.auth.authentication import has_permissions, get_is_permissions
 from common.constants.permission_constants import PermissionConstants, RoleConstants, ViewPermission, CompareConstants
+from common.exception.app_exception import AppApiException, AppUnauthorizedFailed
 from common.log.log import log
 from common.result import result
 from common.utils.common import query_params_to_single_dict
@@ -151,6 +153,24 @@ class ChatView(APIView):
         tags=[_('Application')]  # type: ignore
     )
     def post(self, request: Request, chat_id: str):
+        # P1-6: 校验会话存在,且归属的应用/工作空间与当前登录用户权限一致
+        chat_info = ChatInfo.get_cache(chat_id)
+        if chat_info is None:
+            raise AppApiException(404, "Chat not found or expired")
+        application = QuerySet(Application).filter(id=chat_info.application_id).first()
+        if application is None:
+            raise AppApiException(404, _("Application does not exist"))
+        is_permission = get_is_permissions(request,
+                                           workspace_id=application.workspace_id,
+                                           application_id=str(application.id))(
+            PermissionConstants.APPLICATION_READ.get_workspace_application_permission(),
+            PermissionConstants.APPLICATION_READ.get_workspace_permission_workspace_manage_role(),
+            ViewPermission([RoleConstants.USER.get_workspace_role()],
+                           [PermissionConstants.APPLICATION.get_workspace_application_permission()],
+                           CompareConstants.AND),
+            RoleConstants.WORKSPACE_MANAGE.get_workspace_role())
+        if not is_permission:
+            raise AppUnauthorizedFailed(403, _('No permission to access'))
         return DebugChatSerializers(data={'chat_id': chat_id}).chat(request.data)
 
 class PromptGenerateView(APIView):

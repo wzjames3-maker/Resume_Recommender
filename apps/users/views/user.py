@@ -6,6 +6,7 @@
     @date：2025/4/14 19:25
     @desc:
 """
+import hashlib
 import json
 
 from django.core.cache import cache
@@ -20,7 +21,7 @@ from common.auth.authentication import has_permissions
 from common.constants.cache_version import Cache_Version
 from common.constants.permission_constants import PermissionConstants, RoleConstants
 from common.exception.app_exception import AppApiException
-from common.log.log import log
+from common.log.log import log, _get_ip_address
 from common.result import result
 from common.utils.common import query_params_to_single_dict
 from common.utils.rsa_util import decrypt
@@ -34,6 +35,43 @@ from users.serializers.user import UserProfileSerializer, UserManageSerializer, 
     SendEmailSerializer, RePasswordSerializer, SwitchLanguageSerializer, ResetCurrentUserPassword
 
 default_password = CONFIG.get('DEFAULT_PASSWORD', 'MaxKB@123..')
+
+# P1-7: 匿名接口限流配置，元素为 (时间窗口秒数, 窗口内最大请求次数)
+SEND_EMAIL_THROTTLE_LIMITS = ((60, 3), (3600, 10))  # 发送验证码：1分钟3次、1小时10次
+VERIFY_CODE_THROTTLE_LIMITS = ((60, 10), (3600, 40))  # 校验验证码/重置密码：1分钟10次、1小时40次
+
+version, get_key = Cache_Version.SYSTEM.value
+
+
+def anonymous_throttle(request: Request, scope: str, limits, with_email=False):
+    """
+    P1-7: 匿名接口限流，基于缓存固定窗口计数，按 IP（可选叠加邮箱）维度限制请求频率，
+    防止验证码邮件轰炸与验证码暴力枚举。
+    :param request:    当前请求
+    :param scope:      限流作用域标识
+    :param limits:     限流配置，元素为 (时间窗口秒数, 窗口内最大请求次数)
+    :param with_email: 是否同时叠加请求中的邮箱维度限流
+    :exception AppApiException 请求过于频繁
+    """
+    identities = [str(_get_ip_address(request))]
+    if with_email:
+        email = request.data.get('email') if isinstance(request.data, dict) else None
+        if email:
+            identities.append('email:' + str(email))
+    for identity in identities:
+        identity_hash = hashlib.md5(identity.encode('utf-8')).hexdigest()
+        for window_seconds, max_count in limits:
+            cache_key = f'anonymous_throttle:{scope}:{identity_hash}:{window_seconds}'
+            if cache.add(cache_key, 1, timeout=window_seconds, version=version):
+                continue
+            try:
+                request_count = cache.incr(cache_key, version=version)
+            except ValueError:
+                # 计数键恰好过期时重新初始化并放行本次请求
+                cache.add(cache_key, 1, timeout=window_seconds, version=version)
+                continue
+            if request_count > max_count:
+                raise AppApiException(429, _("Requests are too frequent, please try again later"))
 
 
 def get_user_operation_object(user_id):
@@ -311,6 +349,7 @@ class RePasswordView(APIView):
          get_operation_object=lambda r, k: {'name': r.user.username},
          get_details=get_re_password_details)
     def post(self, request: Request):
+        anonymous_throttle(request, 're_password', VERIFY_CODE_THROTTLE_LIMITS, with_email=True)
         request_data = request.data
         if request_data.get("encrypted", False):
             request_data['password'] = decrypt(request_data.get('password'))
@@ -332,6 +371,7 @@ class SendEmail(APIView):
          get_operation_object=lambda r, k: {'name': r.data.get('email', None)},
          get_user=lambda r: {'user_name': None, 'email': r.data.get('email', None)})
     def post(self, request: Request):
+        anonymous_throttle(request, 'send_email', SEND_EMAIL_THROTTLE_LIMITS, with_email=True)
         serializer_obj = SendEmailSerializer(data=request.data)
         if serializer_obj.is_valid(raise_exception=True):
             return result.success(serializer_obj.send())
@@ -350,6 +390,7 @@ class CheckCode(APIView):
          get_operation_object=lambda r, k: {'name': r.data.get('email', None)},
          get_user=lambda r: {'user_name': None, 'email': r.data.get('email', None)})
     def post(self, request: Request):
+        anonymous_throttle(request, 'check_code', VERIFY_CODE_THROTTLE_LIMITS, with_email=True)
         return result.success(CheckCodeSerializer(data=request.data).is_valid(raise_exception=True))
 
 
@@ -396,7 +437,7 @@ class ResetCurrentUserPasswordView(APIView):
                 decrypted_data = json.loads(decrypted_raw) if decrypted_raw else {}
                 if isinstance(decrypted_data, dict):
                     request_data = decrypted_data
-            except Exception as e:
+            except Exception:
                 raise AppApiException(500, _("Invalid encrypted data"))
         serializer_obj = ResetCurrentUserPassword(data=request_data)
         if serializer_obj.reset_password(request.user.id):
