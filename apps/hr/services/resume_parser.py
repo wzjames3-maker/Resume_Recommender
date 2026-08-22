@@ -31,12 +31,6 @@ def parse_resume_text(text):
         "name": name,
         "email": email_match.group(0) if email_match else "",
         "phone": phone_match.group(0) if phone_match else "",
-        "current_city": "",
-        "target_city": "",
-        "highest_degree": "",
-        "years_experience": None,
-        "skills": [],
-        "note": "",
     }
 
 

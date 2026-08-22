@@ -18,17 +18,12 @@ def _hired_profile(workspace_id, job):
     applications = Application.objects.filter(
         workspace_id=workspace_id, job=job, status=ApplicationStatus.HIRED
     ).select_related("candidate")
-    years = [app.candidate.years_experience for app in applications if app.candidate.years_experience is not None]
-    skill_counter = Counter()
-    for application in applications:
-        for skill in (application.candidate.skills or []):
-            norm = normalize_skill(skill)
-            if norm:
-                skill_counter[norm] += 1
+    # 0030 后 Candidate 已无 years_experience/skills（已 DROP），录用画像仅保留数量，平均年限与高频技能置空（P1-10）
+    # 若需恢复画像，应基于 ResumeFile.raw_text 聚合而非结构化字段
     return (
         len(applications),
-        round(sum(years) / len(years), 1) if years else None,
-        [skill for skill, _ in skill_counter.most_common(5)],
+        None,
+        [],
     )
 
 

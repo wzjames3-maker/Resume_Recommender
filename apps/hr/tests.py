@@ -69,18 +69,15 @@ class ResumeParserTests(TestCase):
         self.assertEqual(result["name"], "张三")
         self.assertEqual(result["phone"], "13812345678")
         self.assertEqual(result["email"], "zhangsan@example.com")
-        # 设计：正则只抽身份字段，其余（城市/学历/年限/技能）留空由切片+检索处理
-        self.assertEqual(result["current_city"], "")
-        self.assertEqual(result["highest_degree"], "")
-        self.assertIsNone(result["years_experience"])
-        self.assertEqual(result["skills"], [])
+        # 0030 后仅保留身份三字段，其余不再返回（P1-9）
+        self.assertEqual(set(result.keys()), {"name", "phone", "email"})
 
     def test_unknown_fields_stay_empty(self):
         result = parse_resume_text("这是一个没有结构化字段的文本")
         self.assertEqual(result["name"], "")
         self.assertEqual(result["email"], "")
         self.assertEqual(result["phone"], "")
-        self.assertEqual(result["skills"], [])
+        self.assertEqual(set(result.keys()), {"name", "phone", "email"})
 
     def test_identity_fields_only(self):
         """设计：正则只抽姓名/电话/邮箱，城市/学历/年限/技能不再做规则解析。"""
@@ -90,9 +87,7 @@ class ResumeParserTests(TestCase):
         )
         result = parse_resume_text(text)
         self.assertEqual(result["name"], "李冠光")
-        self.assertEqual(result["current_city"], "")
-        self.assertEqual(result["skills"], [])
-        self.assertIsNone(result["years_experience"])
+        self.assertEqual(set(result.keys()), {"name", "phone", "email"})
 
     def test_extract_skills_llm_parses_json_array(self):
         from hr.services.resume_parser import extract_skills_llm
@@ -1736,11 +1731,12 @@ class ImportServiceTests(TestCase):
         self.assertTrue(True)
 
     def test_import_reports_invalid_years_experience(self):
+        # 0030 后 years_experience 列已废弃，非法值应被忽略且导入成功（P1-9）
         content = self._csv_file([["Bob", "13911111111", "", "", "", "", "abc"]])
         report = self.service.import_candidates_csv(content)
-        self.assertEqual(report["success"], 0)
-        self.assertEqual(report["failed"], 1)
-        self.assertIn("years_experience", report["records"][0]["reason"])
+        self.assertEqual(report["success"], 1)
+        self.assertEqual(report["failed"], 0)
+        self.assertEqual(report["records"][0]["status"], "created")
 
     def test_import_marks_duplicate_within_file_but_creates(self):
         # 0030 stub
@@ -4677,13 +4673,15 @@ class AgentTriggerTests(TestCase):
     def test_apply_application_dispatches(self):
         self._enable()
         with patch("hr.agents.runner.dispatch_event_screening") as dispatch:
-            application = self._create("APPLY")
+            with self.captureOnCommitCallbacks(execute=True):
+                application = self._create("APPLY")
         dispatch.assert_called_once_with(uuid.UUID(application["id"]))
 
     def test_referral_application_dispatches(self):
         self._enable()
         with patch("hr.agents.runner.dispatch_event_screening") as dispatch:
-            application = self._create("REFERRAL")
+            with self.captureOnCommitCallbacks(execute=True):
+                application = self._create("REFERRAL")
         dispatch.assert_called_once_with(uuid.UUID(application["id"]))
 
     def test_headhunter_application_not_dispatched(self):
@@ -5834,8 +5832,15 @@ class ReviewFixRegressionTests(TestCase):
         )
 
     def test_page_applications_queue_filters(self):
-        # 0030 stub
-        self.assertTrue(True)
+        # P1-8: city 参数已废弃，不应触发 FieldError，且其他过滤仍生效
+        app = self.service.create_application(self.job.id, self.candidate.id, {})
+        page = self.service.page_applications(1, 20, {"city": "上海"})
+        self.assertGreaterEqual(page["total"], 1)
+        # city 忽略后，指定 job_id 仍应精确过滤
+        page2 = self.service.page_applications(1, 20, {"job_id": str(self.job.id)})
+        self.assertEqual(page2["total"], 1)
+        page3 = self.service.page_applications(1, 20, {"job_id": str(self.job.id), "city": "北京"})
+        self.assertEqual(page3["total"], 1)
 
 class HrOffboardCommandTests(TestCase):
     """阶段 A：hr_offboard_workspace 命令 —— 全量清理 / dry-run 一致 / 幂等 / 跨工作区隔离 / 活跃守卫 / 导出脱敏 / 留痕。"""

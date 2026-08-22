@@ -6,6 +6,7 @@
     @desc: ATS v2 事件触发（PRD-AGENT-RAG §4.1）：新建 Application（ACTIVE + APPLIED + APPLY/REFERRAL）
            且工作区开启 Screening Agent 时，异步分发初筛评估任务（不阻塞业务请求）。
 """
+from django.db import transaction
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 
@@ -28,7 +29,8 @@ def application_created(sender, instance, created, **kwargs):
     from hr.agents.runner import dispatch_event_screening
 
     try:
-        dispatch_event_screening(instance.id)
+        # 事务提交后再投递，避免 worker 先于 COMMIT 拾取导致静默丢失或幻影任务（P2-11）
+        transaction.on_commit(lambda: dispatch_event_screening(instance.id))
     except Exception as exc:
         # 事件触发失败不影响业务请求；后续可人工触发
         import logging

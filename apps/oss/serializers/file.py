@@ -356,6 +356,52 @@ class FileSerializer(serializers.Serializer):
             return True
 
 
+def _validate_fetch_url(url: str):
+    """SSRF 防护：仅允许 http/https，拒绝 RFC1918 私网/回环/链路本地，长度受限。"""
+    from urllib.parse import urlparse
+    import ipaddress
+    import socket
+
+    if not isinstance(url, str) or len(url) > 2048:
+        raise AppApiException(400, "Invalid URL")
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise AppApiException(400, "Invalid URL scheme")
+    host = parsed.hostname
+    if not host:
+        raise AppApiException(400, "Invalid URL")
+    lower = host.lower()
+    if lower in ("localhost", "127.0.0.1", "::1", "0.0.0.0"):
+        raise AppApiException(400, "URL host is not allowed")
+
+    def _is_blocked_ip(ip: ipaddress._BaseAddress) -> bool:
+        if ip.is_loopback or ip.is_link_local:
+            return True
+        try:
+            if ip.version == 4:
+                return ip in ipaddress.ip_network("10.0.0.0/8") or ip in ipaddress.ip_network("172.16.0.0/12") or ip in ipaddress.ip_network("192.168.0.0/16") or ip in ipaddress.ip_network("127.0.0.0/8")
+            else:
+                return ip in ipaddress.ip_network("::1/128") or ip in ipaddress.ip_network("fe80::/10")
+        except Exception:
+            return ip.is_private
+
+    try:
+        ip = ipaddress.ip_address(host)
+        if _is_blocked_ip(ip):
+            raise AppApiException(400, "URL host is not allowed")
+    except ValueError:
+        try:
+            ip_str = socket.gethostbyname(host)
+            ip = ipaddress.ip_address(ip_str)
+            if _is_blocked_ip(ip):
+                raise AppApiException(400, "URL host is not allowed")
+        except AppApiException:
+            raise
+        except Exception:
+            pass
+    return parsed
+
+
 def get_url_content(url, application_id: str):
     application = Application.objects.filter(id=application_id).first()
     if application is None:
@@ -365,27 +411,45 @@ def get_url_content(url, application_id: str):
     file_limit = 50 * 1024 * 1024
     if application.file_upload_setting and application.file_upload_setting.get('fileLimit'):
         file_limit = application.file_upload_setting.get('fileLimit') * 1024 * 1024
+    # SSRF 校验先于请求（P1-5）
+    _validate_fetch_url(url)
     try:
         import requests
 
-        requests.packages.urllib3.disable_warnings()
-        response = requests.get(url, verify=False, allow_redirects=False)
-        content_type = response.headers.get('Content-Type', '')
-        if 'text' in content_type or 'json' in content_type:
-            content = response.text
-        else:
+        # 流式拉取，避免先下载后限流；强制证书校验，禁止重定向携带内网
+        with requests.get(url, verify=True, allow_redirects=False, stream=True, timeout=10) as resp:
+            # 重定向一律拒绝（防止 302 到内网）
+            if 300 <= resp.status_code < 400:
+                raise AppApiException(400, "Redirect not allowed")
+            content_type = resp.headers.get('Content-Type', '')
+            # 文本/JSON 类型不回显原文，防止内网响应泄露
+            if 'text' in content_type or 'json' in content_type:
+                raise AppApiException(400, "Unsupported content type")
+            length = resp.headers.get('Content-Length')
+            if length and int(length) > file_limit:
+                raise AppApiException(500, _('File size exceeds limit'))
+            # 流式读取并限流
             import base64
-            content = base64.b64encode(response.content).decode('utf-8')
-        response = {
-            "status_code": response.status_code,
-            "Content-Type": content_type,
-            "Content-Length": response.headers.get('Content-Length', 0),
-            "content": content,
-        }
+
+            chunks = []
+            total = 0
+            for chunk in resp.iter_content(chunk_size=8192):
+                if chunk:
+                    total += len(chunk)
+                    if total > file_limit:
+                        raise AppApiException(500, _('File size exceeds limit'))
+                    chunks.append(chunk)
+            content = base64.b64encode(b"".join(chunks)).decode('utf-8')
+            response = {
+                "status_code": resp.status_code,
+                "Content-Type": content_type,
+                "Content-Length": total,
+                "content": content,
+            }
+    except AppApiException:
+        raise
     except Exception as e:
         raise AppApiException(500, str(e))
-    if int(response.get('Content-Length')) > file_limit:
-        raise AppApiException(500, _('File size exceeds limit'))
     return {
         'status_code': response.get('status_code'),
         'Content-Type': response.get('Content-Type'),

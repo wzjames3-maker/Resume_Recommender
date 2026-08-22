@@ -50,10 +50,9 @@ class Command(BaseCommand):
         )
 
     def _pair_pool(self, workspace_id):
+        # 0030 后 Candidate 仅 name/phone/email，历史结构化字段已 DROP；评测基于侯选人姓名构造，技能由 _ensure_skills 按需回填
         return list(
-            Candidate.objects.filter(workspace_id=workspace_id).values(
-                "id", "name", "skills", "current_city", "years_experience", "highest_degree"
-            )
+            Candidate.objects.filter(workspace_id=workspace_id).values("id", "name")
         )
 
     def _ensure_skills(self, workspace_id, rows, parallel=True):
@@ -81,7 +80,7 @@ class Command(BaseCommand):
     def _backfill_one(self, workspace_id, row):
         from hr.services.ai_parser import extract_skills as llm_extract
 
-        if row["skills"]:
+        if row.get("skills"):
             return 0
         config = HrConfig.objects.get(workspace_id=workspace_id)
         try:
@@ -102,7 +101,7 @@ class Command(BaseCommand):
             return 0
         if not skills:
             return 0
-        # 0030 后 Candidate 仅 name/phone/email，技能不再落库，RAG 直接检索简历原文
+        # 0030 后 Candidate 仅 name/phone/email，技能不再落库，评测侧内存回填仅用于构造用例
         row["skills"] = skills
         return 1
 
@@ -154,7 +153,7 @@ class Command(BaseCommand):
     def _make_positive(self, workspace_id, candidate):
         """正样本：职位由候选人单一代表角色渲染的完整 JD（职责 + 技能 + 年限），
         候选人与职位完全匹配，期望不误拒（宽松）甚至 ADVANCE（严格）。"""
-        skills = candidate["skills"] or []
+        skills = candidate.get("skills") or []
         profile = self._candidate_work_profile(workspace_id, candidate["id"])
         job_skills = skills[:5]
         duties = []
@@ -174,18 +173,16 @@ class Command(BaseCommand):
             duties_text = "1. 参与核心业务系统/项目的研发与交付；\n2. 与团队协作完成需求分析、方案设计与上线；\n3. 持续优化性能与稳定性。"
         else:
             duties_text = "\n".join(f"{i}. 负责{d}" for i, d in enumerate(duties[:4], 1))
-        years = candidate.get("years_experience")
+        years = None  # 0030 后 Candidate 无年限字段，已移除
         description = "岗位职责：\n" + duties_text + "\n\n任职要求：\n" + (
             f"- 熟练掌握：{'、'.join(job_skills)}\n" if job_skills else ""
-        ) + (
-            f"- 具备 {years} 年以上相关经验\n" if years else ""
         ) + "- 良好的团队协作与沟通能力"
         return {
             "kind": "positive",
             "candidate": candidate,
             "job": {
                 "name": "职位-" + (candidate["name"] or "候选人")[:12],
-                "city": candidate["current_city"] or "",
+                "city": "",  # 0030 后无城市字段，已移除
                 "skill_requirements": job_skills,
                 "description": description,
             },
@@ -193,9 +190,9 @@ class Command(BaseCommand):
 
     def _make_negative(self, candidate, pool):
         """负样本：职位技能取自与候选人不相交的他人画像（结构化硬条件必不满足），期望不误推。"""
-        candidate_skills = {s.lower() for s in (candidate["skills"] or [])}
+        candidate_skills = {s.lower() for s in (candidate.get("skills") or [])}
         for other in pool:
-            other_skills = {s.lower() for s in (other["skills"] or [])}
+            other_skills = {s.lower() for s in (other.get("skills") or [])}
             if other["id"] == candidate["id"]:
                 continue
             if not (candidate_skills & other_skills) and other_skills:
@@ -205,7 +202,7 @@ class Command(BaseCommand):
                     "candidate": candidate,
                     "job": {
                         "name": "职位-" + (other["name"] or "x"),
-                        "city": candidate["current_city"] or "未匹配城市",
+                        "city": "",  # 0030 后无城市字段
                         "skill_requirements": skills,
                         "description": "招聘" + "、".join(skills) + "方向人才。",
                     },
@@ -264,12 +261,13 @@ class Command(BaseCommand):
 
         pool = self._pair_pool(workspace_id)
         if options["dry_run"]:
-            pool = [row for row in pool if row["skills"]]
+            # 0030 后技能由简历原文按需提取，不再强制要求 Candidate 有技能
+            pass
         else:
             filled = self._ensure_skills(workspace_id, pool)
             if filled:
                 self.stdout.write(f"技能补抽取 {filled} 人（数据集语料技能稀疏，§14#6）")
-            pool = [row for row in pool if row["skills"]]
+            # 0030 后不过滤无技能候选人，RAG 直接基于简历原文
         if len(pool) < 2:
             self.stderr.write(f"workspace {workspace_id} 可用候选人不足（{len(pool)}），请先 import_resume_dataset")
             return

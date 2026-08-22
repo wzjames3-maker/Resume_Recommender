@@ -119,8 +119,7 @@ class Command(BaseCommand):
             skill_requirements=["Python"], description="真实模型端到端探针职位",
         )
         candidate = Candidate.objects.create(
-            workspace_id=workspace_id, name=f"探针候选人-{probe_id}", skills=["Python"],
-            current_city="上海", highest_degree="本科", years_experience=3,
+            workspace_id=workspace_id, name=f"探针候选人-{probe_id}",
         )
         application = Application.objects.create(
             workspace_id=workspace_id, candidate=candidate, job=job,

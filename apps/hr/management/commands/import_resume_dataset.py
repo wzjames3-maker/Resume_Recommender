@@ -250,7 +250,7 @@ class Command(BaseCommand):
                 manifest.append({
                     "key": key, "file_name": name, "candidate_id": str(candidate.id),
                     "document_id": str(doc_id), "name": candidate.name, "skills": skills,
-                    "years_experience": candidate.years_experience, "highest_degree": degree,
+                    "years_experience": _years_experience(record.get("工作经历")), "highest_degree": degree,
                 })
                 if done % 25 == 0:
                     self.stdout.write(f"  ...已导入 {done} 条（跳过 {skipped}，失败 {failed}）")

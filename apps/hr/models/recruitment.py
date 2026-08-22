@@ -157,6 +157,11 @@ class Offer(models.Model):
             models.UniqueConstraint(
                 fields=["workspace_id", "application", "version"], name="hr_unique_offer_version_per_application"
             ),
+            models.UniqueConstraint(
+                fields=["workspace_id", "application"],
+                condition=models.Q(status="SENT"),
+                name="hr_unique_active_offer_per_application",
+            ),
         ]
 
 

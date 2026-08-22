@@ -587,11 +587,8 @@ class ApplicationService:
         relation_type = query.get("relation_type")
         if relation_type:
             queryset = queryset.filter(relation_type=relation_type)
-        city = query.get("city")
-        if city:
-            queryset = queryset.filter(
-                Q(candidate__current_city__icontains=city) | Q(candidate__target_city__icontains=city)
-            )
+        # city 已于 0030 废弃（Candidate 无城市列，改由 Resume RAG），此处忽略以保持兼容，避免 FieldError 500（P1-8）
+        query.get("city")
         q = query.get("q")
         if q:
             queryset = queryset.filter(

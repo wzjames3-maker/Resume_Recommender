@@ -3,7 +3,7 @@
     @project: MaxKB
     @file： import_service.py
     @date：2026/8/15
-    @desc: B4 候选人 CSV 批量导入：逐行校验、疑似重复标注、审计与报告
+    @desc: B4 候选人 CSV 批量导入：逐行校验、疑似重复标注、审计与报告（0030 后仅 name/phone/email）
 """
 import csv
 import io
@@ -13,14 +13,12 @@ from hr.models import Candidate
 from hr.serializers.recruitment import RecruitmentService
 from hr.services.audit import write_audit_log
 
+# 0030 后 Candidate 仅保留 name/phone/email（+ status），其余 13 列已 DROP；模板与导入收敛为三字段
 IMPORT_HEADERS = [
-    "name", "phone", "email", "current_city", "target_city", "highest_degree",
-    "years_experience", "skills", "source_type", "source_detail", "collected_at",
-    "consent_status", "consent_version", "contact_preference", "source", "note",
+    "name", "phone", "email",
 ]
 
 MAX_IMPORT_ROWS = 200
-_SKILL_SEPARATORS = (",", "，", ";", "；")
 
 
 class ImportService:
@@ -38,18 +36,6 @@ class ImportService:
             raise AppUnauthorizedFailed(403, "Workspace administrator permission is required")
 
     @staticmethod
-    def _parse_skills(value):
-        if not value:
-            return []
-        skills = []
-        normalized = value.replace("，", ",").replace("、", ",").replace("；", ";").replace(";", ",")
-        for part in normalized.split(","):
-            skill = part.strip()
-            if skill and skill not in skills:
-                skills.append(skill)
-        return skills
-
-    @staticmethod
     def _normalize_row(row):
         # 过滤 None 值（DictReader 对缺列给 None），让 data.get(field, default) 的默认值生效
         return {
@@ -58,36 +44,25 @@ class ImportService:
         }
 
     def _create_from_row(self, data):
-        """校验并创建候选人；返回 (candidate, error)；校验逻辑与 create_candidate 一致。"""
+        """校验并创建候选人；返回 (candidate, error)；仅校验三字段。"""
         try:
-            years_value = data.get("years_experience")
-            if years_value not in (None, ""):
-                try:
-                    data["years_experience"] = int(str(years_value).strip())
-                except (TypeError, ValueError) as exc:
-                    raise AppApiException(400, "years_experience is invalid") from exc
             name = RecruitmentService._required_string(data, "name", 128)
+            phone = RecruitmentService._optional_string(data, "phone", 20)
+            email_raw = data.get("email") or None
+            # 邮箱可选，简单规范化（保持与 RecruitmentService 一致的校验在 _optional_string 层已覆盖 phone，email 仅做空值处理）
+            email = email_raw.strip() if isinstance(email_raw, str) and email_raw.strip() else None
+            # 0030 后不再接收 current_city/target_city/highest_degree/years_experience/skills/source 等 13 列
+            # 忽略历史列以保持向后兼容（旧模板仍含这些列时不报错，仅忽略）
             candidate = Candidate.objects.create(
                 workspace_id=self.workspace_id,
                 user_id=self.user_id,
                 name=name,
-                email=data.get("email") or None,
-                phone=RecruitmentService._optional_string(data, "phone", 20),
-                current_city=RecruitmentService._optional_string(data, "current_city", 64),
-                target_city=RecruitmentService._optional_string(data, "target_city", 64),
-                highest_degree=RecruitmentService._optional_string(data, "highest_degree", 32),
-                years_experience=RecruitmentService._years_experience(data),
-                skills=self._parse_skills(data.get("skills")),
-                source=RecruitmentService._optional_string(data, "source", 64),
-                source_type=RecruitmentService._source_type(data),
-                source_detail=RecruitmentService._optional_string(data, "source_detail", 128),
-                collected_at=RecruitmentService._collected_at(data),
-                consent_status=RecruitmentService._consent_status(data),
-                consent_version=RecruitmentService._optional_string(data, "consent_version", 32),
-                contact_preference=RecruitmentService._contact_preference(data),
-                note=RecruitmentService._optional_string(data, "note", 4096),
+                email=email,
+                phone=phone,
             )
         except AppApiException as exc:
+            return None, str(exc)
+        except Exception as exc:  # 防御：应对旧数据仍传已删字段导致的 TypeError
             return None, str(exc)
         return candidate, ""
 
@@ -164,9 +139,4 @@ class ImportService:
     def import_template(self):
         return IMPORT_HEADERS, {
             "name": "张三", "phone": "13800000000", "email": "zhangsan@example.com",
-            "current_city": "上海", "target_city": "北京", "highest_degree": "本科",
-            "years_experience": "3", "skills": "Python,Django",
-            "source_type": "OTHER", "source_detail": "", "collected_at": "2026-08-15T10:00:00Z",
-            "consent_status": "UNKNOWN", "consent_version": "", "contact_preference": "UNSPECIFIED",
-            "source": "", "note": "",
         }

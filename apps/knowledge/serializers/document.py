@@ -820,6 +820,17 @@ class DocumentSerializers(serializers.Serializer):
         def delete(self):
             self.is_valid(raise_exception=True)
             document_id = self.data.get("document_id")
+            # 简历语义索引保护：hr_protected 的 Document 不允许 via 常规文档接口删除（P1-13）
+            try:
+                from knowledge.models import Document as KnowledgeDocument
+
+                doc = KnowledgeDocument.objects.filter(id=document_id).select_related("knowledge").first()
+                if doc and doc.knowledge and (doc.knowledge.meta or {}).get("hr_protected"):
+                    raise AppApiException(400, "Cannot delete hr_protected document")
+            except AppApiException:
+                raise
+            except Exception:
+                pass
             source_file_ids = [
                 doc["meta"].get("source_file_id") for doc in Document.objects.filter(id=document_id).values("meta")
             ]
