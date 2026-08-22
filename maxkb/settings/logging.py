@@ -12,6 +12,10 @@ LOG_LEVEL = CONFIG.get_log_level()
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
+    'filters': {
+        # P2-4：PII 脱敏（手机号/邮箱掩码），挂载到全部输出 handler
+        'pii_mask': {'()': 'common.utils.logger.PiiDesensitizeFilter'},
+    },
     'formatters': {
         'verbose': {
             'format': '%(levelname)s %(asctime)s %(module)s %(process)d %(thread)d %(message)s'
@@ -42,7 +46,8 @@ LOGGING = {
         'console': {
             'level': 'DEBUG',
             'class': 'logging.StreamHandler',
-            'formatter': 'main'
+            'formatter': 'main',
+            'filters': ['pii_mask'],
         },
         'file': {
             'encoding': 'utf8',
@@ -53,6 +58,7 @@ LOGGING = {
             'backupCount': 7,
             'formatter': 'main',
             'filename': MAX_KB_LOG_FILE,
+            'filters': ['pii_mask'],
         },
         'drf_exception': {
             'encoding': 'utf8',
@@ -63,6 +69,7 @@ LOGGING = {
             'interval': 1,
             'backupCount': 7,
             'filename': DRF_EXCEPTION_LOG_FILE,
+            'filters': ['pii_mask'],
         },
         'unexpected_exception': {
             'encoding': 'utf8',
@@ -73,6 +80,7 @@ LOGGING = {
             'backupCount': 7,
             'formatter': 'exception',
             'filename': UNEXPECTED_EXCEPTION_LOG_FILE,
+            'filters': ['pii_mask'],
         },
         'syslog': {
             'level': 'INFO',
@@ -113,7 +121,7 @@ LOGGING = {
         },
         'common.event': {
             'handlers': ['console', 'file'],
-            'level': "DEBUG",
+            'level': LOG_LEVEL,
             'propagate': False,
         },
     }

@@ -46,6 +46,18 @@ CANDIDATE_EXPORT_FIELDS = [
     "create_time",
 ]
 
+# P2-16: 面试状态迁移矩阵（update_interview 用）：仅列出的 status→status 迁移合法；
+# 同状态提交视为空操作放行；PASSED/FAILED/NO_SHOW 为终态不可再流转；CANCELLED 仅可重开回 PENDING。
+_INTERVIEW_STATUS_TRANSITIONS = {
+    InterviewStatus.PENDING: {
+        InterviewStatus.PASSED,
+        InterviewStatus.FAILED,
+        InterviewStatus.NO_SHOW,
+        InterviewStatus.CANCELLED,
+    },
+    InterviewStatus.CANCELLED: {InterviewStatus.PENDING},
+}
+
 
 class RecruitmentService:
     def __init__(self, workspace_id, user_id, hr_role):
@@ -1191,9 +1203,17 @@ class RecruitmentService:
         interview = Interview.objects.filter(id=interview_id, workspace_id=self.workspace_id).first()
         if interview is None:
             raise NotFound404(404, "Resource not found")
+        # P2-16: 记录变更前快照，用于审计（只记字段名与状态迁移，不记字段值，防 PII 入审计）
+        tracked_fields = ("status", "feedback", "interviewer", "interviewer_user_id", "feedback_deadline", "scheduled_at")
+        before = {field: getattr(interview, field) for field in tracked_fields}
+        original_status = interview.status
         if "status" in data:
             if data["status"] not in InterviewStatus.values:
                 raise AppApiException(400, "status is invalid")
+            if data["status"] != interview.status and data["status"] not in _INTERVIEW_STATUS_TRANSITIONS.get(
+                interview.status, set()
+            ):
+                raise AppApiException(400, "status transition is not allowed")
             interview.status = data["status"]
         if "feedback" in data:
             interview.feedback = self._optional_string(data, "feedback", 4096)
@@ -1208,7 +1228,12 @@ class RecruitmentService:
             interview.feedback_deadline = data["feedback_deadline"] or None
         if "scheduled_at" in data:
             interview.scheduled_at = data["scheduled_at"] or None
+        changed_fields = [field for field in tracked_fields if getattr(interview, field) != before[field]]
         interview.save()
+        write_audit_log(
+            self.workspace_id, self.user_id, "UPDATE", "INTERVIEW", interview.id,
+            detail={"changed_fields": changed_fields, "status_from": original_status, "status_to": interview.status},
+        )
         return self._interview_output(interview)
 
     def list_interviews(self, params):
@@ -1309,19 +1334,36 @@ class RecruitmentService:
         return records
 
     def submit_interview_feedback(self, interview_id, data):
-        """面试官本人提交反馈；非本人一律 404；写时间戳并审计。"""
-        interview = Interview.objects.filter(id=interview_id, workspace_id=self.workspace_id).first()
-        if interview is None or interview.interviewer_user_id != self.user_id:
-            raise NotFound404(404, "Resource not found")
-        status = data.get("status")
-        if status not in (InterviewStatus.PASSED, InterviewStatus.FAILED, InterviewStatus.NO_SHOW):
-            raise AppApiException(400, "status is invalid")
-        interview.status = status
-        interview.feedback = self._optional_string(data, "feedback", 4096)
-        interview.feedback_submitted_at = timezone.now()
-        interview.save(update_fields=["status", "feedback", "feedback_submitted_at", "update_time"])
-        write_audit_log(
-            self.workspace_id, self.user_id, "INTERVIEW_FEEDBACK", "INTERVIEW", interview.id,
-            detail="{} {}".format(status, interview.feedback),
-        )
+        """面试官本人提交反馈；非本人一律 404；已提交过则拒绝（幂等防翻转）；写时间戳并审计。"""
+        already_submitted = False
+        with transaction.atomic():
+            # P2-16: 行锁 + 已提交检查，防止并发重复提交翻转已记录的面试结论
+            interview = (
+                Interview.objects.select_for_update()
+                .filter(id=interview_id, workspace_id=self.workspace_id)
+                .first()
+            )
+            if interview is None or interview.interviewer_user_id != self.user_id:
+                raise NotFound404(404, "Resource not found")
+            already_submitted = interview.feedback_submitted_at is not None
+            if not already_submitted:
+                status = data.get("status")
+                if status not in (InterviewStatus.PASSED, InterviewStatus.FAILED, InterviewStatus.NO_SHOW):
+                    raise AppApiException(400, "status is invalid")
+                interview.status = status
+                interview.feedback = self._optional_string(data, "feedback", 4096)
+                interview.feedback_submitted_at = timezone.now()
+                interview.save(update_fields=["status", "feedback", "feedback_submitted_at", "update_time"])
+                # P2-16: 审计不落反馈正文（自由文本可能含候选人 PII），仅记录结论状态与轮次
+                write_audit_log(
+                    self.workspace_id, self.user_id, "INTERVIEW_FEEDBACK", "INTERVIEW", interview.id,
+                    detail={"status": status, "round_no": interview.round_no},
+                )
+        if already_submitted:
+            # 重复提交留痕（事务外写审计，避免随回滚丢失）
+            write_audit_log(
+                self.workspace_id, self.user_id, "INTERVIEW_FEEDBACK", "INTERVIEW", interview.id,
+                result="FAILED", detail="feedback already submitted",
+            )
+            raise AppApiException(400, "feedback has already been submitted")
         return self._interview_output(interview)

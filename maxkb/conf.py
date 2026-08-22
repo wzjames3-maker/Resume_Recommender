@@ -145,7 +145,9 @@ class Config(dict):
             return [("en", "English"), ("zh", "中文简体"), ("zh-hant", "中文繁体")]
 
     def get_log_level(self):
-        return self.get("LOG_LEVEL", "DEBUG")
+        # P2-28：默认级别生产为 INFO（避免 DEBUG 日志泄漏敏感信息/刷盘），开发调试（DEBUG=true）保持 DEBUG；
+        # 可通过 LOG_LEVEL / MAXKB_LOG_LEVEL 显式覆盖
+        return self.get("LOG_LEVEL", "DEBUG" if self.get_debug() else "INFO")
 
     def get_sandbox_python_package_paths(self):
         return self.get(

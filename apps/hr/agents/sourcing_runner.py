@@ -16,7 +16,7 @@ from common.exception.app_exception import AppApiException
 from hr.agents import context
 from hr.agents.base import guard_limits, record_prompt_version, run_output, write_skipped_run
 from hr.agents.proposals import expire_pending_proposals_for, propose
-from hr.agents.runner import _config, _invoke_llm, _load_llm, structured_filter
+from hr.agents.runner import _allowed_paragraph_ids, _config, _invoke_llm, _load_llm, structured_filter
 from hr.agents.scope import validate_resume_database_ids
 from hr.models import (
     Application,
@@ -79,7 +79,7 @@ _SOURCING_PROMPT = """你是人才库激活助手，为职位 Y 从沉睡候选�
 """
 
 
-def _facts_from_llm(model, prompt, allowed_ids):
+def _facts_from_llm(model, prompt, allowed_ids, allowed_paragraph_ids=None):
     data = _invoke_llm(model, prompt)
     if not isinstance(data, dict):
         raise ValueError("sourcing result must be an object")
@@ -93,8 +93,12 @@ def _facts_from_llm(model, prompt, allowed_ids):
         evidence = []
         for entry in (item.get("evidence") or []):
             if isinstance(entry, dict):
+                paragraph_id = entry.get("paragraph_id")
+                # evidence paragraph_id 必须来自本次检索结果，防止编造证据（P2-8）
+                if allowed_paragraph_ids is not None and str(paragraph_id or "") not in allowed_paragraph_ids:
+                    raise ValueError(f"evidence paragraph_id not in retrieved set: {paragraph_id}")
                 evidence.append({
-                    "paragraph_id": entry.get("paragraph_id"),
+                    "paragraph_id": paragraph_id,
                     "excerpt": str(entry.get("excerpt") or "")[:500],
                     "relevance": float(entry.get("relevance", 0) or 0),
                 })
@@ -230,6 +234,8 @@ def run_sourcing_agent(job_id, trigger_type=HrAgentTriggerType.MANUAL, user_id=N
 
         allowed_ids = {str((item.get("candidate") or {}).get("id")) for item in sleeping}
         projected = context.search_to_llm({"items": sleeping, "meta": {}})
+        # evidence paragraph_id 允许集：来自进入提示词的检索投影（P2-8）
+        allowed_paragraph_ids = _allowed_paragraph_ids([projected])
         prompt = _SOURCING_PROMPT.format(
             job=json.dumps(job_ctx, ensure_ascii=False),
             candidate_pool=json.dumps(projected, ensure_ascii=False),
@@ -239,7 +245,7 @@ def run_sourcing_agent(job_id, trigger_type=HrAgentTriggerType.MANUAL, user_id=N
         last_error = ""
         for _attempt in range(2):
             try:
-                facts = _facts_from_llm(model, prompt, allowed_ids)
+                facts = _facts_from_llm(model, prompt, allowed_ids, allowed_paragraph_ids)
                 break
             except (ValueError, TypeError, KeyError) as exc:
                 last_error = str(exc)

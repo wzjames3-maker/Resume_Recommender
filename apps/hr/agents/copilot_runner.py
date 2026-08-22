@@ -17,7 +17,7 @@ from common.exception.app_exception import AppApiException, AppUnauthorizedFaile
 from hr.agents import context
 from hr.agents.base import guard_limits, record_prompt_version, run_output, write_skipped_run
 from hr.agents.proposals import expire_pending_proposals_for, propose
-from hr.agents.runner import _config, _invoke_llm, _is_number, _load_llm
+from hr.agents.runner import _allowed_paragraph_ids, _config, _invoke_llm, _is_number, _load_llm
 from hr.agents.scope import candidate_document_ids, validate_resume_database_ids
 from hr.models import HrAgentRun, HrAgentRunStatus, HrAgentTriggerType, HrAgentType, Interview, InterviewStatus
 from hr.services.audit import write_audit_log
@@ -74,7 +74,7 @@ _FEEDBACK_PROMPT = """你是招聘面试助手，基于面试官已提交反馈�
 """
 
 
-def _validate_prepare_facts(data):
+def _validate_prepare_facts(data, allowed_paragraph_ids=None):
     if not isinstance(data, dict):
         raise ValueError("facts must be an object")
     weak_spots = []
@@ -84,8 +84,12 @@ def _validate_prepare_facts(data):
         evidence = []
         for entry in (item.get("evidence") or []):
             if isinstance(entry, dict):
+                paragraph_id = entry.get("paragraph_id")
+                # evidence paragraph_id 必须来自本次检索结果，防止编造证据（P2-8）
+                if allowed_paragraph_ids is not None and str(paragraph_id or "") not in allowed_paragraph_ids:
+                    raise ValueError(f"evidence paragraph_id not in retrieved set: {paragraph_id}")
                 evidence.append({
-                    "paragraph_id": entry.get("paragraph_id"),
+                    "paragraph_id": paragraph_id,
                     "excerpt": str(entry.get("excerpt") or "")[:500],
                     "relevance": float(entry.get("relevance", 0) or 0) if _is_number(entry.get("relevance")) else 0.0,
                 })
@@ -116,7 +120,8 @@ def _validate_prepare_facts(data):
     }
 
 
-def _validate_feedback_facts(data):
+def _validate_feedback_facts(data, allowed_paragraph_ids=None):
+    """feedback 阶段无 evidence，allowed_paragraph_ids 仅保持与 prepare 校验器同签名。"""
     if not isinstance(data, dict):
         raise ValueError("facts must be an object")
     draft = str(data.get("evaluation_draft") or "").strip()
@@ -288,11 +293,14 @@ def run_interview_copilot(interview_id, data=None, user_id=None, hr_role=None, w
             "job": json.dumps(job_ctx, ensure_ascii=False),
             "candidate": json.dumps(candidate_ctx, ensure_ascii=False),
         }
+        allowed_paragraph_ids = None
         if phase == "prepare":
             # 工具 ③ search_resumes（候选人文档集限定，找弱项）
             t0 = time.monotonic()
             document_ids = _candidate_document_ids(workspace_id, application.candidate_id, resume_database_ids)
             weak_spots = _collect_weak_spots(workspace_id, application, document_ids, resume_database_ids)
+            # evidence paragraph_id 允许集：来自本次 search_resumes 投影结果（P2-8）
+            allowed_paragraph_ids = _allowed_paragraph_ids(weak_spots)
             trace.append({"tool": "search_resumes", "elapsed_ms": int((time.monotonic() - t0) * 1000),
                           "rows": len(weak_spots)})
             # 工具 ④ search_knowledge（企业题库，白名单）
@@ -322,7 +330,7 @@ def run_interview_copilot(interview_id, data=None, user_id=None, hr_role=None, w
         for _attempt in range(2):
             try:
                 facts = (_validate_prepare_facts if phase == "prepare" else _validate_feedback_facts)(
-                    _invoke_llm(model, prompt)
+                    _invoke_llm(model, prompt), allowed_paragraph_ids=allowed_paragraph_ids
                 )
                 break
             except (ValueError, TypeError, KeyError) as exc:

@@ -69,6 +69,10 @@ _PREFILTER_MAX = _env_int("MAXKB_HR_MAX_PREFILTER", 2000)
 # 姓名快速通道（T4）：纯 2-4 字中文查询走 name__icontains 并置顶
 _NAME_RE = re.compile(r"^[\u4e00-\u9fa5]{2,4}$")
 
+# P2-19：0030 后 Candidate 仅 name/phone/email，硬条件（年限/学历/城市）预筛永久禁用；
+# 相关分支仅作历史对照保留，meta.slots.enabled 恒为 False，如实上报前端。
+_HARD_SLOTS_ENABLED = False
+
 _MODE_CHOICES = {"auto", "hybrid", "dense", "phrase", "skills"}
 
 
@@ -104,7 +108,8 @@ def _mask_for_role(candidate, hr_role):
 
 
 def _candidate_matches_hard_slots(candidate, slots):
-    """0030 后 Candidate 仅 name/phone/email，硬条件（年限/学历/城市）已移除，保留函数桩供历史调用兼容。"""
+    """0030 后 Candidate 仅 name/phone/email，硬条件（年限/学历/城市）已移除：恒放行，不做任何过滤。
+    保留函数桩供历史调用兼容；总开关见模块常量 _HARD_SLOTS_ENABLED（P2-19，meta.slots.enabled 如实上报）。"""
     return candidate is not None
 
 
@@ -118,6 +123,11 @@ def _exclude_documents(knowledge_id):
         str(document.id)
         for document in QuerySet(Document).filter(knowledge_id=knowledge_id, is_active=False)
     ]
+
+
+def _scope_size(scope):
+    """P2-20：检索作用域可为惰性 queryset（库范围子查询）或显式小列表，统一取元素数。"""
+    return scope.count() if isinstance(scope, QuerySet) else len(scope)
 
 
 def _sparse_query(query, max_terms=6):
@@ -394,9 +404,12 @@ def _search_skill_and(skills, workspace_id, knowledge, embedding_model, candidat
             .filter(workspace_id=workspace_id, raw_text__icontains=term)
             .values_list("candidate_id", flat=True)
         )
-        # 段落内容兜底（覆盖无 raw_text 的存量）
+        # 段落内容兜底（覆盖无 raw_text 的存量）。P2-18：限定在本工作区简历知识库内，
+        # 避免无租户过滤的 icontains 全表扫描跨工作区命中段落（与 keyword 腿按工作区限定召回对齐）
         doc_ids_for_skill = set(
-            QuerySet(_Para).filter(content__icontains=term, is_active=True).values_list("document_id", flat=True)
+            QuerySet(_Para)
+            .filter(knowledge_id=knowledge.id, content__icontains=term, is_active=True)
+            .values_list("document_id", flat=True)
         )
         if doc_ids_for_skill:
             para_ids = set(
@@ -530,7 +543,10 @@ def search_resumes(workspace_id, query, top_k=5, recall_k=None, similarity=0.2,
     resume_file_scope = {}
     if selected_database_ids:
         resume_file_scope = {"database_memberships__resume_database_id__in": selected_database_ids}
-    scope_doc_ids = meta.get("scope_document_ids")
+    # P2-20：meta 不再携带 scope_document_ids；keyword 腿的显式范围（document_ids/candidate_id）
+    # 在服务端按入参重新解析（入参已在 impl 校验通过），库范围仍由下方 resume_file_scope 限定，
+    # 两级范围求交效果与原先一致，且不再向客户端泄露文档 UUID 列表。
+    scope_doc_ids = _scope_document_ids(workspace_id, candidate_id, document_ids)
     keyword_docs, dropped_terms = _keyword_recall_docs(query, workspace_id, resume_file_scope,
                                                         document_ids=scope_doc_ids)
     kw_added = 0
@@ -611,16 +627,19 @@ def _search_resumes_impl(workspace_id, query, top_k=5, recall_k=None, similarity
     resume_file_scope = {}
     if selected_database_ids:
         resume_file_scope = {"database_memberships__resume_database_id__in": selected_database_ids}
-        database_document_ids = list(
-            QuerySet(ResumeFile).filter(
-                workspace_id=workspace_id, **resume_file_scope, document_id__isnull=False
-            ).values_list("document_id", flat=True)
-        )
+        # P2-20：库范围保持惰性 queryset（下传为 SQL IN 子查询），不再物化全量 document_id 列表
+        database_document_ids = QuerySet(ResumeFile).filter(
+            workspace_id=workspace_id, **resume_file_scope, document_id__isnull=False
+        ).values_list("document_id", flat=True)
         if scope_document_ids is None:
             scope_document_ids = database_document_ids
         else:
-            database_document_set = set(database_document_ids)
-            scope_document_ids = [doc_id for doc_id in scope_document_ids if doc_id in database_document_set]
+            # 显式范围（document_ids/candidate_id）与库范围求交：只回查显式集，不全量拉取。
+            # document_id 是 UUIDField，需 str() 对齐比较（原 str ∈ {UUID} 恒 False 的隐性 bug 一并修复）
+            allowed_set = {
+                str(doc_id) for doc_id in database_document_ids.filter(document_id__in=scope_document_ids)
+            }
+            scope_document_ids = [doc_id for doc_id in scope_document_ids if doc_id in allowed_set]
 
     knowledge = get_resume_knowledge(workspace_id)
     if knowledge is None:
@@ -639,17 +658,19 @@ def _search_resumes_impl(workspace_id, query, top_k=5, recall_k=None, similarity
             "resume_database_ids": [str(database_id) for database_id in selected_database_ids],
             "database_count": len(selected_database_ids),
         }
-    # 审查修复 #4：scope_document_ids 下传到 keyword 腿，防止限定单候选人/单文档检索时
-    # keyword 补位返回全工作区其他候选人简历（作用域泄露）
+    # 审查修复 #4 / P2-20：作用域只在服务端生效（库范围=惰性子查询、显式范围=已校验小列表），
+    # meta 不再输出完整 document_id UUID 列表，仅上报数量；keyword 腿的显式范围由
+    # search_resumes 按入参重新解析，库范围由其自身的 resume_file_scope 过滤。
     if scope_document_ids is not None:
-        meta["scope_document_ids"] = [str(doc_id) for doc_id in scope_document_ids]
+        meta["scope_document_count"] = _scope_size(scope_document_ids)
 
     # ---------- 查询理解 v1（T4）：规则槽位（年限/学历/城市 + 语义词） ----------
     # 0030 Candidate 结构化字段已移除，city_list 空，仅作语义提取
     city_list: list[str] = []
     slots = extract_slots(query, city_list=city_list)
+    # P2-19：槽位仅作语义提取展示，硬条件过滤已禁用——enabled 如实上报，避免前端误读为已生效
     meta["slots"] = {"years_min": slots["years_min"], "degree_level": slots["degree_level"],
-                     "cities": slots["cities"]}
+                     "cities": slots["cities"], "enabled": _HARD_SLOTS_ENABLED}
     meta["prefilter"] = {"applied": False, "candidate_count": 0, "resume_count": 0,
                          "skipped": False, "empty": False}
     prefilter_ids = None
@@ -680,7 +701,7 @@ def _search_resumes_impl(workspace_id, query, top_k=5, recall_k=None, similarity
     # ---------- 结构化预筛（0030 后已简化：Candidate 仅 name/phone/email，无年限/学历/城市结构化字段，不再预筛） ----------
     # 0030 前曾按 years_experience/highest_degree/current_city + candidate_skill 做 SQL 精确过滤；
     # 0030 后这些字段已物理删除，预筛改为仅库范围（已在 resume_file_scope 中体现），此处保留分支桩仅作历史对照。
-    hard_slots = False  # 0030 结构化字段已移除，无硬条件可预筛
+    hard_slots = _HARD_SLOTS_ENABLED  # P2-19：恒 False（0030 结构化字段已移除），下方分支仅历史对照
     if hard_slots and mode in ("phrase", "hybrid", "skills"):
         q = Q()
         if selected_database_ids:
@@ -747,14 +768,16 @@ def _search_resumes_impl(workspace_id, query, top_k=5, recall_k=None, similarity
             prefilter_ids = doc_ids
 
     # 范围限定与结构化预筛取交集；仅传 scope 时直接作为限定集
+    # （P2-20：scope 可能为惰性 queryset——库范围子查询；数量用 _scope_size，不物化列表）
     if scope_document_ids is not None:
         if prefilter_ids is None:
             prefilter_ids = scope_document_ids
         else:
+            # 仅历史预筛分支可达（_HARD_SLOTS_ENABLED 恒 False），此时 scope 必为显式小列表
             scope_set = set(scope_document_ids)
             prefilter_ids = [doc_id for doc_id in prefilter_ids if doc_id in scope_set]
-        meta["scope"] = {"applied": True, "document_count": len(scope_document_ids),
-                         "restricted_count": len(prefilter_ids),
+        meta["scope"] = {"applied": True, "document_count": _scope_size(scope_document_ids),
+                         "restricted_count": _scope_size(prefilter_ids),
                          "resume_database_ids": [str(database_id) for database_id in selected_database_ids],
                          "database_count": len(selected_database_ids)}
 

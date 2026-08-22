@@ -7,12 +7,16 @@
            同签名 run_screening_agent(...), 单次 Agent.run_sync, Pydantic BaseModel 校验，
            禁止 ReAct 循环，保留账本/护栏/评分。
 """
+import contextvars
 import json
 import time
 import uuid
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_ai import ModelRetry
+
+# 并发隔离：每 run 的允许 paragraph_id 集合存于 ContextVar，避免全局 set 互相污染（P2-7）
+_allowed_ids_ctx: contextvars.ContextVar[set[str]] = contextvars.ContextVar("_allowed_ids_ctx", default=set())
 
 
 from common.exception.app_exception import AppApiException
@@ -65,7 +69,7 @@ _SCREENING_PROMPT = """你是招聘初筛助手，对候选人 X 与职位 Y 做
 9. confidence 表示你对维度结论的确信程度；结论有被引用证据实质支撑时，不应因候选其它经历不相关而压低当前维度置信度。
 """
 
-# 全局允许的 paragraph_id 集合，供 Pydantic 校验时比对（替代原 _validate_facts 的 allowed_paragraph_ids）
+# 兼容旧全局（已迁移至 ContextVar，保留空集避免旧代码引用报错）
 _ALLOWED_PARAGRAPH_IDS: set[str] = set()
 
 DIMENSION_WHITELIST = ("技能匹配", "经验相关性", "工作年限", "城市", "学历")
@@ -106,12 +110,13 @@ class ScreeningFacts(BaseModel):
 
     @model_validator(mode="after")
     def _validate_evidence_ids(self):
-        # Evidence.paragraph_id 必须来自本次检索结果，防止编造证据
-        if _ALLOWED_PARAGRAPH_IDS:
+        # Evidence.paragraph_id 必须来自本次检索结果，防止编造证据（P2-7：改 ContextVar 隔离）
+        allowed = _allowed_ids_ctx.get()
+        if allowed:
             for dim in self.dimensions:
                 for ev in dim.evidence:
                     pid = ev.paragraph_id
-                    if pid is not None and str(pid) not in _ALLOWED_PARAGRAPH_IDS:
+                    if pid is not None and str(pid) not in allowed:
                         raise ModelRetry(f"evidence paragraph_id not in retrieved set: {pid}")
         return self
 
@@ -224,7 +229,7 @@ def run_screening_agent(application_id, trigger_type=HrAgentTriggerType.EVENT, u
     )
     started = time.monotonic()
     trace = []
-    global _ALLOWED_PARAGRAPH_IDS
+    _token = _allowed_ids_ctx.set(set())
     try:
         model, model_name = _load_llm(workspace_id, config)
         if model is None:
@@ -245,7 +250,7 @@ def run_screening_agent(application_id, trigger_type=HrAgentTriggerType.EVENT, u
         t0 = time.monotonic()
         evidence = _collect_evidence(workspace_id, application.job, application.candidate, document_ids, resume_database_ids)
         allowed_paragraph_ids = _allowed_paragraph_ids(evidence)
-        _ALLOWED_PARAGRAPH_IDS = allowed_paragraph_ids
+        _allowed_ids_ctx.set(allowed_paragraph_ids)
         trace.append({"tool": "search_resumes", "elapsed_ms": int((time.monotonic() - t0) * 1000), "rows": len(evidence)})
 
         prompt = _SCREENING_PROMPT.format(
@@ -287,8 +292,8 @@ def run_screening_agent(application_id, trigger_type=HrAgentTriggerType.EVENT, u
         # 单次 run_sync，无 ReAct 循环
         result = agent.run_sync("请基于给定证据完成人岗匹配评估，严格按白名单维度输出。", deps=deps)
         facts: ScreeningFacts = result.output  # type: ignore
-        # 清理全局
-        _ALLOWED_PARAGRAPH_IDS = set()
+        # 清理
+        _allowed_ids_ctx.set(set())
 
         # 空检索分支：无证据 → HOLD
         evidence_available = any(item.get("items") for item in evidence)
@@ -343,9 +348,13 @@ def run_screening_agent(application_id, trigger_type=HrAgentTriggerType.EVENT, u
             detail={"agent_type": _AGENT_TYPE, "trigger": trigger_type, "action": payload["decision"]["suggested_action"], "score": payload["decision"]["score"]},
             trace_id=run.id,
         )
+        _allowed_ids_ctx.reset(_token)
         return _run_output(run, proposal)
     except Exception as exc:  # noqa: BLE001
-        _ALLOWED_PARAGRAPH_IDS = set()
+        try:
+            _allowed_ids_ctx.set(set())
+        except Exception:
+            pass
         run.status = HrAgentRunStatus.FAILED
         run.error = str(exc)[:2000]
         run.tool_trace = trace

@@ -1502,6 +1502,52 @@ class InterviewerMineApiTests(_HrApiBase):
         )
         self.assertEqual(response.status_code, 404)
 
+    def test_update_interview_validates_transition_and_writes_audit(self):
+        # P2-16: 合法迁移 PENDING→CANCELLED 放行并写 UPDATE/INTERVIEW 审计（含状态迁移，不含字段值）
+        url = "/admin/api/workspace/workspace-a/hr/interviews/{}".format(self.interview_id)
+        response = self._client(self.admin).put(url, {"status": "CANCELLED"}, content_type="application/json")
+        self.assertEqual(response.status_code, 200)
+        audit = HrAuditLog.objects.get(
+            workspace_id="workspace-a", action="UPDATE", object_type="INTERVIEW", object_id=self.interview_id
+        )
+        self.assertIn("status_from", audit.detail)
+        # 非法迁移 CANCELLED→FAILED 被矩阵拒绝
+        response = self._client(self.admin).put(url, {"status": "FAILED"}, content_type="application/json")
+        self.assertEqual(response.json()["code"], 400)
+
+    def test_update_interview_terminal_state_cannot_change(self):
+        # P2-16: 终态（PASSED）不可再流转到其他状态
+        Interview.objects.filter(id=self.interview_id).update(status="PASSED")
+        url = "/admin/api/workspace/workspace-a/hr/interviews/{}".format(self.interview_id)
+        response = self._client(self.admin).put(url, {"status": "FAILED"}, content_type="application/json")
+        self.assertEqual(response.json()["code"], 400)
+        self.assertEqual(Interview.objects.get(id=self.interview_id).status, "PASSED")
+
+    def test_submit_feedback_is_idempotent_and_prevents_flip(self):
+        # P2-16: 反馈只能提交一次；重复提交返回 400 且不翻转已记录结论
+        url = "/admin/api/workspace/workspace-a/hr/interviews/{}/feedback".format(self.interview_id)
+        first = self._client(self.interviewer).put(
+            url, {"status": "PASSED", "feedback": "表现优秀"}, content_type="application/json"
+        )
+        self.assertEqual(first.status_code, 200)
+        submitted_at = Interview.objects.get(id=self.interview_id).feedback_submitted_at
+        second = self._client(self.interviewer).put(
+            url, {"status": "FAILED", "feedback": "改判不合格"}, content_type="application/json"
+        )
+        self.assertEqual(second.json()["code"], 400)
+        interview = Interview.objects.get(id=self.interview_id)
+        self.assertEqual(interview.status, "PASSED")
+        self.assertEqual(interview.feedback, "表现优秀")
+        self.assertEqual(interview.feedback_submitted_at, submitted_at)
+        # 拒绝记录留痕（FAILED 结果），成功审计不落反馈正文（PII 治理）
+        self.assertTrue(
+            HrAuditLog.objects.filter(
+                workspace_id="workspace-a", action="INTERVIEW_FEEDBACK", object_id=self.interview_id,
+                result="FAILED", detail="feedback already submitted",
+            ).exists()
+        )
+        self.assertFalse(HrAuditLog.objects.filter(detail__contains="表现优秀").exists())
+
 
 class CleanupOrphanResumeTaskTests(TestCase):
     """A4: TTL 清理未关联简历（31 天前清理、30 天内保留、已关联不清理）"""
@@ -4099,9 +4145,10 @@ class ApplicationCommandIdempotencyTests(TestCase):
 
     def test_terminal_idempotency_key(self):
         key = "term-{}".format(uuid.uuid7())
-        self.service.reject_application(self.application_id, {"termination_reason": "NOT_FIT", "idempotency_key": key})
-        with self.assertRaisesRegex(AppApiException, "not active"):
-            self.service.reject_application(self.application_id, {"termination_reason": "NOT_FIT", "idempotency_key": key})
+        first = self.service.reject_application(self.application_id, {"termination_reason": "NOT_FIT", "idempotency_key": key})
+        # P2-17: 幂等键应先于状态检查，同键重试应幂等返回而非 400
+        second = self.service.reject_application(self.application_id, {"termination_reason": "NOT_FIT", "idempotency_key": key})
+        self.assertEqual(first["id"], second["id"])
         self.assertEqual(
             ApplicationEvent.objects.filter(
                 application_id=self.application_id, event_type="REJECTED", idempotency_key=key
@@ -6315,8 +6362,8 @@ class PydanticAgentValidationTests(TestCase):
         from pydantic_ai import ModelRetry
         import hr.agents.runner_pydantic as rp
 
-        # 设置允许的 paragraph_id 集合
-        rp._ALLOWED_PARAGRAPH_IDS = {"p1", "p2"}
+        # 设置允许的 paragraph_id 集合（P2-7 起校验读取 ContextVar，旧全局仅作兼容占位）
+        _token = rp._allowed_ids_ctx.set({"p1", "p2"})
         try:
             # 合法 paragraph_id 应通过
             facts = ScreeningFacts(
@@ -6333,7 +6380,7 @@ class PydanticAgentValidationTests(TestCase):
                     clarifying_questions=[],
                 )
         finally:
-            rp._ALLOWED_PARAGRAPH_IDS = set()
+            rp._allowed_ids_ctx.reset(_token)
 
     def test_jd_draft_missing_description_validation(self):
         from hr.agents.jd_runner_pydantic import JdDraftFacts

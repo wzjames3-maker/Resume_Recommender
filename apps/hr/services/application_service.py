@@ -133,6 +133,12 @@ class ApplicationService:
             raise NotFound404(404, "Resource not found")
         return application
 
+    def _ensure_offer_stage_terminal_allowed(self, application, event_type):
+        """P2-15: 源为 OFFER 阶段且存在 SENT Offer 时，终态需先处理 Offer，避免 SENT 悬挂。"""
+        if application.current_stage and application.current_stage.key == "OFFER":
+            if Offer.objects.filter(workspace_id=self.workspace_id, application=application, status=OfferStatus.SENT).exists():
+                raise AppApiException(400, "Active SENT offer exists; handle offer before terminal transition")
+
     def _job(self, job_id):
         job = Job.objects.filter(id=job_id, workspace_id=self.workspace_id).first()
         if job is None:
@@ -353,8 +359,7 @@ class ApplicationService:
         idempotency_key = data.get("idempotency_key") or str(uuid.uuid4())
         with transaction.atomic():
             application = self._application(application_id, for_update=True)
-            if application.status != ApplicationStatus.ACTIVE:
-                raise AppApiException(400, "Application is not active")
+            # 幂等优先：同键重放直接返回当前快照，不做 ACTIVE 校验（与 move_stage 一致，P2-17）
             existing_event = ApplicationEvent.objects.filter(
                 workspace_id=self.workspace_id,
                 application=application,
@@ -363,6 +368,10 @@ class ApplicationService:
             ).first()
             if existing_event is not None:
                 return self._output(application)
+            if application.status != ApplicationStatus.ACTIVE:
+                raise AppApiException(400, "Application is not active")
+            # §2.2：源为 OFFER 阶段且存在 SENT Offer 时须先处理 Offer 再终态（P2-15）
+            self._ensure_offer_stage_terminal_allowed(application, event_type)
             application.status = status
             application.termination_reason = reason
             application.terminated_at = timezone.now()

@@ -5,11 +5,13 @@
     @date：2026/8/20
     @desc: Sourcing Agent Pydantic AI 迁移（Prompt 5）
 """
+import contextvars
 import json
 import time
 import uuid
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+from pydantic_ai import ModelRetry
 
 from common.exception.app_exception import AppApiException
 from hr.agents import context
@@ -25,6 +27,9 @@ _AGENT_TYPE = HrAgentType.SOURCING
 _PROMPT_VERSION = "sourcing-v1"
 _MAX_SEARCHES = 3
 _MAX_CANDIDATES = 10
+
+# 并发隔离：每 run 的允许 evidence paragraph_id 集合存于 ContextVar（P2-8，同 runner_pydantic P2-7）
+_allowed_ids_ctx: contextvars.ContextVar[set[str]] = contextvars.ContextVar("_sourcing_allowed_ids_ctx", default=set())
 
 _SOURCING_PROMPT = """你是人才库激活助手，为职位 Y 从沉睡候选人池中筛选优先级激活清单。
 输入：
@@ -68,6 +73,30 @@ class CandidateMatch(BaseModel):
 class SourcingFacts(BaseModel):
     candidates: list[CandidateMatch] = Field(description="激活清单")
     summary: str = Field(max_length=1000)
+
+    @model_validator(mode="after")
+    def _validate_evidence_ids(self):
+        # Evidence.paragraph_id 必须来自本次检索结果，防止编造证据（P2-8）
+        allowed = _allowed_ids_ctx.get()
+        if allowed:
+            for row in self.candidates:
+                for ev in row.evidence:
+                    pid = ev.paragraph_id
+                    if pid is not None and str(pid) not in allowed:
+                        raise ModelRetry(f"evidence paragraph_id not in retrieved set: {pid}")
+        return self
+
+
+def _allowed_paragraph_ids(results):
+    """从检索投影结果中收集合法 evidence paragraph_id 集合（P2-8）。"""
+    ids = set()
+    for result in results:
+        for item in result.get("items", []):
+            for paragraph in item.get("paragraphs", []):
+                paragraph_id = paragraph.get("paragraph_id") or paragraph.get("id")
+                if paragraph_id:
+                    ids.add(str(paragraph_id))
+    return ids
 
 
 def _config(workspace_id):
@@ -116,6 +145,7 @@ def run_sourcing_agent(job_id, trigger_type=HrAgentTriggerType.MANUAL, user_id=N
     )
     started = time.monotonic()
     trace = []
+    _allowed_ids_ctx.set(set())
     try:
         model, model_name = get_pydantic_model(workspace_id, config)
         if model is None:
@@ -171,6 +201,8 @@ def run_sourcing_agent(job_id, trigger_type=HrAgentTriggerType.MANUAL, user_id=N
             raise RuntimeError("no sleeping candidates after structured filter")
         allowed_ids = {str((item.get("candidate") or {}).get("id")) for item in sleeping}
         projected = context.search_to_llm({"items": sleeping, "meta": {}})
+        # evidence paragraph_id 允许集：来自进入提示词的检索投影（P2-8）
+        _allowed_ids_ctx.set(_allowed_paragraph_ids([projected]))
         prompt = _SOURCING_PROMPT.format(job=json.dumps(job_ctx, ensure_ascii=False), candidate_pool=json.dumps(projected, ensure_ascii=False), max_candidates=_MAX_CANDIDATES)
 
         deps = HrDeps(workspace_id=workspace_id, user_id=actor_id, job_id=str(job.id), job=job_ctx)
@@ -186,6 +218,7 @@ def run_sourcing_agent(job_id, trigger_type=HrAgentTriggerType.MANUAL, user_id=N
 
         result = agent.run_sync("请生成激活清单。", deps=deps)
         facts: SourcingFacts = result.output  # type: ignore
+        _allowed_ids_ctx.set(set())
         # 校验 candidate_id 必须在 allowed_ids
         for row in facts.candidates:
             if row.candidate_id not in allowed_ids:
@@ -223,6 +256,10 @@ def run_sourcing_agent(job_id, trigger_type=HrAgentTriggerType.MANUAL, user_id=N
 
         return run_output(run, proposal)
     except Exception as exc:  # noqa: BLE001
+        try:
+            _allowed_ids_ctx.set(set())
+        except Exception:
+            pass
         run.status = HrAgentRunStatus.FAILED
         run.error = str(exc)[:2000]
         run.tool_trace = trace

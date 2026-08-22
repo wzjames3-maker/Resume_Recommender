@@ -5,11 +5,13 @@
     @date：2026/8/20
     @desc: Interview Copilot Pydantic AI 迁移（Prompt 4）：双 phase
 """
+import contextvars
 import json
 import time
 import uuid
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
+from pydantic_ai import ModelRetry
 
 from common.exception.app_exception import AppApiException, AppUnauthorizedFailed
 from hr.agents import context
@@ -26,6 +28,9 @@ _SYSTEM_USER_ID = uuid.UUID(int=0)
 _AGENT_TYPE = HrAgentType.INTERVIEW_COPILOT
 _PROMPT_VERSION = "interview-copilot-v1"
 _MAX_SEARCHES = 3
+
+# 并发隔离：每 run 的允许 evidence paragraph_id 集合存于 ContextVar（P2-8，同 runner_pydantic P2-7）
+_allowed_ids_ctx: contextvars.ContextVar[set[str]] = contextvars.ContextVar("_copilot_allowed_ids_ctx", default=set())
 
 _PREPARE_PROMPT = """你是招聘面试助手，为一场面试生成结构化面试问题清单。
 输入：
@@ -99,6 +104,18 @@ class PrepareFacts(BaseModel):
     questions: list[Question] = Field(description="5-12 条，覆盖基础/进阶/深挖")
     focus: list[str] = Field(default_factory=list)
 
+    @model_validator(mode="after")
+    def _validate_evidence_ids(self):
+        # Evidence.paragraph_id 必须来自本次检索结果，防止编造证据（P2-8）
+        allowed = _allowed_ids_ctx.get()
+        if allowed:
+            for spot in self.weak_spots:
+                for ev in spot.evidence:
+                    pid = ev.paragraph_id
+                    if pid is not None and str(pid) not in allowed:
+                        raise ModelRetry(f"evidence paragraph_id not in retrieved set: {pid}")
+        return self
+
     @property
     def validated_questions(self):
         # 保证 5-12 条，难度归一
@@ -113,6 +130,18 @@ class FeedbackFacts(BaseModel):
     evaluation_draft: str = Field(max_length=8000)
     recommendation_hint: str = Field(max_length=500, default="")
     open_items: list[str] = Field(default_factory=list)
+
+
+def _allowed_paragraph_ids(results):
+    """从检索投影结果中收集合法 evidence paragraph_id 集合（P2-8）。"""
+    ids = set()
+    for result in results:
+        for item in result.get("items", []):
+            for paragraph in item.get("paragraphs", []):
+                paragraph_id = paragraph.get("paragraph_id") or paragraph.get("id")
+                if paragraph_id:
+                    ids.add(str(paragraph_id))
+    return ids
 
 
 def _config(workspace_id):
@@ -212,6 +241,7 @@ def run_interview_copilot(interview_id, data=None, user_id=None, hr_role=None, w
     )
     started = time.monotonic()
     trace = []
+    _allowed_ids_ctx.set(set())
     try:
         model, model_name = get_pydantic_model(workspace_id, config)
         if model is None:
@@ -228,6 +258,8 @@ def run_interview_copilot(interview_id, data=None, user_id=None, hr_role=None, w
             t0 = time.monotonic()
             document_ids = _candidate_document_ids(workspace_id, application.candidate_id, resume_database_ids)
             weak_spots = _collect_weak_spots(workspace_id, application, document_ids, resume_database_ids)
+            # evidence paragraph_id 允许集：来自本次 search_resumes 投影结果（P2-8）
+            _allowed_ids_ctx.set(_allowed_paragraph_ids(weak_spots))
             trace.append({"tool": "search_resumes", "elapsed_ms": int((time.monotonic() - t0) * 1000), "rows": len(weak_spots)})
             t0 = time.monotonic()
             question_bank = _collect_question_bank(workspace_id, application.job)
@@ -259,6 +291,7 @@ def run_interview_copilot(interview_id, data=None, user_id=None, hr_role=None, w
             # 校验 questions 数量
             if len(facts.questions) < 5:
                 raise ValueError("questions must be at least 5")
+            _allowed_ids_ctx.set(set())
             payload = {"phase": phase, "weak_spots": [w.model_dump() for w in facts.weak_spots], "questions": [q.model_dump() for q in facts.questions[:12]], "focus": facts.focus}
         else:
             prompt = _FEEDBACK_PROMPT.format(**prompt_kwargs, interview_feedback=json.dumps(feedback, ensure_ascii=False))
@@ -303,6 +336,10 @@ def run_interview_copilot(interview_id, data=None, user_id=None, hr_role=None, w
 
         return run_output(run, proposal)
     except Exception as exc:  # noqa: BLE001
+        try:
+            _allowed_ids_ctx.set(set())
+        except Exception:
+            pass
         run.status = HrAgentRunStatus.FAILED
         run.error = str(exc)[:2000]
         run.tool_trace = trace
