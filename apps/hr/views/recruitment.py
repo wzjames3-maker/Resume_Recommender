@@ -189,14 +189,24 @@ class ResumeAPI(APIView):
         if not resume_database_ids:
             resume_database_ids = request.data.get("resume_database_ids") or request.data.get("resume_database_id")
         files = []
-        for upload in request.FILES.getlist("files"):
-            temp_path = os.path.join(tempfile.gettempdir(), f"{uuid.uuid7()}_{upload.name}")
-            with open(temp_path, "wb") as handle:
-                for chunk in upload.chunks():
-                    handle.write(chunk)
-            extension = os.path.splitext(upload.name)[1].lstrip(".").lower()
-            files.append((temp_path, upload.name, extension))
-        return result.success(_service(request, workspace_id).upload_resumes(files, source_channel, resume_database_ids))
+        temp_paths = []
+        try:
+            for upload in request.FILES.getlist("files"):
+                temp_path = os.path.join(tempfile.gettempdir(), f"{uuid.uuid7()}_{upload.name}")
+                with open(temp_path, "wb") as handle:
+                    for chunk in upload.chunks():
+                        handle.write(chunk)
+                extension = os.path.splitext(upload.name)[1].lstrip(".").lower()
+                files.append((temp_path, upload.name, extension))
+                temp_paths.append(temp_path)
+            return result.success(_service(request, workspace_id).upload_resumes(files, source_channel, resume_database_ids))
+        finally:
+            for path in temp_paths:
+                try:
+                    if os.path.exists(path):
+                        os.remove(path)
+                except Exception:
+                    pass
 
 
 class ResumeListAPI(APIView):

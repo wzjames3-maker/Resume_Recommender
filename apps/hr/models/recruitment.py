@@ -277,6 +277,7 @@ class ResumeFile(models.Model):
 
     def save(self, *args, **kwargs):
         # 低层导入/管理命令也必须遵守总库归属，避免绕过上传服务产生无范围简历。
+        # 并发安全：首次建档的总库创建需原子化，避免撞唯一约束（workspace_id, name）导致 500（P2-23）
         if not kwargs.get("raw") and self.workspace_id:
             total = ResumeDatabase.objects.filter(
                 workspace_id=self.workspace_id, status=ResumeDatabaseStatus.ACTIVE, is_system=True
@@ -286,22 +287,36 @@ class ResumeFile(models.Model):
                     workspace_id=self.workspace_id, status=ResumeDatabaseStatus.ACTIVE, is_default=True
                 ).first()
             if total is None:
-                total = ResumeDatabase.objects.create(
-                    workspace_id=self.workspace_id, name="总库", is_default=True, is_system=True
-                )
-            if not total.is_system:
+                try:
+                    total, _ = ResumeDatabase.objects.get_or_create(
+                        workspace_id=self.workspace_id,
+                        name="总库",
+                        defaults={"is_default": True, "is_system": True, "status": ResumeDatabaseStatus.ACTIVE},
+                    )
+                except Exception:
+                    # 并发 get_or_create 仍可能撞唯一约束，回退查询
+                    total = ResumeDatabase.objects.filter(workspace_id=self.workspace_id, name="总库").first()
+                    if total is None:
+                        total = ResumeDatabase.objects.filter(
+                            workspace_id=self.workspace_id, status=ResumeDatabaseStatus.ACTIVE, is_system=True
+                        ).first()
+            if total and not total.is_system:
                 total.is_system = True
                 total.save(update_fields=["is_system", "update_time"])
-            if not self.resume_database_id:
+            if not self.resume_database_id and total:
                 self.resume_database = total
         super().save(*args, **kwargs)
         membership_model = globals().get("ResumeDatabaseMembership")
         if not kwargs.get("raw") and membership_model and self.resume_database_id and self.workspace_id:
-            total = ResumeDatabase.objects.filter(
-                workspace_id=self.workspace_id, status=ResumeDatabaseStatus.ACTIVE, is_system=True
-            ).first()
-            if total is not None:
-                membership_model.objects.get_or_create(resume_file=self, resume_database=total)
+            # 总库成员关系幂等：get_or_create 已原子化，避免并发重复
+            try:
+                total = ResumeDatabase.objects.filter(
+                    workspace_id=self.workspace_id, status=ResumeDatabaseStatus.ACTIVE, is_system=True
+                ).first()
+                if total is not None:
+                    membership_model.objects.get_or_create(resume_file=self, resume_database=total)
+            except Exception:
+                pass
 
     class Meta:
         db_table = "hr_resume_file"

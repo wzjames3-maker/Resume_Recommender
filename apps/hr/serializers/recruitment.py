@@ -1,5 +1,6 @@
 import hashlib
 import os
+import tempfile
 from datetime import datetime
 
 import uuid_utils.compat as uuid
@@ -956,6 +957,8 @@ class RecruitmentService:
         if not resume.file_path or not get_storage().exists(resume.file_path):
             raise NotFound404(404, "File not found")
         local_path = get_storage().open(resume.file_path)
+        # S3 后端 open 会物化到临时文件，需在使用后清理（P2-26）
+        is_temp = local_path.startswith(tempfile.gettempdir()) if local_path else False
         try:
             if resume.extension.lower() == "docx":
                 text = extract_text_from_docx(local_path)
@@ -963,6 +966,13 @@ class RecruitmentService:
                 text = extract_text_from_txt(local_path)
         except Exception as exc:
             raise AppApiException(400, "简历内容提取失败") from exc
+        finally:
+            if is_temp:
+                try:
+                    if os.path.exists(local_path):
+                        os.remove(local_path)
+                except Exception:
+                    pass
         return {"content": text}
 
     def check_duplicate(self, data):

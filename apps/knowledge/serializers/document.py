@@ -1458,14 +1458,34 @@ class DocumentSerializers(serializers.Serializer):
                 BatchSerializer(data=instance).is_valid(model=Document, raise_exception=True)
                 self.is_valid(raise_exception=True)
             document_id_list = instance.get("id_list")
+            # IDOR 防护：校验 id_list 均属于同一 workspace/knowledge（P1-4）
+            workspace_id = instance.get("workspace_id") or self.data.get("workspace_id")
+            knowledge_id = instance.get("knowledge_id") or self.data.get("knowledge_id")
+            qs = Document.objects.filter(id__in=document_id_list)
+            if workspace_id:
+                if qs.exclude(workspace_id=workspace_id).exists():
+                    raise AppApiException(400, "Invalid document")
+            elif knowledge_id:
+                if qs.exclude(knowledge_id=knowledge_id).exists():
+                    raise AppApiException(400, "Invalid document")
             source_file_ids = [
                 doc["meta"].get("source_file_id")
                 for doc in Document.objects.filter(id__in=document_id_list).values("meta")
             ]
             QuerySet(File).filter(id__in=source_file_ids).delete()
-            QuerySet(Document).filter(id__in=document_id_list).delete()
-            QuerySet(DocumentTag).filter(document_id__in=document_id_list).delete()
-            paragraph_ids = QuerySet(Paragraph).filter(document_id__in=document_id_list).values_list("id", flat=True)
+            # 仅删除校验通过的集合
+            if workspace_id:
+                QuerySet(Document).filter(id__in=document_id_list, workspace_id=workspace_id).delete()
+                QuerySet(DocumentTag).filter(document_id__in=document_id_list, document__workspace_id=workspace_id).delete()
+                paragraph_ids = QuerySet(Paragraph).filter(document_id__in=document_id_list, document__workspace_id=workspace_id).values_list("id", flat=True)
+            elif knowledge_id:
+                QuerySet(Document).filter(id__in=document_id_list, knowledge_id=knowledge_id).delete()
+                QuerySet(DocumentTag).filter(document_id__in=document_id_list, document__knowledge_id=knowledge_id).delete()
+                paragraph_ids = QuerySet(Paragraph).filter(document_id__in=document_id_list, document__knowledge_id=knowledge_id).values_list("id", flat=True)
+            else:
+                QuerySet(Document).filter(id__in=document_id_list).delete()
+                QuerySet(DocumentTag).filter(document_id__in=document_id_list).delete()
+                paragraph_ids = QuerySet(Paragraph).filter(document_id__in=document_id_list).values_list("id", flat=True)
             # 删除问题关系
             delete_problems_and_mappings(paragraph_ids)
             # 删除段落
