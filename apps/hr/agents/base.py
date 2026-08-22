@@ -18,21 +18,50 @@ _SYSTEM_USER_ID = uuid.UUID(int=0)
 
 
 def guard_limits(workspace_id, config, agent_type):
-    """并发与速率护栏（按 agent_type 独立统计）：超限返回跳过原因，否则 None。"""
-    concurrent = HrAgentRun.objects.filter(
-        workspace_id=workspace_id,
-        agent_type=agent_type,
-        status__in=[HrAgentRunStatus.PENDING, HrAgentRunStatus.RUNNING],
-    ).count()
-    if concurrent >= config.agent_max_concurrent_runs:
-        return f"concurrent run limit reached ({config.agent_max_concurrent_runs})"
-    since = timezone.now() - timezone.timedelta(hours=1)
-    recent = HrAgentRun.objects.filter(
-        workspace_id=workspace_id, agent_type=agent_type, create_time__gte=since
-    ).count()
-    if recent >= config.agent_run_rate_limit:
-        return f"rate limit reached ({config.agent_run_rate_limit}/hour)"
-    return None
+    """并发与速率护栏（按 agent_type 独立统计）：超限返回跳过原因，否则 None。
+
+    修复：check-then-write 竞态改用 DB 锁序列化；速率统计排除 SKIPPED（P2-9）。
+    """
+    from django.db import transaction
+
+    # 使用 HrConfig 行锁序列化同 workspace+agent_type 的并发检查，避免 TOCTOU
+    try:
+        with transaction.atomic():
+            # 锁配置行（若不存在则跳过锁，直接检查）
+            from hr.models import HrConfig as _HrConfig
+
+            _HrConfig.objects.select_for_update().filter(workspace_id=workspace_id).first()
+            concurrent = HrAgentRun.objects.filter(
+                workspace_id=workspace_id,
+                agent_type=agent_type,
+                status__in=[HrAgentRunStatus.PENDING, HrAgentRunStatus.RUNNING],
+            ).count()
+            if concurrent >= config.agent_max_concurrent_runs:
+                return f"concurrent run limit reached ({config.agent_max_concurrent_runs})"
+            since = timezone.now() - timezone.timedelta(hours=1)
+            # 速率仅统计非 SKIPPED 的真实触发（避免 SKIPPED 自我放大）
+            recent = HrAgentRun.objects.filter(
+                workspace_id=workspace_id, agent_type=agent_type, create_time__gte=since
+            ).exclude(status=HrAgentRunStatus.SKIPPED).count()
+            if recent >= config.agent_run_rate_limit:
+                return f"rate limit reached ({config.agent_run_rate_limit}/hour)"
+            return None
+    except Exception:
+        # 锁失败回退到原逻辑（保持可用性）
+        concurrent = HrAgentRun.objects.filter(
+            workspace_id=workspace_id,
+            agent_type=agent_type,
+            status__in=[HrAgentRunStatus.PENDING, HrAgentRunStatus.RUNNING],
+        ).count()
+        if concurrent >= config.agent_max_concurrent_runs:
+            return f"concurrent run limit reached ({config.agent_max_concurrent_runs})"
+        since = timezone.now() - timezone.timedelta(hours=1)
+        recent = HrAgentRun.objects.filter(
+            workspace_id=workspace_id, agent_type=agent_type, create_time__gte=since
+        ).exclude(status=HrAgentRunStatus.SKIPPED).count()
+        if recent >= config.agent_run_rate_limit:
+            return f"rate limit reached ({config.agent_run_rate_limit}/hour)"
+        return None
 
 
 def record_prompt_version(config, agent_type, version):

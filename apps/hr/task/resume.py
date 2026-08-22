@@ -44,6 +44,13 @@ def cleanup_orphan_resumes():
     for resume in resumes:
         # 语义索引联动清理（幂等；仅已索引的孤儿简历有 document_id）
         delete_resume_index(resume)
+        # P1-13: 同步清理流转日志（EXTRACT/SANITIZE 含未脱敏全文，避免 PII 永久留存）
+        try:
+            from hr.services.flow_log import delete_flow_logs
+
+            delete_flow_logs(resume.workspace_id, resume.id)
+        except Exception:
+            pass
         file_delete_failed = False
         if resume.file_path and get_storage().exists(resume.file_path):
             try:
@@ -73,7 +80,7 @@ def parse_resume_task(resume_id):
             text = extract_text_from_txt(local_path)
         log_flow(
             resume.workspace_id, "EXTRACT", resume_id=resume.id,
-            detail={"length": len(text), "lines": text.count("\n") + 1, "source": resume.extension, "text": text},
+            detail={"length": len(text), "lines": text.count("\n") + 1, "source": resume.extension},
         )
         parsed = parse_resume_text(text)
         # 设计：LLM 只负责切片；技能/城市/学历等字段不做规则解析（正则只抽姓名/电话/邮箱），
