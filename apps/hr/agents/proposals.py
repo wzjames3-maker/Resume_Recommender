@@ -31,11 +31,12 @@ from hr.services.audit import write_audit_log
 
 
 def propose(workspace_id, run, target_id, action, payload_json, target_type="APPLICATION"):
-    """Runner 的唯一写出口：同目标（target_type+target_id）旧的 PENDING Proposal 自动 EXPIRED（§4.4）。"""
+    """Runner 的唯一写出口：同目标同动作（target_type+target_id+action）旧的 PENDING Proposal 自动 EXPIRED（§4.4，P2-10 分动作过期）。"""
     HrAgentProposal.objects.filter(
         workspace_id=workspace_id,
         target_type=target_type,
         target_id=str(target_id),
+        action=action,
         status=HrAgentProposalStatus.PENDING,
     ).update(status=HrAgentProposalStatus.EXPIRED, update_time=timezone.now())
     return HrAgentProposal.objects.create(

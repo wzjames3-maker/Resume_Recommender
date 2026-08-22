@@ -67,8 +67,9 @@ def agent_feedback_stats(workspace_id):
             action = row["action"]
             bucket = action_stats.setdefault(action, {"PENDING": 0, "ACCEPTED": 0, "DISMISSED": 0, "EXPIRED": 0})
             bucket[row["status"]] = bucket.get(row["status"], 0) + 1
+        # P2-10：EXPIRED 不计入 decided，避免稀释采纳率
         decided = sum(
-            bucket["ACCEPTED"] + bucket["DISMISSED"] + bucket["EXPIRED"]
+            bucket["ACCEPTED"] + bucket["DISMISSED"]
             for bucket in action_stats.values()
         )
         accepted = sum(bucket["ACCEPTED"] for bucket in action_stats.values())
@@ -79,7 +80,7 @@ def agent_feedback_stats(workspace_id):
             key = _band(row["score"])
             bucket = band_rows.setdefault(key, {"count": 0, "accepted": 0, "decided": 0})
             bucket["count"] += 1
-            if row["status"] != HrAgentProposalStatus.PENDING:
+            if row["status"] in (HrAgentProposalStatus.ACCEPTED, HrAgentProposalStatus.DISMISSED):
                 bucket["decided"] += 1
                 if row["status"] == HrAgentProposalStatus.ACCEPTED:
                     bucket["accepted"] += 1
