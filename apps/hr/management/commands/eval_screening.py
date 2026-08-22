@@ -173,7 +173,6 @@ class Command(BaseCommand):
             duties_text = "1. 参与核心业务系统/项目的研发与交付；\n2. 与团队协作完成需求分析、方案设计与上线；\n3. 持续优化性能与稳定性。"
         else:
             duties_text = "\n".join(f"{i}. 负责{d}" for i, d in enumerate(duties[:4], 1))
-        years = None  # 0030 后 Candidate 无年限字段，已移除
         description = "岗位职责：\n" + duties_text + "\n\n任职要求：\n" + (
             f"- 熟练掌握：{'、'.join(job_skills)}\n" if job_skills else ""
         ) + "- 良好的团队协作与沟通能力"

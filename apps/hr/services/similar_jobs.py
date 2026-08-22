@@ -7,7 +7,6 @@
            SQL 相似（部门/城市/技能重叠）+ HIRED 录用画像聚合（count/平均年限/高频技能）。
            输出不含任何候选人联系方式；职位库 500 量级，Python 计算足够。
 """
-from collections import Counter
 
 from common.exception.app_exception import AppApiException
 from hr.models import Application, ApplicationStatus, Job

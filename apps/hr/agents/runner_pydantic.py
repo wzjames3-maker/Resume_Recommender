@@ -7,17 +7,12 @@
            同签名 run_screening_agent(...), 单次 Agent.run_sync, Pydantic BaseModel 校验，
            禁止 ReAct 循环，保留账本/护栏/评分。
 """
-import contextvars
 import json
 import time
 import uuid
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 from pydantic_ai import ModelRetry
-
-# 并发隔离：每 run 的允许 paragraph_id 集合存于 ContextVar，避免全局 set 互相污染（P2-7）
-_allowed_ids_ctx: contextvars.ContextVar[set[str]] = contextvars.ContextVar("_allowed_ids_ctx", default=set())
-
 
 from common.exception.app_exception import AppApiException
 from hr.agents import context, scoring
@@ -27,6 +22,11 @@ from hr.agents.scope import candidate_document_ids, validate_resume_database_ids
 from hr.models import Application, ApplicationStatus, HrAgentRun, HrAgentRunStatus, HrAgentTriggerType, RelationType
 from hr.services.audit import write_audit_log
 from hr.services.resume_search import search_resumes
+
+import contextvars
+
+# 并发隔离：每 run 的允许 paragraph_id 集合存于 ContextVar，避免全局 set 互相污染（P2-7）
+_allowed_ids_ctx: contextvars.ContextVar[set[str]] = contextvars.ContextVar("_allowed_ids_ctx", default=set())
 
 _SYSTEM_USER_ID = uuid.UUID(int=0)
 _PROMPT_VERSION = "screening-v2"

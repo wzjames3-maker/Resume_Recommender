@@ -5880,7 +5880,7 @@ class ReviewFixRegressionTests(TestCase):
 
     def test_page_applications_queue_filters(self):
         # P1-8: city 参数已废弃，不应触发 FieldError，且其他过滤仍生效
-        app = self.service.create_application(self.job.id, self.candidate.id, {})
+        self.service.create_application(self.job.id, self.candidate.id, {})
         page = self.service.page_applications(1, 20, {"city": "上海"})
         self.assertGreaterEqual(page["total"], 1)
         # city 忽略后，指定 job_id 仍应精确过滤

@@ -576,7 +576,29 @@ class ParagraphSerializers(serializers.Serializer):
                 BatchSerializer(data=instance).is_valid(model=Paragraph, raise_exception=True)
                 self.is_valid(raise_exception=True)
             paragraph_id_list = instance.get("id_list")
-            QuerySet(Paragraph).filter(id__in=paragraph_id_list).delete()
+            # IDOR 防护：校验 id_list 均属于同一 workspace/knowledge/document
+            workspace_id = instance.get("workspace_id") or self.data.get("workspace_id")
+            knowledge_id = instance.get("knowledge_id") or self.data.get("knowledge_id")
+            document_id = instance.get("document_id") or self.data.get("document_id")
+            qs = Paragraph.objects.filter(id__in=paragraph_id_list)
+            if workspace_id:
+                if qs.exclude(document__workspace_id=workspace_id).exists():
+                    raise AppApiException(400, "Invalid paragraph")
+            elif knowledge_id:
+                if qs.exclude(knowledge_id=knowledge_id).exists():
+                    raise AppApiException(400, "Invalid paragraph")
+            elif document_id:
+                if qs.exclude(document_id=document_id).exists():
+                    raise AppApiException(400, "Invalid paragraph")
+            # 仅删除校验通过的集合
+            if workspace_id:
+                QuerySet(Paragraph).filter(id__in=paragraph_id_list, document__workspace_id=workspace_id).delete()
+            elif knowledge_id:
+                QuerySet(Paragraph).filter(id__in=paragraph_id_list, knowledge_id=knowledge_id).delete()
+            elif document_id:
+                QuerySet(Paragraph).filter(id__in=paragraph_id_list, document_id=document_id).delete()
+            else:
+                QuerySet(Paragraph).filter(id__in=paragraph_id_list).delete()
             delete_problems_and_mappings(paragraph_id_list)
             update_document_char_length(self.data.get("document_id"))
             # 删除向量库
