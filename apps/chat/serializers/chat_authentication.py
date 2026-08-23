@@ -21,6 +21,7 @@ from common.constants.cache_version import Cache_Version
 from common.database_model_manage.database_model_manage import DatabaseModelManage
 from common.exception.app_exception import NotFound404, AppUnauthorizedFailed
 from common.utils.rsa_util import get_key_pair_by_sql
+from maxkb.const import CONFIG
 
 
 class AnonymousAuthenticationSerializer(serializers.Serializer):
@@ -30,9 +31,9 @@ class AnonymousAuthenticationSerializer(serializers.Serializer):
         token = request.META.get('HTTP_AUTHORIZATION')
         token_details = {}
         try:
-            # 校验token
+            # 校验token（匿名令牌携带签名时间戳，超过会话有效期视为无效，需重新获取chat_user_id）
             if token is not None:
-                token_details = signing.loads(token[7:])
+                token_details = signing.loads(token[7:], max_age=CONFIG.get_session_timeout())
         except Exception:
             pass
         if with_valid:

@@ -7,6 +7,7 @@
            进入模型前的工具返回值统一脱敏——剔除 phone/email/note/文件路径/简历原文，
            证据只保留已脱敏 chunk。只改工具适配器，不改 RAG 链路。
 """
+from hr.services.resume_splitter import mask_pii, scan_residual_pii
 
 _MAX_EXCERPT_LENGTH = 500
 _SEARCH_EVIDENCE_LIMIT = 12
@@ -74,6 +75,11 @@ def search_to_llm(search_result):
             content = paragraph.get("content", "")
             if not isinstance(content, str):
                 content = str(content)
+            # P3 加固：组装 LLM 上下文前的防御性二次掩码（入库侧漏网/存量数据兜底）；
+            # 掩码后仍检出残留 PII 变体（变体手机号/15 位身份证/银行卡号）则整段剔除，原文绝不进模型。
+            content = mask_pii(content)
+            if scan_residual_pii(content):
+                continue
             paragraphs.append({
                 "paragraph_id": paragraph.get("id") or paragraph.get("paragraph_id"),
                 "title": paragraph.get("title", ""),

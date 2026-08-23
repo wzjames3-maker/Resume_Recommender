@@ -119,14 +119,18 @@ def index_resume(workspace_id, user_id, resume, text, chat_fn, stats=None, chunk
             ],
         },
     )
-    if resume.document_id:
-        _delete_document(str(resume.document_id))
-    # T2：HR 自建 Document/Paragraph（chunks 携带 "{title}\n" 前缀参与向量化/分词，
-    # content 保持原文——保真/展示/证据回溯不受影响）。默认 status 即 PENDING，
-    # embedding 任务 state_list 含 PENDING，delay 后可直接拾取，无需复刻 refresh() 状态置位。
-    document_id = _create_document_with_chunks(knowledge, user_id, resume.file_name, chunks)
-    resume.document_id = document_id
-    resume.save(update_fields=["document_id", "update_time"])
+    # P2 修复：删旧建新整体原子——旧文档删除、新文档/段落创建、ResumeFile.document_id 更新
+    # 在同一事务内，任一步失败整体回滚，避免留下悬空 document_id 使简历永久不可搜。
+    # 向量化 delay 留在事务外（broker 副作用不参与回滚）。
+    with transaction.atomic():
+        if resume.document_id:
+            _delete_document(str(resume.document_id))
+        # T2：HR 自建 Document/Paragraph（chunks 携带 "{title}\n" 前缀参与向量化/分词，
+        # content 保持原文——保真/展示/证据回溯不受影响）。默认 status 即 PENDING，
+        # embedding 任务 state_list 含 PENDING，delay 后可直接拾取，无需复刻 refresh() 状态置位。
+        document_id = _create_document_with_chunks(knowledge, user_id, resume.file_name, chunks)
+        resume.document_id = document_id
+        resume.save(update_fields=["document_id", "update_time"])
     try:
         embedding_by_document.delay(document_id, str(knowledge.embedding_model_id))
     except AlreadyQueued:
@@ -214,13 +218,15 @@ def _delete_document(document_id):
     QuerySet(Document).filter(id=document_id).delete()
 
 
-def delete_resume_index(resume):
-    """候选人删除/合并清理时删除简历文档与向量（幂等）。"""
+def delete_resume_index(resume, save=True):
+    """候选人删除/合并清理时删除简历文档与向量（幂等）。
+    save=False 用于 post_delete 信号兜底：行已被删除，不能再回写 document_id。"""
     if not resume.document_id:
         return
     _delete_document(str(resume.document_id))
     resume.document_id = None
-    resume.save(update_fields=["document_id", "update_time"])
+    if save:
+        resume.save(update_fields=["document_id", "update_time"])
 
 
 def set_resume_index_active(resume, is_active):

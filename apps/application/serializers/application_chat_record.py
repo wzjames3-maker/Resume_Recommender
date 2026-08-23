@@ -11,7 +11,7 @@ from functools import reduce
 from typing import Dict
 
 import uuid_utils.compat as uuid
-from application.models import Application, ApplicationAccessToken, ChatRecord
+from application.models import Application, ApplicationAccessToken, Chat, ChatRecord
 from application.serializers.application_chat import ChatCountSerializer
 from application.serializers.common import ChatInfo
 from common.auth.authentication import get_is_permissions
@@ -61,6 +61,7 @@ class ChatRecordOperateSerializer(serializers.Serializer):
     workspace_id = serializers.CharField(required=False, allow_null=True, allow_blank=True, label=_("Workspace ID"))
     application_id = serializers.UUIDField(required=True, label=_("Application ID"))
     chat_record_id = serializers.UUIDField(required=True, label=_("Conversation record id"))
+    chat_user_id = serializers.UUIDField(required=False, allow_null=True, label=_("Chat User ID"))
 
     def is_valid(self, *, debug=False, raise_exception=False):
         super().is_valid(raise_exception=True)
@@ -79,6 +80,14 @@ class ChatRecordOperateSerializer(serializers.Serializer):
         )
         if application_access_token is None:
             raise AppApiException(500, gettext("Application authentication information does not exist"))
+        # 会话端(chat)调用时必须校验chat_user归属，防止同应用内跨用户越权(IDOR)
+        chat_user_id = self.data.get("chat_user_id")
+        if chat_user_id and not Chat.objects.filter(
+            id=self.data.get("chat_id"),
+            application_id=self.data.get("application_id"),
+            chat_user_id=str(chat_user_id),
+        ).exists():
+            raise AppApiException(500, gettext("Conversation does not exist"))
 
     def get_chat_record(self):
         chat_record_id = self.data.get("chat_record_id")

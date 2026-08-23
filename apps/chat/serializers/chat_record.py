@@ -181,7 +181,10 @@ class HistoricalConversationRecordSerializer(serializers.Serializer):
 
     def get_queryset(self):
         chat_id = self.data.get('chat_id')
-        return QuerySet(ChatRecord).filter(chat_id=chat_id).order_by('-create_time')
+        chat_user_id = self.data.get('chat_user_id')
+        application_id = self.data.get("application_id")
+        return QuerySet(ChatRecord).filter(chat_id=chat_id, chat__application_id=application_id,
+                                           chat__chat_user_id=chat_user_id).order_by('-create_time')
 
     def list(self):
         self.is_valid(raise_exception=True)

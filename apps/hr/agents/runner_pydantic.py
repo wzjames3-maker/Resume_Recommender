@@ -12,7 +12,7 @@ import time
 import uuid
 
 from pydantic import BaseModel, Field, field_validator, model_validator
-from pydantic_ai import ModelRetry
+from pydantic_ai import ModelRetry, capture_run_messages
 
 from common.exception.app_exception import AppApiException
 from hr.agents import context, scoring
@@ -229,6 +229,9 @@ def run_screening_agent(application_id, trigger_type=HrAgentTriggerType.EVENT, u
     )
     started = time.monotonic()
     trace = []
+    prompt_tokens = 0  # 全部 LLM 请求（含校验重试）的 token 累计；SUCCEEDED/FAILED 均落库
+    completion_tokens = 0
+    run_messages: list = []  # capture_run_messages 捕获的消息：run 失败时仍可读取已发生请求的用量
     _token = _allowed_ids_ctx.set(set())
     try:
         model, model_name = _load_llm(workspace_id, config)
@@ -289,8 +292,9 @@ def run_screening_agent(application_id, trigger_type=HrAgentTriggerType.EVENT, u
             # 为简化，直接返回全部 evidence（已脱敏）
             return {"items": evidence, "allowed_ids": list(allowed_paragraph_ids)}
 
-        # 单次 run_sync，无 ReAct 循环
-        result = agent.run_sync("请基于给定证据完成人岗匹配评估，严格按白名单维度输出。", deps=deps)
+        # 单次 run_sync，无 ReAct 循环；capture_run_messages 保证中途抛错时已发生请求的消息（含用量）仍可读
+        with capture_run_messages() as run_messages:
+            result = agent.run_sync("请基于给定证据完成人岗匹配评估，严格按白名单维度输出。", deps=deps)
         facts: ScreeningFacts = result.output  # type: ignore
         # 清理
         _allowed_ids_ctx.set(set())
@@ -355,11 +359,24 @@ def run_screening_agent(application_id, trigger_type=HrAgentTriggerType.EVENT, u
             _allowed_ids_ctx.set(set())
         except Exception:
             pass
+        if not prompt_tokens and not completion_tokens:
+            # P2 成本核算修复：FAILED 也落库已发生的 token——从捕获消息累加每次请求的用量（含校验重试触发的额外请求）
+            for message in run_messages:
+                request_usage = getattr(message, "usage", None)
+                if request_usage is None:
+                    continue
+                try:
+                    prompt_tokens += int(getattr(request_usage, "input_tokens", 0) or 0)
+                    completion_tokens += int(getattr(request_usage, "output_tokens", 0) or 0)
+                except Exception:
+                    pass
         run.status = HrAgentRunStatus.FAILED
         run.error = str(exc)[:2000]
         run.tool_trace = trace
         run.duration_ms = int((time.monotonic() - started) * 1000)
-        run.save(update_fields=["status", "error", "tool_trace", "duration_ms", "update_time"])
+        run.prompt_tokens = prompt_tokens
+        run.completion_tokens = completion_tokens
+        run.save(update_fields=["status", "error", "tool_trace", "duration_ms", "prompt_tokens", "completion_tokens", "update_time"])
         write_audit_log(workspace_id, actor_id, "AGENT_RUN", "APPLICATION", application.id, result="FAILED", detail=f"screening agent failed: {str(exc)[:500]}", trace_id=run.id)
         return _run_output(run, None)
 

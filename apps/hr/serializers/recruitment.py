@@ -1,4 +1,5 @@
 import hashlib
+import logging
 import os
 import tempfile
 from datetime import datetime
@@ -43,9 +44,11 @@ from hr.services.application_service import (
     normalize_interview_datetime,
     validate_interview_times,
 )
-from hr.services.storage import get_storage
+from hr.services.storage import ensure_download_key_scoped, get_storage
 from hr.task.resume import parse_resume_task
 from users.models.user import User
+
+logger = logging.getLogger("hr")
 
 CANDIDATE_EXPORT_FIELDS = [
     "name",
@@ -811,8 +814,7 @@ class RecruitmentService:
     def _resume_key(workspace_id, sha256, extension):
         return os.path.join("resume", workspace_id, f"{sha256}.{extension}")
 
-    @staticmethod
-    def _resume_output(resume):
+    def _resume_output(self, resume):
         memberships = list(
             ResumeDatabaseMembership.objects.filter(resume_file=resume).select_related("resume_database")
         )
@@ -828,7 +830,8 @@ class RecruitmentService:
             "resume_database_ids": [str(item.resume_database_id) for item in memberships],
             "resume_database_names": [item.resume_database.name for item in memberships],
             "status": resume.status,
-            "error_message": resume.error_message,
+            # P3 加固：解析失败原因可能含内部异常原文，对 VIEWER 隐藏（OPERATOR/ADMIN 可见）
+            "error_message": resume.error_message if self.hr_role != "VIEWER" else "",
             "document_id": str(resume.document_id) if resume.document_id else None,
             "candidate_id": str(resume.candidate_id) if resume.candidate_id else None,
             "create_time": resume.create_time,
@@ -898,11 +901,14 @@ class RecruitmentService:
             except AlreadyQueued as exc:
                 raise AppApiException(500, "任务已存在，请稍后查询") from exc
             except Exception as exc:
+                # P3 加固：未预期异常原文不直返客户端——服务端记完整日志，响应统一“系统异常”；
+                # 原文仅落库 error_message 供 OPERATOR/ADMIN 排查（输出层对 VIEWER 隐藏）。
+                logger.exception("简历解析任务投递失败 workspace=%s resume=%s", self.workspace_id, resume.id)
                 resume.status = ResumeStatus.FAILED
                 resume.error_message = str(exc)
                 resume.save(update_fields=["status", "error_message", "update_time"])
                 status = ResumeStatus.FAILED
-                error_message = str(exc)
+                error_message = "系统异常"
             records.append({
                 "resume_id": str(resume.id),
                 "file_name": resume.file_name,
@@ -956,6 +962,8 @@ class RecruitmentService:
     def download_resume(self, resume_id):
         self._require_operator()
         resume = self._resume_file(resume_id)
+        # P3 加固：下载前断言文件 key 归属当前工作区（workspace 包含性 + 防路径穿越）
+        ensure_download_key_scoped(resume.file_path, self.workspace_id)
         if not resume.file_path or not get_storage().exists(resume.file_path):
             raise NotFound404(404, "File not found")
         content_type = {
@@ -968,6 +976,8 @@ class RecruitmentService:
     def resume_content(self, resume_id):
         self._require_operator()
         resume = self._resume_file(resume_id)
+        # P3 加固：读取前断言文件 key 归属当前工作区（workspace 包含性 + 防路径穿越）
+        ensure_download_key_scoped(resume.file_path, self.workspace_id)
         if not resume.file_path or not get_storage().exists(resume.file_path):
             raise NotFound404(404, "File not found")
         local_path = get_storage().open(resume.file_path)
@@ -1077,7 +1087,8 @@ class RecruitmentService:
                 "status": resume.status,
                 "candidate_id": str(resume.candidate_id) if resume.candidate_id else None,
                 "document_id": str(resume.document_id) if resume.document_id else None,
-                "error_message": resume.error_message,
+                # P3 加固：解析失败原因可能含内部异常原文，对 VIEWER 隐藏（OPERATOR/ADMIN 可见）
+                "error_message": resume.error_message if self.hr_role != "VIEWER" else "",
             }
             for resume in resumes
         ]

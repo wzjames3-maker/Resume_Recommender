@@ -6,7 +6,8 @@
     @desc: Agent 真实模型能力探针（D1 §4.1 第 0 步 / §10 模型能力验收项）：
            用真实 LLM 检查 JSON 输出能力，并跑一次真实 Screening Runner
            （检索凭据缺失时自动验证降级链：无证据 → HOLD，禁止无证据高分）。
-           凭据只走环境变量（仓库惯例，不入库持久化）：
+           凭据只走环境变量，且只写入探针工作区（--workspace）自己的模型行，
+           不按 model_name 全局回写、不污染其他租户：
              RUN_REAL_MODEL=1
              HR_PROBE_LLM_API_BASE=https://token.sensenova.cn/v1
              HR_PROBE_LLM_API_KEY=xxx   （或 SENSENOVA_API_KEY）
@@ -55,9 +56,10 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(f"report: {report_path}"))
         return ok
 
-    def _inject_credential(self, model_name, api_base, api_key):
-        """临时把环境变量凭据写入模型记录（RSA 加密存储，与 model_serializer 一致）；返回模型对象。"""
-        model = Model.objects.filter(model_name=model_name).first()
+    def _inject_credential(self, workspace_id, model_name, api_base, api_key):
+        """临时把环境变量凭据写入探针工作区的模型记录（RSA 加密存储，与 model_serializer 一致）；返回模型对象。
+        仅匹配当前探针工作区（--workspace），禁止按 model_name 全局匹配污染其他工作区/租户的同名生产模型。"""
+        model = Model.objects.filter(model_name=model_name, workspace_id=workspace_id).first()
         if model is None:
             return None
         model.credential = rsa_long_encrypt(json.dumps({"api_base": api_base, "api_key": api_key}))
@@ -78,16 +80,16 @@ class Command(BaseCommand):
         if not llm_key:
             self.stdout.write("SKIP: missing LLM api key (HR_PROBE_LLM_API_KEY / SENSENOVA_API_KEY)")
             return
-        model = self._inject_credential(llm_model, llm_base, llm_key)
+        model = self._inject_credential(workspace_id, llm_model, llm_base, llm_key)
         if model is None:
-            self.stdout.write(f"SKIP: model {llm_model} not registered in models_provider")
+            self.stdout.write(f"SKIP: model {llm_model} not registered in workspace {workspace_id}")
             return
         llm_model_id = str(model.id)
         embed_key = _env("HR_PROBE_EMBED_API_KEY") or _env("SILICONFLOW_API_KEY")
         if embed_key:
             embed_base = _env("HR_PROBE_EMBED_API_BASE") or "https://api.siliconflow.cn/v1"
-            self._inject_credential("BAAI/bge-large-zh-v1.5", embed_base, embed_key)
-            self._inject_credential("BAAI/bge-reranker-v2-m3", embed_base, embed_key)
+            self._inject_credential(workspace_id, "BAAI/bge-large-zh-v1.5", embed_base, embed_key)
+            self._inject_credential(workspace_id, "BAAI/bge-reranker-v2-m3", embed_base, embed_key)
 
         # ---------- 检查 1：严格 JSON 输出能力 ----------
         try:

@@ -316,6 +316,8 @@ def run_screening_agent(application_id, trigger_type=HrAgentTriggerType.EVENT, u
     )
     started = time.monotonic()
     trace = []
+    prompt_tokens = 0  # 全部尝试（含重试与失败）的 token 累计；SUCCEEDED/FAILED 均落库
+    completion_tokens = 0
     try:
         model, model_name = _load_llm(workspace_id, config)
         if model is None:
@@ -359,6 +361,18 @@ def run_screening_agent(application_id, trigger_type=HrAgentTriggerType.EVENT, u
                 last_error = str(exc)
                 if _attempt < _LLM_RETRY_ATTEMPTS - 1:
                     time.sleep(_LLM_RETRY_BACKOFF * (2 ** _attempt))
+            finally:
+                # P2 成本核算修复：_last_usage 每轮被覆盖、只记最后一次；改为每轮 finally 累加。
+                # 读后即清：某轮在赋值 _last_usage 之前抛错（空响应/provider 异常）时不会重复累计上一轮残留。
+                usage = getattr(model, "_last_usage", None)
+                if not isinstance(usage, dict):
+                    usage = {}
+                prompt_tokens += int(usage.get("input_tokens") or usage.get("prompt_tokens") or 0)
+                completion_tokens += int(usage.get("output_tokens") or usage.get("completion_tokens") or 0)
+                try:
+                    model._last_usage = {}
+                except Exception:
+                    pass
         if facts is None:
             raise RuntimeError(f"LLM output validation failed: {last_error}")
 
@@ -400,9 +414,8 @@ def run_screening_agent(application_id, trigger_type=HrAgentTriggerType.EVENT, u
         run.llm_model = model_name
         run.tool_trace = trace
         run.duration_ms = int((time.monotonic() - started) * 1000)
-        usage = getattr(model, "_last_usage", {}) or {}
-        run.prompt_tokens = int(usage.get("input_tokens") or usage.get("prompt_tokens") or 0)
-        run.completion_tokens = int(usage.get("output_tokens") or usage.get("completion_tokens") or 0)
+        run.prompt_tokens = prompt_tokens
+        run.completion_tokens = completion_tokens
         run.save(update_fields=["output_json", "status", "llm_model", "tool_trace", "duration_ms", "prompt_tokens", "completion_tokens", "update_time"])
         write_audit_log(
             workspace_id, actor_id, "AGENT_RUN", "APPLICATION", application.id,
@@ -419,7 +432,9 @@ def run_screening_agent(application_id, trigger_type=HrAgentTriggerType.EVENT, u
         run.error = str(exc)[:2000]
         run.tool_trace = trace
         run.duration_ms = int((time.monotonic() - started) * 1000)
-        run.save(update_fields=["status", "error", "tool_trace", "duration_ms", "update_time"])
+        run.prompt_tokens = prompt_tokens  # FAILED 也落库已发生的 token（含最后一次尝试）
+        run.completion_tokens = completion_tokens
+        run.save(update_fields=["status", "error", "tool_trace", "duration_ms", "prompt_tokens", "completion_tokens", "update_time"])
         write_audit_log(
             workspace_id, actor_id, "AGENT_RUN", "APPLICATION", application.id,
             result="FAILED", detail=f"screening agent failed: {str(exc)[:500]}", trace_id=run.id,

@@ -31,7 +31,7 @@ from hr.models import (
 )
 from hr.services.application_service import write_application_event
 from hr.services.audit import write_audit_log
-from hr.services.storage import get_storage
+from hr.services.storage import ensure_download_key_scoped, get_storage
 
 _OFFER_TRANSITIONS = {
     OfferStatus.DRAFT: {OfferStatus.SENT},
@@ -437,6 +437,8 @@ class OfferService:
     def offer_attachment_file(self, offer_id):
         self._require_operator()
         offer = self._offer(offer_id)
+        # P3 加固：下载前断言附件 key 归属当前工作区（workspace 包含性 + 防路径穿越）
+        ensure_download_key_scoped(offer.attachment_path, self.workspace_id)
         if not offer.attachment_path or not get_storage().exists(offer.attachment_path):
             raise NotFound404(404, "File not found")
         return get_storage().open(offer.attachment_path), offer.attachment_name

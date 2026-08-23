@@ -6,6 +6,7 @@
     @date：2025/6/6 15:08
     @desc:
 """
+from django.core import signing
 from django.db.models import QuerySet
 from django.utils.translation import gettext_lazy as _
 
@@ -15,6 +16,7 @@ from common.auth.handle.auth_base_handle import AuthBaseHandle
 from common.constants.authentication_type import AuthenticationType
 from common.constants.permission_constants import RoleConstants, Permission, Group, Operate, ChatAuth
 from common.exception.app_exception import AppAuthenticationFailed
+from maxkb.const import CONFIG
 from maxkb.settings import edition
 
 
@@ -29,7 +31,11 @@ class ChatAnonymousUserToken(AuthBaseHandle):
                 token_details.get('type') == AuthenticationType.CHAT_ANONYMOUS_USER.value)
 
     def handle(self, request, token: str, get_token_details):
-        auth_details = get_token_details()
+        # 匿名令牌校验签名时间戳(iat)，超过会话有效期则拒绝(401)，与平台用户token的会话超时保持一致
+        try:
+            auth_details = signing.loads(token, max_age=CONFIG.get_session_timeout())
+        except Exception:
+            raise AppAuthenticationFailed(1002, _('Login expired'))
         chat_user_token = ChatUserToken.new_instance(auth_details)
         application_id = chat_user_token.application_id
         access_token = chat_user_token.access_token

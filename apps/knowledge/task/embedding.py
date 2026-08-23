@@ -40,26 +40,71 @@ def get_embedding_model(
     return embedding_model
 
 
-@celery_app.task(base=QueueOnce, once={"keys": ["paragraph_id"]}, name="celery:embedding_by_paragraph")
-def embedding_by_paragraph(paragraph_id, model_id):
-    embedding_model = get_embedding_model(model_id)
-    ListenerManagement.embedding_by_paragraph(paragraph_id, embedding_model)
+# 瞬时故障（broker/DB/向量库抖动）指数退避重试；acks_late + reject_on_worker_lost 保证
+# worker 崩溃（OOM/SIGKILL）后消息重新投递，不再出现 STARTED 永久卡死。
 
 
-@celery_app.task(base=QueueOnce, once={"keys": ["paragraph_id_list"]}, name="celery:embedding_by_paragraph_data_list")
-def embedding_by_paragraph_data_list(data_list, paragraph_id_list, model_id):
-    embedding_model = get_embedding_model(model_id)
-    ListenerManagement.embedding_by_paragraph_data_list(data_list, paragraph_id_list, embedding_model)
+@celery_app.task(
+    base=QueueOnce,
+    once={"keys": ["paragraph_id"]},
+    name="celery:embedding_by_paragraph",
+    bind=True,
+    max_retries=3,
+    acks_late=True,
+    reject_on_worker_lost=True,
+)
+def embedding_by_paragraph(self, paragraph_id, model_id):
+    try:
+        embedding_model = get_embedding_model(model_id)
+        ListenerManagement.embedding_by_paragraph(paragraph_id, embedding_model)
+    except Exception as e:
+        raise self.retry(exc=e, countdown=min(60 * 2 ** self.request.retries, 600))
 
 
-@celery_app.task(base=QueueOnce, once={"keys": ["paragraph_id_list"]}, name="celery:embedding_by_paragraph_list")
-def embedding_by_paragraph_list(paragraph_id_list, model_id):
-    embedding_model = get_embedding_model(model_id)
-    ListenerManagement.embedding_by_paragraph_list(paragraph_id_list, embedding_model)
+@celery_app.task(
+    base=QueueOnce,
+    once={"keys": ["paragraph_id_list"]},
+    name="celery:embedding_by_paragraph_data_list",
+    bind=True,
+    max_retries=3,
+    acks_late=True,
+    reject_on_worker_lost=True,
+)
+def embedding_by_paragraph_data_list(self, data_list, paragraph_id_list, model_id):
+    try:
+        embedding_model = get_embedding_model(model_id)
+        ListenerManagement.embedding_by_paragraph_data_list(data_list, paragraph_id_list, embedding_model)
+    except Exception as e:
+        raise self.retry(exc=e, countdown=min(60 * 2 ** self.request.retries, 600))
 
 
-@celery_app.task(base=QueueOnce, once={"keys": ["document_id"]}, name="celery:embedding_by_document")
-def embedding_by_document(document_id, model_id, state_list=None):
+@celery_app.task(
+    base=QueueOnce,
+    once={"keys": ["paragraph_id_list"]},
+    name="celery:embedding_by_paragraph_list",
+    bind=True,
+    max_retries=3,
+    acks_late=True,
+    reject_on_worker_lost=True,
+)
+def embedding_by_paragraph_list(self, paragraph_id_list, model_id):
+    try:
+        embedding_model = get_embedding_model(model_id)
+        ListenerManagement.embedding_by_paragraph_list(paragraph_id_list, embedding_model)
+    except Exception as e:
+        raise self.retry(exc=e, countdown=min(60 * 2 ** self.request.retries, 600))
+
+
+@celery_app.task(
+    base=QueueOnce,
+    once={"keys": ["document_id"]},
+    name="celery:embedding_by_document",
+    bind=True,
+    max_retries=3,
+    acks_late=True,
+    reject_on_worker_lost=True,
+)
+def embedding_by_document(self, document_id, model_id, state_list=None):
     """
     向量化文档
     @param state_list:
@@ -87,25 +132,45 @@ def embedding_by_document(document_id, model_id, state_list=None):
             )
         )
 
-    embedding_model = get_embedding_model(model_id, exception_handler)
-    #
-    ListenerManagement.embedding_by_document(document_id, embedding_model, state_list)
+    try:
+        embedding_model = get_embedding_model(model_id, exception_handler)
+        #
+        ListenerManagement.embedding_by_document(document_id, embedding_model, state_list)
+    except Exception as e:
+        raise self.retry(exc=e, countdown=min(60 * 2 ** self.request.retries, 600))
 
 
-@celery_app.task(name="celery:embedding_by_document_list")
-def embedding_by_document_list(document_id_list, model_id):
+@celery_app.task(
+    name="celery:embedding_by_document_list",
+    bind=True,
+    max_retries=3,
+    acks_late=True,
+    reject_on_worker_lost=True,
+)
+def embedding_by_document_list(self, document_id_list, model_id):
     """
     向量化文档
     @param document_id_list: 文档id列表
     @param model_id 向量模型
     :return: None
     """
-    for document_id in document_id_list:
-        embedding_by_document.delay(document_id, model_id)
+    try:
+        for document_id in document_id_list:
+            embedding_by_document.delay(document_id, model_id)
+    except Exception as e:
+        raise self.retry(exc=e, countdown=min(60 * 2 ** self.request.retries, 600))
 
 
-@celery_app.task(base=QueueOnce, once={"keys": ["knowledge_id"]}, name="celery:embedding_by_knowledge")
-def embedding_by_knowledge(knowledge_id, model_id):
+@celery_app.task(
+    base=QueueOnce,
+    once={"keys": ["knowledge_id"]},
+    name="celery:embedding_by_knowledge",
+    bind=True,
+    max_retries=3,
+    acks_late=True,
+    reject_on_worker_lost=True,
+)
+def embedding_by_knowledge(self, knowledge_id, model_id):
     """
     向量化知识库
     @param knowledge_id: 知识库id
@@ -138,6 +203,7 @@ def embedding_by_knowledge(knowledge_id, model_id):
                 knowledge_id=knowledge_id, error=str(e), traceback=traceback.format_exc()
             )
         )
+        raise self.retry(exc=e, countdown=min(60 * 2 ** self.request.retries, 600))
     finally:
         maxkb_logger.info(_("End--->Vectorized knowledge: {knowledge_id}").format(knowledge_id=knowledge_id))
 
@@ -158,9 +224,20 @@ def embedding_by_data_list(args: List, model_id):
     ListenerManagement.embedding_by_data_list(args, embedding_model)
 
 
-@celery_app.task(base=QueueOnce, once={"keys": ["document_id"]}, name="celery:tokenize_by_document")
-def tokenize_by_document(document_id, state_list):
-    ListenerManagement.tokenize_by_document(document_id, state_list)
+@celery_app.task(
+    base=QueueOnce,
+    once={"keys": ["document_id"]},
+    name="celery:tokenize_by_document",
+    bind=True,
+    max_retries=3,
+    acks_late=True,
+    reject_on_worker_lost=True,
+)
+def tokenize_by_document(self, document_id, state_list):
+    try:
+        ListenerManagement.tokenize_by_document(document_id, state_list)
+    except Exception as e:
+        raise self.retry(exc=e, countdown=min(60 * 2 ** self.request.retries, 600))
 
 
 def delete_embedding_by_document(document_id):
