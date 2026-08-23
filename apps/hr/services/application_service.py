@@ -11,6 +11,7 @@ from datetime import datetime
 from django.db import IntegrityError, transaction
 from django.db.models import Max, Q
 from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from common.exception.app_exception import AppApiException, AppUnauthorizedFailed, NotFound404
 from hr.models import (
@@ -58,9 +59,35 @@ _OFFER_STAGE_KEY = "OFFER"
 _INTERVIEW_STAGE_KEYS = ("SCREEN", "INTERVIEW")
 
 
+# P3: 面试时间字段入口校验（create_interview / update_interview 共用）：
+# 字符串必须能被 parse_datetime 解析为 ISO 8601，否则 400；空值归一为 None；
+# naive 时间补当前时区，防脏值入库后解析/序列化 500。
+def normalize_interview_datetime(value, field):
+    if value is None or value == "":
+        return None
+    if isinstance(value, str):
+        parsed = parse_datetime(value)
+        if parsed is None:
+            raise AppApiException(400, f"{field} is not a valid datetime")
+    elif isinstance(value, datetime):
+        parsed = value
+    else:
+        raise AppApiException(400, f"{field} is not a valid datetime")
+    if timezone.is_naive(parsed):
+        parsed = timezone.make_aware(parsed)
+    return parsed
+
+
+def validate_interview_times(scheduled_at, feedback_deadline):
+    """边界校验：feedback_deadline（截止）必须晚于 scheduled_at（开始）。"""
+    if scheduled_at and feedback_deadline and feedback_deadline <= scheduled_at:
+        raise AppApiException(400, "feedback_deadline must be later than scheduled_at")
+
+
 def write_application_event(workspace_id, actor_id, application, event_type, from_stage, to_stage,
                             from_status, to_status, reason_code, reason_text, idempotency_key):
     """写一条不可变流程账本事件；同 (application, event_type, idempotency_key) 幂等。"""
+    idempotency_key = idempotency_key or None  # P3-2: 空/None 统一存 NULL，规避唯一约束下空键冲突
     event, created = ApplicationEvent.objects.get_or_create(
         workspace_id=workspace_id,
         application=application,
@@ -542,6 +569,10 @@ class ApplicationService:
         if application.current_stage is None or application.current_stage.key not in _INTERVIEW_STAGE_KEYS:
             raise AppApiException(400, "Interview can only be created at SCREEN or INTERVIEW stage")
         interviewer_user_id = self._interviewer_user_id(data)
+        # P3: 时间字段入口校验，非法值直接 400
+        scheduled_at = normalize_interview_datetime(data.get("scheduled_at"), "scheduled_at")
+        feedback_deadline = normalize_interview_datetime(data.get("feedback_deadline"), "feedback_deadline")
+        validate_interview_times(scheduled_at, feedback_deadline)
         max_round = Interview.objects.filter(
             workspace_id=self.workspace_id,
             application=application,
@@ -553,8 +584,8 @@ class ApplicationService:
                 round_no=max_round + 1,
                 interviewer=self._optional_string(data, "interviewer", 64) or self._user_nick_name(interviewer_user_id),
                 interviewer_user_id=interviewer_user_id,
-                feedback_deadline=data.get("feedback_deadline") or None,
-                scheduled_at=data.get("scheduled_at") or None,
+                feedback_deadline=feedback_deadline,
+                scheduled_at=scheduled_at,
                 user_id=self.user_id,
             )
         except IntegrityError as exc:
@@ -575,6 +606,7 @@ class ApplicationService:
 
     # ---------- 查询 ----------
     def page_applications(self, current_page, page_size, query):
+        current_page = max(1, int(current_page))  # P3-1: 钳制页码≥1，防 current_page=0 负切片 AssertionError
         queryset = Application.objects.filter(workspace_id=self.workspace_id).select_related(
             "candidate", "job", "current_stage"
         )

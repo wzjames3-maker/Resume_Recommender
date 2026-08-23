@@ -560,7 +560,8 @@ class ApplicationEvent(models.Model):
     actor_id = models.UUIDField(null=True, blank=True)
     reason_code = models.CharField(max_length=32, blank=True, default="")
     reason_text = models.TextField(blank=True, default="")
-    idempotency_key = models.CharField(max_length=128, blank=True, default="")
+    # P3-2: 默认 None+null=True——PG 唯一约束视 NULL 互异，缺省/空键不再触发 IntegrityError
+    idempotency_key = models.CharField(max_length=128, blank=True, default=None, null=True)
     trace_id = models.CharField(max_length=64, blank=True, default="")
     create_time = models.DateTimeField(auto_now_add=True)
 

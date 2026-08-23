@@ -2,6 +2,8 @@ import hashlib
 import os
 import tempfile
 from datetime import datetime
+from functools import reduce
+from operator import or_
 
 import uuid_utils.compat as uuid
 from django.db import transaction
@@ -36,7 +38,11 @@ from hr.services.flow_log import delete_flow_logs, log_flow
 from hr.services.resume_index import delete_resume_index, set_resume_index_active
 from hr.services.resume_parser import extract_text_from_docx, extract_text_from_txt
 from hr.services.audit import write_audit_log
-from hr.services.application_service import create_default_stages
+from hr.services.application_service import (
+    create_default_stages,
+    normalize_interview_datetime,
+    validate_interview_times,
+)
 from hr.services.storage import get_storage
 from hr.task.resume import parse_resume_task
 from users.models.user import User
@@ -439,6 +445,7 @@ class RecruitmentService:
         return queryset
 
     def page_candidates(self, current_page, page_size, query):
+        current_page = max(1, int(current_page))  # P3-1: 钳制页码≥1，防 current_page=0 负切片 AssertionError
         queryset = self._filter_candidates(query)
         total = queryset.count()
         start = (current_page - 1) * page_size
@@ -448,22 +455,28 @@ class RecruitmentService:
         return {"total": total, "records": records}
 
     def _attach_duplicate_ids(self, records, candidates):
-        # 批量预取：phone 精确匹配 1 次查询，email 逐条 iexact（大小写不敏感，页内最多 20 条）
+        # 批量预取（P3-2）：phone 精确匹配、email 大小写不敏感各 1 次批量查询，
+        # 消除此前 email 逐条 iexact 造成的每行一查 N+1。
         candidates = list(candidates)
         phones = {c.phone for c in candidates if c.phone}
+        emails = {c.email for c in candidates if c.email}
         phone_map = {}
         if phones:
             for cand_id, phone in Candidate.objects.filter(workspace_id=self.workspace_id, phone__in=phones).values_list("id", "phone"):
                 phone_map.setdefault(phone, set()).add(cand_id)
+        email_map = {}
+        if emails:
+            # 页内全部 email OR 合并为一次 iexact 查询，再按小写 email 分组（与逐条 iexact 同义）
+            email_conditions = reduce(or_, (Q(email__iexact=email) for email in emails))
+            rows = Candidate.objects.filter(workspace_id=self.workspace_id).filter(email_conditions).values_list("id", "email")
+            for cand_id, email in rows:
+                email_map.setdefault(email.lower(), set()).add(cand_id)
         for record, candidate in zip(records, candidates):
             dupes = set()
             if candidate.phone and candidate.phone in phone_map:
                 dupes.update(phone_map[candidate.phone] - {candidate.id})
             if candidate.email:
-                dupes.update(
-                    Candidate.objects.filter(workspace_id=self.workspace_id, email__iexact=candidate.email)
-                    .exclude(id=candidate.id).values_list("id", flat=True)
-                )
+                dupes.update(email_map.get(candidate.email.lower(), set()) - {candidate.id})
             record["duplicate_ids"] = [str(item) for item in dupes]
 
     def get_candidate(self, candidate_id):
@@ -632,6 +645,7 @@ class RecruitmentService:
         return self._job_output(job)
 
     def page_jobs(self, current_page, page_size, query):
+        current_page = max(1, int(current_page))  # P3-1: 钳制页码≥1，防 current_page=0 负切片 AssertionError
         queryset = Job.objects.filter(workspace_id=self.workspace_id)
         name = query.get("name")
         status = query.get("status")
@@ -1069,6 +1083,7 @@ class RecruitmentService:
         ]
 
     def match_job_candidates(self, job_id, current_page, page_size):
+        current_page = max(1, int(current_page))  # P3-1: 钳制页码≥1，防 current_page=0 负下标错位
         job = self._job(job_id)
         if job.status != JobStatus.OPEN:
             raise AppApiException(400, "Job is closed")
@@ -1234,10 +1249,15 @@ class RecruitmentService:
             interview.interviewer_user_id = interviewer_user_id
             if data.get("interviewer") is None:
                 interview.interviewer = self._user_nick_name(interviewer_user_id)
-        if "feedback_deadline" in data:
-            interview.feedback_deadline = data["feedback_deadline"] or None
-        if "scheduled_at" in data:
-            interview.scheduled_at = data["scheduled_at"] or None
+        # P3: 时间字段入口校验：非法时间串 400（防入库/解析 500），且 deadline 必须晚于开始时间
+        if "scheduled_at" in data or "feedback_deadline" in data:
+            interview.scheduled_at = normalize_interview_datetime(
+                data.get("scheduled_at", interview.scheduled_at), "scheduled_at"
+            )
+            interview.feedback_deadline = normalize_interview_datetime(
+                data.get("feedback_deadline", interview.feedback_deadline), "feedback_deadline"
+            )
+            validate_interview_times(interview.scheduled_at, interview.feedback_deadline)
         changed_fields = [field for field in tracked_fields if getattr(interview, field) != before[field]]
         interview.save()
         write_audit_log(

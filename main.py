@@ -30,7 +30,7 @@ def collect_static():
     try:
         management.call_command('collectstatic', '--no-input', '-c', verbosity=0, interactive=False)
         logging.info("Collect static files done")
-    except:
+    except Exception:
         pass
 
 

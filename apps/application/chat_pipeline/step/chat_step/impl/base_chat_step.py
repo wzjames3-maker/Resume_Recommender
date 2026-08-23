@@ -298,6 +298,10 @@ def event_content(
         )
         if not manage.debug:
             add_access_num(chat_user_id, chat_user_type, manage.context.get("application_id"))
+        if isinstance(e, GeneratorExit):
+            # 内核加固：GeneratorExit 之后不允许再 yield（否则 RuntimeError: generator ignored GeneratorExit），
+            # 直接结束生成器；上游流的关闭统一放在 finally 中处理。
+            return
         yield manage.get_base_to_response().to_stream_chunk_response(
             chat_id,
             str(chat_record_id),
@@ -315,6 +319,14 @@ def event_content(
                 "reasoning_content": "",
             },
         )
+    finally:
+        # 内核加固：客户端断开等场景生成器被关闭时，确保上游流（如模型流式响应）被关闭，避免连接泄漏
+        response_close = getattr(response, "close", None)
+        if callable(response_close):
+            try:
+                response_close()
+            except Exception:
+                maxkb_logger.error(f"close upstream stream failed:{traceback.format_exc()}")
 
 
 class BaseChatStep(IChatStep):

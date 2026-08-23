@@ -51,6 +51,17 @@ def _env_int(name, default):
         return default
 
 
+def escape_ilike(value):
+    r"""转义 LIKE/ILIKE 通配符（P3-1）：\ → \\、% → \%、_ → \_。
+
+    仅供手工拼接 LIKE/ILIKE 模式时使用（原生 SQL、字符串包裹 '%value%' 等）。
+    注意：Django ORM 的 icontains/iexact/contains 等查找已在 PatternLookup.process_rhs
+    中经 prep_for_like_query 完成同等转义，切勿再对 ORM 查找的值预转义——
+    双重转义会把用户输入的字面 %/_ 变成 \\%/\_ 匹配，破坏含这些字符的合法检索。
+    """
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 _RRF_K = 60
 _MAX_SKILLS = 10
 _DEFAULT_SIMILARITY = 0.2

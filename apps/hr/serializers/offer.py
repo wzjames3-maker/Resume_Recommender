@@ -39,6 +39,18 @@ _OFFER_TRANSITIONS = {
 }
 _ACCEPT_STATUSES = {OfferStatus.ACCEPTED, OfferStatus.REJECTED, OfferStatus.WITHDRAWN}
 
+# P3: Offer 附件类型白名单：扩展名 + 文件头魔数双重校验，拒绝任意类型上传
+_OFFER_ATTACHMENT_EXTENSIONS = ("pdf", "doc", "docx", "png", "jpg", "jpeg")
+# 扩展名 -> 允许的文件头魔数（内容级 MIME 校验，防止仅改扩展名绕过白名单）
+_OFFER_ATTACHMENT_MAGIC = {
+    "pdf": (b"%PDF",),
+    "doc": (b"\xd0\xcf\x11\xe0\xa1\xb1\x1a\xe1",),  # OLE2
+    "docx": (b"PK\x03\x04",),  # OOXML ZIP 容器
+    "png": (b"\x89PNG\r\n\x1a\n",),
+    "jpg": (b"\xff\xd8\xff",),
+    "jpeg": (b"\xff\xd8\xff",),
+}
+
 
 class OfferService:
     def __init__(self, workspace_id, user_id, hr_role):
@@ -364,11 +376,27 @@ class OfferService:
     def _attachment_key(workspace_id, offer_id, extension):
         return os.path.join("offer", workspace_id, f"{offer_id}.{extension}")
 
+    @staticmethod
+    def _validate_attachment_type(file_path, file_name):
+        """附件类型双重校验：扩展名须在白名单内，且文件头魔数须与该类型的 MIME 匹配；任一不通过返回 400。"""
+        extension = os.path.splitext(file_name)[1].lstrip(".").lower()
+        if extension not in _OFFER_ATTACHMENT_EXTENSIONS:
+            raise AppApiException(400, "Attachment type is not allowed (pdf/doc/docx/png/jpg/jpeg only)")
+        try:
+            with open(file_path, "rb") as handle:
+                head = handle.read(8)
+        except OSError:
+            head = b""
+        if not any(head.startswith(magic) for magic in _OFFER_ATTACHMENT_MAGIC[extension]):
+            raise AppApiException(400, "Attachment content does not match an allowed file type")
+
     def upload_offer_attachment(self, offer_id, file_path, file_name):
         self._require_manage()
         offer = self._offer(offer_id)
         if offer.status != OfferStatus.DRAFT:
             raise AppApiException(400, "Only draft offer can change attachment")
+        # P3: 先做类型白名单校验（通过后才覆盖旧附件）
+        self._validate_attachment_type(file_path, file_name)
         if offer.attachment_path:
             try:
                 get_storage().delete(offer.attachment_path)

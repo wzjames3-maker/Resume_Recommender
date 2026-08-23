@@ -722,6 +722,22 @@ class DuplicateDetectionTests(TestCase):
         self.assertNotIn(str(self.foreign.id), by_id[str(self.alice.id)]["duplicate_ids"])
         self.assertIn(str(self.alice.id), by_id[str(self.carol.id)]["duplicate_ids"])
 
+    def test_page_duplicate_lookup_is_batched(self):
+        """P3-2：页内 phone/email 去重各只发 1 次批量查询，与页大小无关（消除逐条 iexact 的 N+1）。"""
+        from django.db import connection
+        from django.test.utils import CaptureQueriesContext
+
+        for index in range(5):
+            Candidate.objects.create(
+                name=f"Bulk{index}", workspace_id="workspace-a",
+                phone=f"1390000000{index}", email=f"bulk{index}@example.com",
+            )
+        with CaptureQueriesContext(connection) as ctx:
+            result = self.service.page_candidates(1, 20, {})
+        self.assertEqual(len(result["records"]), 8)
+        # count + 页查询 + phone 批量 + email 批量 = 4；旧实现 email 逐条 iexact 会是 4 + 页内邮箱数
+        self.assertLessEqual(len(ctx.captured_queries), 4)
+
     def test_check_duplicate_by_phone_and_email(self):
         result = self.service.check_duplicate({"phone": "13800000001"})
         ids = {item["id"] for item in result["candidates"]}
@@ -744,6 +760,40 @@ class DuplicateDetectionTests(TestCase):
     def test_check_duplicate_rejects_invalid_exclude_id(self):
         with self.assertRaisesRegex(AppApiException, "exclude_id is invalid"):
             self.service.check_duplicate({"phone": "13800000001", "exclude_id": "garbage"})
+
+
+class IlikeWildcardLiteralTests(TestCase):
+    """P3-1：icontains 的 %/_ 必须按字面量匹配（无通配符放大）。
+
+    Django PatternLookup.process_rhs 已通过 prep_for_like_query 对值完成 \\ % _ 转义，
+    ORM 查找值不得再自行预转义（双重转义会破坏含 %/_ 字面量的合法检索）；
+    escape_ilike 仅用于手工拼接 LIKE/ILIKE 模式。本组用例锁定该性质。
+    """
+
+    def setUp(self):
+        self.service = RecruitmentService(workspace_id="workspace-w", user_id=uuid.uuid7(), hr_role="ADMIN")
+        self.literal = Candidate.objects.create(name="张三_100%", workspace_id="workspace-w")
+        Candidate.objects.create(name="张三X100Y", workspace_id="workspace-w")
+
+    def test_escape_ilike_escapes_wildcards(self):
+        from hr.services.resume_search import escape_ilike
+
+        self.assertEqual(escape_ilike("a\\b%c_"), "a\\\\b\\%c\\_")
+
+    def test_name_search_underscore_percent_are_literal(self):
+        result = self.service.page_candidates(1, 20, {"name": "三_100"})
+        self.assertEqual([item["name"] for item in result["records"]], ["张三_100%"])
+
+    def test_name_search_percent_alone_not_wildcard(self):
+        # 若 % 被当作通配符，"张三X100Y" 也会被放大命中；字面量语义下仅名称含真实 % 的记录命中
+        result = self.service.page_candidates(1, 20, {"name": "%"})
+        self.assertEqual([item["name"] for item in result["records"]], ["张三_100%"])
+
+    def test_job_name_search_wildcards_are_literal(self):
+        job_literal = Job.objects.create(workspace_id="workspace-w", name="SRE_50%", headcount=1)
+        Job.objects.create(workspace_id="workspace-w", name="SREXX50", headcount=1)
+        result = self.service.page_jobs(1, 20, {"name": "E_50"})
+        self.assertEqual([item["id"] for item in result["records"]], [str(job_literal.id)])
 
 
 class CandidateMergeTests(TestCase):
