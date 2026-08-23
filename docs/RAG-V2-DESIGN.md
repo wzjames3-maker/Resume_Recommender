@@ -12,7 +12,7 @@
 
 | 目标 | 含义 |
 |---|---|
-| G1 精确条件可保证 | 年限/学历/城市/状态等条件 100% 由 SQL 语义保证，不允许向量近似 |
+| G1 精确条件可保证 | 年限/学历/城市/状态等条件 100% 由 SQL 语义保证，不允许向量近似（**0030 后收窄**：结构化条件字段已物理删除，SQL 保证现仅覆盖 status=ACTIVE + 库范围，技能/年限/学历/城市改由文本检索承载，见 §3.5） |
 | G2 语义命中可解释 | 每份命中简历给出证据段落（title+分数），HR 可核验 |
 | G3 结构感知贯穿全程 | 章节/字段信息从切片流到检索与展示，不在任何层断流 |
 | G4 合规默认 | PII 掩码先于任何 LLM 调用；展示按角色最小可见 |
@@ -27,7 +27,7 @@
 L0 路由层   意图分类+槽位抽取（1 次 LLM，规则兜底）
   {intent: lookup|conditional|browse, skills[], years_min, degree, city[], semantic_query}
   ├─ lookup -----> SQL 精确找（姓名/电话/邮箱，Candidate.name 有索引）
-  ├─ conditional -> L1 结构化层：Candidate SQL 预筛（保证 G1）
+  ├─ conditional -> L1 结构化层：Candidate SQL 预筛（保证 G1；**0030 后仅 status+库范围，见 §3.5 现役口径**）
   │                    │ document_id 集合
   │                    ▼
   │               L2 语义层：双路召回（dense+sparse）限定预筛集内
@@ -39,6 +39,7 @@ L0 路由层   意图分类+槽位抽取（1 次 LLM，规则兜底）
 
 数据面：简历 -> 解析 -> [结构化字段 + 章节序列] -> 切片{title, section_type, content}
         -> 索引三副本：dense 向量 / sparse tsvector / 结构化字段(+技能归一表)
+        （0030 对账：结构化字段与技能归一表已删列，第三副本现役仅 status+库范围；文本腿另见 0031 GIN trgm 索引，§3.3）
 ```
 
 ## 3. 各层详细设计
@@ -77,19 +78,26 @@ L0 路由层   意图分类+槽位抽取（1 次 LLM，规则兜底）
 | sparse | 同上 + Termbase | **Termbase 在 HR 稀疏路已自动接入**（`KeywordsSearch().handle` 内部按 knowledge_id 查 Termbase，pg_vector.py:294-298；入库侧 `_batch_save` 同样生效）。落地 = 向 HR 知识库插入技能同义词词条 + **全量重嵌**（使 search_vector 分词与查询侧一致）。注意 `_sparse_query` 停用词表硬编码（经验/工作/熟悉/精通等），词条设计需避开 |
 | 结构化 | Candidate 字段 + 新增 `candidate_skill(candidate_id, skill_norm, skill_raw)` 归一表 | **0030 已 DROP**：Skill-AND 从逐技能向量召回 + Python 过滤改为 SQL EXISTS 的设计已废止，现改为 `raw_text + paragraph` 文本检索 |
 
+> **0031 落地对账（2026-08-23）**：上表文本腿索引已实际建成——`apps/hr/migrations/0031_add_trgm_indexes.py` 先 `CREATE EXTENSION IF NOT EXISTS pg_trgm`，再建
+> `hr_resume_file_raw_text_trgm_idx ON hr_resume_file USING gin (UPPER(raw_text) gin_trgm_ops)` 与
+> `paragraph_content_trgm_idx ON paragraph USING gin (UPPER(content) gin_trgm_ops)`，
+> 支撑 keyword 腿的 `raw_text__icontains` / `content__icontains`（UPPER(LIKE) 命中表达式索引）；dense/sparse 两副本仍按上表机制运行。
+
 ### 3.4 L0 查询理解
 
 - 一次 LLM 输出 `{intent, skills[], years_min, degree, city[], semantic_query}`。
 - 规则兜底（LLM 不可用）：正则抽年限（`(\\d+)\\s*年`）、学历/城市词表；intent 缺省 browse。
 - semantic_query = 去掉精确条件后的剩余语义词（避免"5 年以上 Java"整句 embed 稀释语义）。
 
-### 3.5 L1 结构化预筛（G1 的保证）【0030 已调整，技能/城市等结构化字段已移除】
+### 3.5 L1 结构化预筛【现役口径（0030/P2-19 后）：仅 status=ACTIVE + 库范围】
 
-> **0030 前**：`status=ACTIVE AND years_experience>=n AND highest_degree∈(...) AND current_city∈(...) AND EXISTS(技能)`（技能经 `CandidateSkill` 归一表）。**0030 后**：`Candidate` 仅 `name/phone/email`，上述结构化字段（`years_experience/highest_degree/current_city/skills/CandidateSkill`）已物理删除，**预筛已简化为仅 `status=ACTIVE` + 库范围**；技能/年限/学历/城市改由 `ResumeFile.raw_text + Paragraph` 的文本检索与语义召回承载（见 `resume_search.py:wrapper keyword腿` 及 `0030` 后预筛移除技能维度的修复）。结构化技能预筛已废止，本节仅作历史对照。
+> **现役口径（2026-08-23 对账明确）**：0030 已物理删除 `Candidate` 的结构化条件字段（`years_experience/highest_degree/current_city/skills` 等 13 列）及 `CandidateSkill` 归一表，`Candidate` 仅剩 `name/phone/email/status`；`resume_search.py` 中 `_HARD_SLOTS_ENABLED=False` **写死**，原结构化预筛分支仅为历史对照不再执行。因此检索的结构化约束只剩 **`status=ACTIVE` + `resume_database_ids` 库范围**（后者经 ResumeDatabaseMembership 贯穿预筛、召回、重排与聚合）；技能/年限/学历/城市一律改由 **文本检索承载**：keyword 腿（`raw_text` / 段落 `content` icontains，由 0031 GIN trgm 索引支撑，见 §3.3）+ 稀疏（tsvector）+ 密集（语义）三路。查询理解仍抽取 `years_min/degree/cities` 槽位，但仅作语义提取与 meta 展示，不做 SQL 过滤。
+>
+> **历史对照（0030 前，已废止）**：SQL 为 `status=ACTIVE AND years_experience>=n AND highest_degree∈(...) AND current_city∈(...) AND EXISTS(技能)`（技能经 `CandidateSkill` 归一表）；G1 的「精确条件 100% SQL 保证」自 0030 起仅对 status/库范围成立。
 
-- SQL（0030 前）：`status=ACTIVE AND years_experience>=n AND highest_degree∈(...) AND current_city∈(...) AND EXISTS(技能)`。
-- 接入点（自审修正）：**HR `_recall_dual` 自建 query_set（resume_search.py:103）追加 `.filter(document_id__in=预筛文档集)`**；内核 `pg_vector.query` 虽有 document_id_list 参数，但 HR 路径不经由它。候选->文档映射经 ResumeFile.document_id。
-- 边界：预筛为空 -> 返回空+meta（明确"无满足条件候选人"，不做语义兜底误导）；预筛 > 阈值（建议 2000）-> 放弃预筛转 browse+检索后过滤。
+- SQL（0030 前，历史对照）：`status=ACTIVE AND years_experience>=n AND highest_degree∈(...) AND current_city∈(...) AND EXISTS(技能)`。
+- 接入点（自审修正）：**HR `_recall_dual` 自建 query_set（resume_search.py:103）追加 `.filter(document_id__in=文档集)`**；内核 `pg_vector.query` 虽有 document_id_list 参数，但 HR 路径不经由它。候选->文档映射经 ResumeFile.document_id。（现役仅库范围解析出的文档集走此路径；结构化候选集过滤已废止。）
+- 边界（历史对照，0030 后不触发）：预筛为空 -> 返回空+meta（明确"无满足条件候选人"，不做语义兜底误导）；预筛 > 阈值（建议 2000）-> 放弃预筛转 browse+检索后过滤。
 
 ### 3.6 L2 语义召回
 
@@ -123,13 +131,13 @@ L0 路由层   意图分类+槽位抽取（1 次 LLM，规则兜底）
 LLM 挂     -> 规则槽位抽取 + browse（检索不中断）
 embed 挂   -> 稀疏单路 + 结构化层（sparse_failed 标记沿用）
 rerank 挂  -> RRF 序（现有）
-全挂       -> 纯 SQL 结构化检索（L1 独立可用）
+全挂       -> 纯 SQL 结构化检索（L1 独立可用；0030 后 L1 仅 status+库范围 + name/phone/email 精确查找）
 ```
 
 ## 6. 评测计划（修复缺陷 F）
 
 - 分查询类型标注集各 30+：lookup / conditional / browse / skill-AND。
-- 指标：conditional 类**条件精确率必须=1.0**（SQL 保证验证）；browse 类 recall@3/MRR；skill-AND hit-rate。
+- 指标：conditional 类**条件精确率必须=1.0**（SQL 保证验证；**前提已按 0030 调整**——结构化条件预筛已移除，conditional 类与该指标暂缓，待新口径下重新定义标注集；既有 recall@5=0.92/MRR=0.785 为 0030 前口径基线，重测前仅作参考）；browse 类 recall@3/MRR；skill-AND hit-rate。
 - 消融：title 入 chunks 前后、L1 预筛前后、证据合成前后--同一集复测，每个 Phase 一次。
 
 ## 7. 实施路线
@@ -146,7 +154,7 @@ rerank 挂  -> RRF 序（现有）
 
 1. 掩码前置对 LLM 字段/边界标注质量的影响 -> 规则抽取规避 PII 字段；dataset30 复测边界协议命中率；
 2. 查询理解 +1 LLM 调用（~1s）-> 常见模式缓存；conditional 缺省走规则路径；
-3. candidate_skill 字典治理 -> LLM 抽取+人工抽检+字典冻结；
+3. candidate_skill 字典治理 -> LLM 抽取+人工抽检+字典冻结（**0030 后已废止**：归一表随结构化字段一并删除，风险不再适用）；
 4. λ 调参主观性 -> 绑定消融评测，不接受无评测调参；
 5. title 入 chunks 改变检索行为 -> 仅 HR 知识库生效（杠杆 B），dataset30 前后对比。
 
@@ -155,3 +163,4 @@ rerank 挂  -> RRF 序（现有）
 1. title 入向量杠杆从"改 embedding 输入"精确化为 **chunks 派生**（发现 list_embedding_text.sql 的 text 列已 concat title 但被 chunks 优先级覆盖）；并勘误评估文档中"title 既不进 embedding 也不进 search_vector"的机制描述（结论不变）。
 2. Termbase 从"启用"修正为"**已自动接入**，落地=词条+全量重嵌"（KeywordsSearch.handle 内部已查 Termbase）。
 3. L1 预筛接入点从"内核 pg_vector.query(document_id_list)"修正为"**HR _recall_dual 自建 query_set 加 document_id 过滤**"（HR 不走内核 query）。
+4. **2026-08-23 对账（CODE-REVIEW 失实宣称修订）**：① G1/L1 口径收窄——0030 删除全部结构化条件字段与 CandidateSkill，`hard_slots=False` 写死，现役预筛仅 status+库范围，技能/年限/学历/城市改由文本检索承载（§1 G1、§2 架构图、§3.5、§5、§6 已同步标注）；② 索引三副本章节补记 0031 已落地（pg_trgm GIN：UPPER(raw_text) 与 paragraph UPPER(content)，§3.3）；③ 评测前提（conditional 条件精确率=1.0、recall@5=0.92 等）按 0030 前口径标注为历史基线。

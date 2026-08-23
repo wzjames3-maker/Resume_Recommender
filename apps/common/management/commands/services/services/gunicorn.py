@@ -1,7 +1,7 @@
 import subprocess
 
 from .base import BaseService
-from ..hands import *
+from ..hands import APPS_DIR, DEBUG, HTTP_HOST, HTTP_PORT, os
 
 __all__ = ['GunicornService']
 

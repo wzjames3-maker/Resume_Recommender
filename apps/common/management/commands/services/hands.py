@@ -2,7 +2,7 @@ import logging
 import os
 import sys
 
-from maxkb.const import CONFIG, PROJECT_DIR
+from maxkb.const import CONFIG, LOG_DIR, PROJECT_DIR
 
 try:
     from maxkb import const  # 标准路径（maxkb 在项目根）

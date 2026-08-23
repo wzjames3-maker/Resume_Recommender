@@ -6,4 +6,6 @@
     @date：2026/5/13 14:31
     @desc:
 """
-from .homepage import *
+from .homepage import HomePageAPI
+
+__all__ = ['HomePageAPI']

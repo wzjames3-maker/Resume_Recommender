@@ -4,7 +4,7 @@ import psutil
 import datetime
 import threading
 import subprocess
-from ..hands import *
+from ..hands import CONFIG, DEBUG, LOG_DIR, TMP_DIR, logging, os
 
 
 class BaseService(object):

@@ -6,4 +6,6 @@
     @date：2025/4/14 10:20
     @desc:
 """
-from .user import *
+from .user import User
+
+__all__ = ['User']

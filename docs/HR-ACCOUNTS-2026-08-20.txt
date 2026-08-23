@@ -1,5 +1,0 @@
-workspace_id: default
-hr-admin / Admin123!@#  (ADMIN) id=01a01e6c-958b-7013-b5db-59beb0ef1b40
-hr-operator / Operator123!@#  (OPERATOR) id=01a01e6c-95fc-7ef1-9beb-46635f228ff1
-hr-viewer / Viewer123!@#  (VIEWER) id=01a01e6c-966d-7f82-8114-b13114d79f5a
-test_admin / TestAdmin123!@#  (ADMIN) id=01a01e6c-96dc-7d63-8965-e8478ced7d9a

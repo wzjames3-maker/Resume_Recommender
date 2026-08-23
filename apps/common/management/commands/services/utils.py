@@ -3,7 +3,7 @@ import signal
 import time
 import daemon
 from daemon import pidfile
-from .hands import *
+from .hands import LOG_DIR, TMP_DIR, logging, os
 from .hands import __version__
 from .services.base import BaseService
 

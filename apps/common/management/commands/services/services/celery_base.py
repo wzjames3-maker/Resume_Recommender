@@ -1,7 +1,7 @@
 from django.conf import settings
 
 from .base import BaseService
-from ..hands import *
+from ..hands import APPS_DIR, os
 
 
 class CeleryBaseService(BaseService):
