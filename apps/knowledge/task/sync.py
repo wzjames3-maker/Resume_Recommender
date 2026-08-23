@@ -71,5 +71,5 @@ def sync_web_document(knowledge_id, user_id, source_url_list: List[str], selecto
         try:
             result = Fork(base_fork_url=source_url, selector_list=selector.split(" ")).fork()
             handler(source_url, selector, result)
-        except Exception as e:
+        except Exception:
             pass

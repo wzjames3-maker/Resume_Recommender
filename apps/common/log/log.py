@@ -92,7 +92,7 @@ def log(menu: str, operate, get_user=_get_user, get_ip_address=_get_ip_address, 
             try:
                 if get_operation_object is not None:
                     operation_object = get_operation_object(request, kwargs)
-            except Exception as e:
+            except Exception:
                 pass
             try:
                 return func(view, request, **kwargs)
@@ -154,6 +154,6 @@ def record_log(menu: str, operate: str, request, user: dict = None, status: int 
             operation_object=operation_object or {},
             workspace_id=workspace_id
         ).save()
-    except Exception as e:
+    except Exception:
         # 日志记录失败不应影响主业务流程
         pass

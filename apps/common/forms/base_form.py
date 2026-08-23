@@ -6,7 +6,6 @@
     @date：2023/11/1 16:04
     @desc:
 """
-from typing import Dict
 
 from common.forms import BaseField
 

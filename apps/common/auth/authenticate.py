@@ -66,7 +66,7 @@ class TokenDetails:
         if self.token_details is None and not self.is_load:
             try:
                 self.token_details = signing.loads(self.token)
-            except Exception as e:
+            except Exception:
                 self.is_load = True
         return self.token_details
 

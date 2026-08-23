@@ -17,7 +17,7 @@ class SchedulerService(BaseService):
         print("\n- Start Scheduler Server")
 
         log_format = '%(h)s %(t)s %(L)ss "%(r)s" %(s)s %(b)s '
-        bind = f'127.0.0.1:6060'
+        bind = '127.0.0.1:6060'
         max_requests = 10240 if int(self.worker) > 1 else 0
         cmd = [
             'gunicorn', 'maxkb.wsgi:application',

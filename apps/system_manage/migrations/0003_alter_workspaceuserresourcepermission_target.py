@@ -12,7 +12,7 @@ from common.utils.common import group_by
 def workspace_user_role_mapping_model_exists(workspace_user_role_mapping_model):
     try:
         QuerySet(workspace_user_role_mapping_model).first()
-    except Exception as e:
+    except Exception:
         return False
     return False
 

@@ -11,7 +11,7 @@ from drf_spectacular.utils import OpenApiParameter
 
 from application.serializers.application_version import ApplicationVersionModelSerializer
 from common.mixins.api_mixin import APIMixin
-from common.result import ResultSerializer, PageDataResponse, ResultPageSerializer
+from common.result import ResultSerializer, ResultPageSerializer
 
 
 class ApplicationListVersionResult(ResultSerializer):

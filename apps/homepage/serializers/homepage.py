@@ -15,7 +15,6 @@ from django.db import models
 from django.db.models import QuerySet, Count, Q, UUIDField, Sum, F, BigIntegerField, Value, ExpressionWrapper, \
     IntegerField, Window
 from django.db.models.functions import Cast, Coalesce, RowNumber
-from django.forms import CharField
 from django.http import HttpResponse
 from django.utils import timezone
 from django.utils.translation import gettext_lazy as _, gettext
@@ -324,7 +323,7 @@ class HomePageSerializer(serializers.Serializer):
                 ]
                 worksheet.append(row)
             response = HttpResponse(content_type="application/vnd.ms-excel")
-            response["Content-Disposition"] = f'attachment; filename="data.xlsx"'
+            response["Content-Disposition"] = 'attachment; filename="data.xlsx"'
             workbook.save(response)
             return response
 
@@ -504,7 +503,7 @@ class HomePageSerializer(serializers.Serializer):
                 ]
                 worksheet.append(row)
             response = HttpResponse(content_type="application/vnd.ms-excel")
-            response["Content-Disposition"] = f'attachment; filename="data.xlsx"'
+            response["Content-Disposition"] = 'attachment; filename="data.xlsx"'
             workbook.save(response)
             return response
 
@@ -644,7 +643,7 @@ class HomePageSerializer(serializers.Serializer):
                 ]
                 worksheet.append(row)
             response = HttpResponse(content_type="application/vnd.ms-excel")
-            response["Content-Disposition"] = f'attachment; filename="data.xlsx"'
+            response["Content-Disposition"] = 'attachment; filename="data.xlsx"'
             workbook.save(response)
             return response
 

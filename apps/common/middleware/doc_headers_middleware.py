@@ -131,6 +131,6 @@ class DocHeadersMiddleware(MiddlewareMixin):
                             handle.handle(request, token, token_details.get_token_details)
                             return response
                     return HttpResponse(content)
-                except Exception as e:
+                except Exception:
                     return HttpResponse(content)
         return response

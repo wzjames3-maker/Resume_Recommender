@@ -10,13 +10,10 @@ import os
 
 from django.db import models
 from rest_framework import serializers
-from django.core.cache import cache
 
-from common.constants.cache_version import Cache_Version
 from common.database_model_manage.database_model_manage import DatabaseModelManage
 from common.utils.rsa_util import get_key_pair_by_sql
 from maxkb import settings
-from system_manage.models import SystemSetting
 
 
 class SettingType(models.CharField):

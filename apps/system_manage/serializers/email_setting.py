@@ -6,7 +6,6 @@
     @date：2024/3/19 16:29
     @desc:
 """
-import logging
 
 from django.core.mail.backends.smtp import EmailBackend
 from django.db.models import QuerySet

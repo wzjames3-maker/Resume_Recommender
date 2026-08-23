@@ -7,10 +7,8 @@
     @desc:
 """
 from django.db.models import QuerySet
-from django.http import HttpResponse
 from django.utils.translation import gettext_lazy as _
 from drf_spectacular.utils import extend_schema
-from rest_framework.parsers import MultiPartParser
 from rest_framework.request import Request
 from rest_framework.views import APIView
 
@@ -21,7 +19,7 @@ from application.serializers.application import ApplicationSerializer, Query, Ap
     ApplicationBatchOperateSerializer
 from common import result
 from common.auth import TokenAuth
-from common.auth.authentication import has_permissions, get_is_permissions, check_batch_permissions
+from common.auth.authentication import has_permissions, check_batch_permissions
 from common.constants.permission_constants import PermissionConstants, RoleConstants, ViewPermission, CompareConstants
 from common.log.log import log
 

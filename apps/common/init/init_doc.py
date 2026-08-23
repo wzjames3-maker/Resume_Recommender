@@ -9,7 +9,7 @@
 import hashlib
 
 from django.urls import path, URLPattern
-from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView, SpectacularRedocView
+from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView
 
 from maxkb.const import CONFIG
 

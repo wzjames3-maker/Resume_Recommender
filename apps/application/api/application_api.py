@@ -13,7 +13,7 @@ from drf_spectacular.utils import OpenApiParameter
 from application.serializers.application import ApplicationCreateSerializer, ApplicationListResponse, \
     ApplicationEditSerializer, BatchCleanTimeSerializer
 from common.mixins.api_mixin import APIMixin
-from common.result import ResultSerializer, ResultPageSerializer, DefaultResultSerializer
+from common.result import ResultSerializer, ResultPageSerializer
 from knowledge.serializers.common import BatchSerializer, BatchMoveSerializer
 
 

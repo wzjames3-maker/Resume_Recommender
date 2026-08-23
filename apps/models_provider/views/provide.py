@@ -7,8 +7,6 @@ from rest_framework.views import APIView
 
 from common import result
 from common.auth import TokenAuth
-from common.auth.authentication import has_permissions
-from common.constants.permission_constants import PermissionConstants
 from models_provider.api.provide import ProvideApi
 from models_provider.constants.model_provider_constants import ModelProvideConstants
 from models_provider.serializers.model_serializer import get_default_model_params_setting

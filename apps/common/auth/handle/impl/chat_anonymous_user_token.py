@@ -14,7 +14,6 @@ from common.auth.common import ChatUserToken
 from common.auth.handle.auth_base_handle import AuthBaseHandle
 from common.constants.authentication_type import AuthenticationType
 from common.constants.permission_constants import RoleConstants, Permission, Group, Operate, ChatAuth
-from common.database_model_manage.database_model_manage import DatabaseModelManage
 from common.exception.app_exception import AppAuthenticationFailed
 from maxkb.settings import edition
 

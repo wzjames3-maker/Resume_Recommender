@@ -7,7 +7,6 @@
 @desc: 对话step Base实现
 """
 
-import json
 import time
 import traceback
 from typing import List
@@ -21,7 +20,6 @@ from application.models import (
     ApplicationLongTermMemory,
     ChatUserType,
 )
-from common.exception.app_exception import AppApiException
 from common.utils.logger import maxkb_logger
 from django.db.models import QuerySet
 from django.http import StreamingHttpResponse
@@ -248,7 +246,7 @@ def event_content(
             try:
                 request_token = chat_model.get_num_tokens_from_messages(message_list)
                 response_token = chat_model.get_num_tokens(all_text)
-            except Exception as e:
+            except Exception:
                 request_token = 0
                 response_token = 0
         else:
@@ -281,7 +279,7 @@ def event_content(
             add_access_num(chat_user_id, chat_user_type, manage.context.get("application_id"))
     except BaseException as e:
         if isinstance(e, GeneratorExit):
-            maxkb_logger.error(f"Generator was closed (client disconnected)")
+            maxkb_logger.error("Generator was closed (client disconnected)")
         else:
             maxkb_logger.error(f"{str(e)}:{traceback.format_exc()}")
             # 内核审查 P1-3：异常细节只进日志，回答内容为通用文案（不泄露内部错误、不污染 chat_record）
@@ -704,7 +702,7 @@ class BaseChatStep(IChatStep):
                     ],
                 },
             )
-        except Exception as e:
+        except Exception:
             # 内核审查 P1-3：异常细节只进日志，回答内容为通用文案（不泄露内部错误、不污染 chat_record）
             all_text = _("Sorry, failed to generate the answer, please try again later")
             write_context(self, manage, 0, 0, all_text)

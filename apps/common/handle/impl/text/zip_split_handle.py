@@ -153,7 +153,7 @@ def get_file_name(file_name):
         file_name_code = file_name.encode("cp437")
         charset = detect(file_name_code)["encoding"]
         return file_name_code.decode(charset)
-    except Exception as e:
+    except Exception:
         return file_name
 
 

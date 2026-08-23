@@ -1,4 +1,3 @@
-import logging
 from logging import StreamHandler
 from threading import get_ident
 

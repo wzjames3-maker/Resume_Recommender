@@ -21,7 +21,7 @@ def handle_sheet(file_name, sheet, image_dict):
     try:
         title_row_list = next(rows)
         title_row_list = [row.value for row in title_row_list]
-    except Exception as e:
+    except Exception:
         return {'name': file_name, 'paragraphs': []}
     if len(title_row_list) == 0:
         return {'name': file_name, 'paragraphs': []}
@@ -60,7 +60,7 @@ class XlsxParseQAHandle(BaseParseQAHandle):
             try:
                 image_dict: dict = xlsx_embed_cells_images(io.BytesIO(buffer))
                 save_image([item for item in image_dict.values()])
-            except Exception as e:
+            except Exception:
                 image_dict = {}
             worksheets = workbook.worksheets
             worksheets_size = len(worksheets)

@@ -22,7 +22,7 @@ from common.exception.app_exception import AppApiException, AppUnauthorizedFaile
 from common.utils.common import post
 from django.db import transaction
 from django.db.models import QuerySet
-from django.db.models.aggregates import Max, Min
+from django.db.models.aggregates import Max
 from django.utils.translation import gettext
 from django.utils.translation import gettext_lazy as _
 from knowledge.models import Document, Knowledge, Paragraph, Problem, ProblemParagraphMapping

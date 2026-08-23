@@ -7,7 +7,7 @@ from rest_framework.views import APIView
 from common.auth import TokenAuth
 from common.auth.authentication import has_permissions
 from common.constants.permission_constants import Permission, Group, Operate, RoleConstants, ViewPermission, \
-    PermissionConstants, CompareConstants
+    CompareConstants
 from common.log.log import log
 from common.result import result
 from folders.api.folder import FolderCreateAPI, FolderEditAPI, FolderReadAPI, FolderTreeReadAPI, FolderDeleteAPI

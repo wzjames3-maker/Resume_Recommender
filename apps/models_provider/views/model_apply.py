@@ -12,8 +12,6 @@ from django.utils.translation import gettext_lazy as _
 from drf_spectacular.utils import extend_schema
 from rest_framework.views import APIView
 
-from common.auth.authentication import has_permissions
-from common.constants.permission_constants import PermissionConstants
 from common.result import result
 from models_provider.api.model import DefaultModelResponse
 from models_provider.serializers.model_apply_serializers import ModelApplySerializers

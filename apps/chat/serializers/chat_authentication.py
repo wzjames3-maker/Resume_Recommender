@@ -33,7 +33,7 @@ class AnonymousAuthenticationSerializer(serializers.Serializer):
             # 校验token
             if token is not None:
                 token_details = signing.loads(token[7:])
-        except Exception as e:
+        except Exception:
             pass
         if with_valid:
             self.is_valid(raise_exception=True)

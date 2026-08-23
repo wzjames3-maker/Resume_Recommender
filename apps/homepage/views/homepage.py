@@ -10,14 +10,13 @@ from drf_spectacular.utils import extend_schema
 from rest_framework.request import Request
 from rest_framework.views import APIView
 
-from application.api.application_stats import ApplicationStatsAPI
 from common import result
 from common.auth import TokenAuth
 from common.auth.authentication import has_permissions
 from common.constants.permission_constants import PermissionConstants, RoleConstants
 from homepage.api.home_page_api import ApplicationTokensRankingAPI, ApplicationQuestionRankingAPI, UserTokensRankingAPI, \
     ApplicationAggregationAPI, KnowledgeAggregationAPI, ModelAggregationAPI, \
-    ApplicationMonitoringAPI, RankingBaseAPI, TokensAggregationAPI, RankingBaseExportAPI
+    ApplicationMonitoringAPI, TokensAggregationAPI, RankingBaseExportAPI
 from homepage.serializers.homepage import HomePageSerializer
 from django.utils.translation import gettext_lazy as _
 

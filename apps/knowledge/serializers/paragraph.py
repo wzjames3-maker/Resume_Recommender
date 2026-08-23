@@ -624,7 +624,7 @@ class ParagraphSerializers(serializers.Serializer):
                 generate_related_by_paragraph_id_list.delay(
                     document_id, paragraph_id_list, model_id, model_params_setting, prompt
                 )
-            except AlreadyQueued as e:
+            except AlreadyQueued:
                 raise AppApiException(500, _("The task is being executed, please do not send it again."))
 
     class Migrate(serializers.Serializer):

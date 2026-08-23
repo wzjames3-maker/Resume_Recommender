@@ -362,7 +362,7 @@ class KnowledgeSerializer(serializers.Serializer):
             embedding_model_id = get_embedding_model_id_by_knowledge_id(self.data.get("knowledge_id"))
             try:
                 embedding_by_knowledge.delay(knowledge_id, embedding_model_id)
-            except AlreadyQueued as e:
+            except AlreadyQueued:
                 raise AppApiException(500, _("Failed to send the vectorization task, please try again later!"))
 
         def generate_related(self, instance: Dict, with_valid=True):
@@ -391,7 +391,7 @@ class KnowledgeSerializer(serializers.Serializer):
             ListenerManagement.get_aggregation_document_status_by_knowledge_id(knowledge_id)()
             try:
                 generate_related_by_knowledge_id.delay(knowledge_id, model_id, model_params_setting, prompt, state_list)
-            except AlreadyQueued as e:
+            except AlreadyQueued:
                 raise AppApiException(500, _("Failed to send the vectorization task, please try again later!"))
 
         def list_application(self, with_valid=True):

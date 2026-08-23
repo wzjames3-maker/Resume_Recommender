@@ -6,14 +6,10 @@
     @date：2025/4/28 18:13
     @desc:
 """
-from drf_spectacular.types import OpenApiTypes
-from drf_spectacular.utils import OpenApiParameter
 
 from common.mixins.api_mixin import APIMixin
 from common.result import ResultSerializer
 from system_manage.serializers.email_setting import EmailSettingSerializer
-from system_manage.serializers.user_resource_permission import UserResourcePermissionResponse, \
-    UpdateUserResourcePermissionRequest
 
 
 class EmailResponse(ResultSerializer):

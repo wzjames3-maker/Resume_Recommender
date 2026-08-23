@@ -26,7 +26,6 @@ from application.chat_pipeline.step.reset_problem_step.impl.base_reset_problem_s
 from application.chat_pipeline.step.search_dataset_step.impl.base_search_dataset_step import BaseSearchDatasetStep
 from application.models import Application, ApplicationTypeChoices, \
     ChatUserType, ApplicationChatUserStats, ApplicationAccessToken, ChatRecord, Chat, ApplicationVersion
-from application.serializers.application import ApplicationOperateSerializer
 from application.serializers.common import ChatInfo
 from common.database_model_manage.database_model_manage import DatabaseModelManage
 from common.exception.app_exception import AppApiException, AppChatNumOutOfBoundsFailed, ChatException

@@ -4,7 +4,6 @@ import io
 import traceback
 
 from charset_normalizer import detect
-from common.handle.base_parse_qa_handle import get_title_row_index_dict, get_row_value
 from common.handle.base_parse_table_handle import BaseParseTableHandle
 from common.utils.logger import maxkb_logger
 

@@ -43,7 +43,7 @@ def handle_sheet(file_name, sheet, image_dict, limit: int):
         title_md_content = row_to_md(title_row_list, image_dict)
         title_md_content += '| ' + ' | '.join(
             ['---' if cell is not None else '' for cell in title_row_list]) + ' |\n'
-    except Exception as e:
+    except Exception:
         return result
     if len(title_row_list) == 0:
         return result
@@ -115,7 +115,7 @@ class XlsxSplitHandle(BaseSplitHandle):
             try:
                 image_dict: dict = xlsx_embed_cells_images(io.BytesIO(buffer))
                 save_image([item for item in image_dict.values()])
-            except Exception as e:
+            except Exception:
                 image_dict = {}
             worksheets = workbook.worksheets
             worksheets_size = len(worksheets)

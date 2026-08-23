@@ -118,7 +118,7 @@ class BaseChatOpenAI(ChatOpenAI):
         if self.usage_metadata is None or self.usage_metadata == {}:
             try:
                 return super().get_num_tokens(text)
-            except Exception as e:
+            except Exception:
                 tokenizer = TokenizerManage.get_tokenizer()
                 return len(tokenizer.encode(text))
         return self.get_last_generation_info().get('output_tokens',

@@ -1,7 +1,6 @@
 # coding=utf-8
 from drf_spectacular.types import OpenApiTypes
 from drf_spectacular.utils import OpenApiParameter
-from rest_framework import serializers
 
 from common.mixins.api_mixin import APIMixin
 from common.result import ResultSerializer, DefaultResultSerializer

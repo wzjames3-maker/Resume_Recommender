@@ -9,7 +9,6 @@ from common.auth.handle.impl.user_token import get_auth
 from common.constants.authentication_type import AuthenticationType
 from common.database_model_manage.database_model_manage import DatabaseModelManage
 from common.exception.app_exception import AppApiException, AppUnauthorizedFailed, NotFound404
-from common.utils.common import common_convert_value
 from django.db.models import QuerySet
 from django.http import HttpResponse
 from django.utils.translation import gettext

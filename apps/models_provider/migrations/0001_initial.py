@@ -3,7 +3,6 @@ import django.db.models.deletion
 import uuid_utils.compat
 from django.db import migrations, models
 
-from models_provider.models import Status
 
 
 class Migration(migrations.Migration):

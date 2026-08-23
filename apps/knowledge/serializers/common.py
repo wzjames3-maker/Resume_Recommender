@@ -28,7 +28,7 @@ from knowledge.models import Paragraph, Problem, ProblemParagraphMapping, Knowle
 from maxkb.conf import PROJECT_DIR
 from system_manage.utils.resource_mapping import get_instance_resource, knowledge_instance_field_call_dict, save_resource_mapping
 from models_provider.tools import get_model, get_model_default_params
-from system_manage.models.resource_mapping import ResourceMapping, ResourceType
+from system_manage.models.resource_mapping import ResourceType
 
 
 class MetaSerializer(serializers.Serializer):

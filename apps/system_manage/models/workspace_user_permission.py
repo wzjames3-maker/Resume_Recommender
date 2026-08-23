@@ -11,7 +11,7 @@ import uuid_utils.compat as uuid
 from django.contrib.postgres.fields import ArrayField
 from django.db import models
 
-from common.constants.permission_constants import Group, ResourcePermissionGroup, ResourceAuthType, \
+from common.constants.permission_constants import Group, ResourceAuthType, \
     ResourcePermissionRole, ResourcePermission
 from users.models import User
 

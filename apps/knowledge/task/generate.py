@@ -35,7 +35,7 @@ def generate_problem_by_paragraph(paragraph, llm_model, prompt):
             save_problem(paragraph.knowledge_id, paragraph.document_id, paragraph.id, problem)
         ListenerManagement.update_status(QuerySet(Paragraph).filter(id=paragraph.id), TaskType.GENERATE_PROBLEM,
                                          State.SUCCESS)
-    except Exception as e:
+    except Exception:
         ListenerManagement.update_status(QuerySet(Paragraph).filter(id=paragraph.id), TaskType.GENERATE_PROBLEM,
                                          State.FAILURE)
 
@@ -68,7 +68,7 @@ def generate_related_by_knowledge_id(knowledge_id, model_id, model_params_settin
     for document in document_list:
         try:
             generate_related_by_document_id.delay(document.id, model_id, model_params_setting, prompt, state_list)
-        except Exception as e:
+        except Exception:
             pass
 
 

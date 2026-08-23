@@ -51,13 +51,13 @@ class OpenAIChatModel(MaxKBBaseModel, BaseChatOpenAI):
     def get_num_tokens_from_messages(self, messages: List[BaseMessage]) -> int:
         try:
             return super().get_num_tokens_from_messages(messages)
-        except Exception as e:
+        except Exception:
             tokenizer = TokenizerManage.get_tokenizer()
             return sum([len(tokenizer.encode(get_buffer_string([m]))) for m in messages])
 
     def get_num_tokens(self, text: str) -> int:
         try:
             return super().get_num_tokens(text)
-        except Exception as e:
+        except Exception:
             tokenizer = TokenizerManage.get_tokenizer()
             return len(tokenizer.encode(text))

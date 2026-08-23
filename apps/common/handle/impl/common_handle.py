@@ -8,7 +8,6 @@
 """
 import io
 import traceback
-from functools import reduce
 from io import BytesIO
 from xml.etree.ElementTree import fromstring
 from zipfile import ZipFile

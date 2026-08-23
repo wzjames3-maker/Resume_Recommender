@@ -48,7 +48,7 @@ class BaseResetProblemStep(IResetProblemStep):
         try:
             request_token = chat_model.get_num_tokens_from_messages(message_list)
             response_token = chat_model.get_num_tokens(padding_problem)
-        except Exception as e:
+        except Exception:
             request_token = 0
             response_token = 0
         self.context['message_tokens'] = request_token

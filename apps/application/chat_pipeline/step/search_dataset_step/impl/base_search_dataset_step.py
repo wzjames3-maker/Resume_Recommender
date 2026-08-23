@@ -11,7 +11,6 @@ from typing import List, Dict
 
 from django.db.models import QuerySet
 from django.utils.translation import gettext_lazy as _
-from rest_framework.utils.formatting import lazy_format
 
 from application.chat_pipeline.I_base_chat_pipeline import ParagraphPipelineModel
 from application.chat_pipeline.step.search_dataset_step.i_search_dataset_step import ISearchDatasetStep
@@ -24,7 +23,6 @@ from knowledge.models import Paragraph, Knowledge
 from knowledge.models import SearchMode
 from knowledge.vector.base_vector import normalize_for_embedding
 from maxkb.conf import PROJECT_DIR
-from models_provider.models import Model
 from models_provider.tools import get_model, get_model_by_id, get_model_default_params
 
 

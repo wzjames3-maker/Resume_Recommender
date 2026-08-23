@@ -16,7 +16,6 @@ from rest_framework import serializers
 
 from application.models import ApplicationAccessToken, Application
 from common.constants.cache_version import Cache_Version
-from common.database_model_manage.database_model_manage import DatabaseModelManage
 from common.exception.app_exception import AppApiException
 
 

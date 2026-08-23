@@ -59,7 +59,7 @@ def get_paragraph_element_images(paragraph_element, doc: Document, images_list, 
             if _images is not None and len(_images) > 0:
                 for image in _images:
                     images.append({'image': image, 'get_image_id_handle': get_image_id_handle})
-        except Exception as e:
+        except Exception:
             pass
     return images
 
@@ -86,7 +86,7 @@ def get_paragraph_element_txt(paragraph_element, doc: Document, images_list, get
 def get_paragraph_txt(paragraph: Paragraph, doc: Document, images_list, get_image_id):
     try:
         return "".join([get_paragraph_element_txt(e, doc, images_list, get_image_id) for e in paragraph._element])
-    except Exception as e:
+    except Exception:
         return ""
 
 
@@ -95,7 +95,7 @@ def get_cell_text(cell, doc: Document, images_list, get_image_id):
         return "".join(
             [get_paragraph_txt(paragraph, doc, images_list, get_image_id) for paragraph in cell.paragraphs]).replace(
             "\n", '</br>')
-    except Exception as e:
+    except Exception:
         return ""
 
 
@@ -136,7 +136,7 @@ def get_title_level(paragraph: Paragraph):
                 for _value, index in zip(title_font_list, range(len(title_font_list))):
                     if pt >= _value[0] and pt < _value[1] and any([run.font.bold for run in paragraph.runs]):
                         return index + 1
-    except Exception as e:
+    except Exception:
         pass
     return None
 

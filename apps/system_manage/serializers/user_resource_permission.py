@@ -19,7 +19,7 @@ from rest_framework import serializers
 
 from application.models import Application
 from common.constants.cache_version import Cache_Version
-from common.constants.permission_constants import get_default_workspace_user_role_mapping_list, RoleConstants, \
+from common.constants.permission_constants import RoleConstants, \
     ResourcePermission, ResourcePermissionRole, ResourceAuthType
 from common.database_model_manage.database_model_manage import DatabaseModelManage
 from common.db.search import native_search, native_page_search, get_dynamics_model

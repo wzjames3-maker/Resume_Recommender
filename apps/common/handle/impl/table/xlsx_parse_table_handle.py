@@ -1,6 +1,5 @@
 # coding=utf-8
 import io
-import logging
 import traceback
 
 from openpyxl import load_workbook
@@ -65,7 +64,7 @@ class XlsxParseTableHandle(BaseParseTableHandle):
             try:
                 image_dict: dict = xlsx_embed_cells_images(io.BytesIO(buffer))
                 save_image([item for item in image_dict.values()])
-            except Exception as e:
+            except Exception:
                 image_dict = {}
             result = []
             for sheetname in wb.sheetnames:

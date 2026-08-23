@@ -6,7 +6,6 @@
     @date：2023/9/5 19:29
     @desc:
 """
-import logging
 import traceback
 
 from rest_framework.exceptions import ValidationError, ErrorDetail, APIException
@@ -54,7 +53,7 @@ def validation_error_to_result(exc: ValidationError):
         if v is None:
             return result.error(str(exc.detail))
         return result.error(str(v))
-    except Exception as e:
+    except Exception:
         return result.error(str(exc.detail))
 
 

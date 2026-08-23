@@ -6,7 +6,6 @@
     @date：2023/9/5 19:29
     @desc:
 """
-import logging
 import traceback
 
 from rest_framework.exceptions import ValidationError, ErrorDetail, APIException
@@ -55,7 +54,7 @@ def validation_error_to_result(exc: ValidationError):
         if v is None:
             return result.error(str(exc.detail))
         return result.error(str(v))
-    except Exception as e:
+    except Exception:
         return result.error(str(exc.detail))
 
 
@@ -77,7 +76,7 @@ def find_err_detail(exc_detail):
             if isinstance(_value, dict) and len(_value.keys()) > 0:
                 try:
                     return find_err_detail(ReturnDict(_value, serializer=exc_detail.serializer.fields[key]))
-                except Exception as e:
+                except Exception:
                     return _value
     if isinstance(exc_detail, list):
         for v in exc_detail:
@@ -89,7 +88,7 @@ def find_err_detail(exc_detail):
 def get_label(key, exc_detail):
     try:
         return exc_detail.serializer.fields[key].label
-    except Exception as e:
+    except Exception:
         return key
 
 
