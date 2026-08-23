@@ -43,7 +43,12 @@ SECRET_KEY = _secret
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = CONFIG.get_debug()
 
-ALLOWED_HOSTS = ['*']
+# ALLOWED_HOSTS: 生产通过 MAXKB_ALLOWED_HOSTS 逗号分隔配置收紧；DEBUG 时默认放行便于本地开发/测试
+_ALLOWED_HOSTS_ENV = os.environ.get("MAXKB_ALLOWED_HOSTS", "").strip()
+if _ALLOWED_HOSTS_ENV:
+    ALLOWED_HOSTS = [h.strip() for h in _ALLOWED_HOSTS_ENV.split(",") if h.strip()]
+else:
+    ALLOWED_HOSTS = ['*'] if CONFIG.get_debug() else []
 
 # Application definition
 
@@ -214,7 +219,24 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 edition = 'CE'
 
-SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+# 仅当显式信任代理时才信任 X-Forwarded-Proto，避免任意客户端伪造 https
+if os.environ.get("MAXKB_TRUST_PROXY", "").lower() in ("true", "1", "yes", "on"):
+    SECURE_PROXY_SSL_HEADER = ('HTTP_X_FORWARDED_PROTO', 'https')
+
+# Cookie 安全：显式声明 HttpOnly，Secure 随 MAXKB_COOKIE_SECURE 或生产 (DEBUG=False) 自动开启
+SESSION_COOKIE_HTTPONLY = True
+CSRF_COOKIE_HTTPONLY = False  # 前端不读 CSRF cookie，保持与现有 TokenAuth 一致
+_COOKIE_SECURE_ENV = os.environ.get("MAXKB_COOKIE_SECURE", "").strip().lower()
+if _COOKIE_SECURE_ENV in ("true", "1", "yes", "on"):
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+elif _COOKIE_SECURE_ENV in ("false", "0", "no", "off"):
+    SESSION_COOKIE_SECURE = False
+    CSRF_COOKIE_SECURE = False
+else:
+    # 未显式配置时：生产默认 Secure，开发保持 False 便于 http 调试
+    SESSION_COOKIE_SECURE = not CONFIG.get_debug()
+    CSRF_COOKIE_SECURE = False
 
 if os.environ.get('MAXKB_REDIS_SENTINEL_SENTINELS') is not None:
     DJANGO_REDIS_CONNECTION_FACTORY = "django_redis.pool.SentinelConnectionFactory"

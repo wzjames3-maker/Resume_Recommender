@@ -3,6 +3,7 @@
 
 from datetime import datetime, time
 
+from django.conf import settings
 from django.db.models import Count, F, Q, Sum
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
@@ -25,6 +26,20 @@ from hr.models import (
     HrAgentTriggerType,
     ResumeFile,
 )
+
+try:
+    from hr.agents.copilot_runner_pydantic import run_interview_copilot as run_interview_copilot_pydantic
+    from hr.agents.jd_runner_pydantic import run_jd_draft_agent as run_jd_draft_agent_pydantic
+    from hr.agents.runner_pydantic import run_screening_agent as run_screening_agent_pydantic
+    from hr.agents.sourcing_runner_pydantic import run_sourcing_agent as run_sourcing_agent_pydantic
+
+    _PYDANTIC_AVAILABLE = True
+except ImportError:
+    _PYDANTIC_AVAILABLE = False
+
+
+def _use_pydantic():
+    return _PYDANTIC_AVAILABLE and getattr(settings, "USE_PYDANTIC_AI", False)
 
 
 _AGENT_TYPES = {"SCREENING", "JD_DRAFT", "INTERVIEW_COPILOT", "SOURCING", "COMMUNICATION_DRAFT"}
@@ -283,7 +298,8 @@ def retry_run(workspace_id, run_id, user_id, data=None):
         raise AppApiException(400, "only FAILED or SKIPPED runs can be retried")
     meta = run.input_meta or {}
     if run.agent_type == "SCREENING":
-        output = run_screening_agent(
+        _runner = run_screening_agent_pydantic if _use_pydantic() else run_screening_agent
+        output = _runner(
             meta.get("application_id") or run.ref_object_id,
             trigger_type=HrAgentTriggerType.MANUAL,
             user_id=user_id,
@@ -291,14 +307,16 @@ def retry_run(workspace_id, run_id, user_id, data=None):
             resume_database_ids=meta.get("resume_database_ids") or [],
         )
     elif run.agent_type == "JD_DRAFT":
-        output = run_jd_draft_agent(
+        _runner = run_jd_draft_agent_pydantic if _use_pydantic() else run_jd_draft_agent
+        output = _runner(
             meta.get("job_id") or run.ref_object_id,
             trigger_type=HrAgentTriggerType.MANUAL,
             user_id=user_id,
             workspace_id=workspace_id,
         )
     elif run.agent_type == "SOURCING":
-        output = run_sourcing_agent(
+        _runner = run_sourcing_agent_pydantic if _use_pydantic() else run_sourcing_agent
+        output = _runner(
             meta.get("job_id") or run.ref_object_id,
             trigger_type=HrAgentTriggerType.MANUAL,
             user_id=user_id,
@@ -316,7 +334,8 @@ def retry_run(workspace_id, run_id, user_id, data=None):
             if not feedback:
                 raise AppApiException(400, "feedback is required to retry feedback copilot")
             retry_data["feedback"] = feedback
-        output = run_interview_copilot(
+        _runner = run_interview_copilot_pydantic if _use_pydantic() else run_interview_copilot
+        output = _runner(
             meta.get("interview_id") or run.ref_object_id,
             data=retry_data,
             user_id=user_id,

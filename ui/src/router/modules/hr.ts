@@ -71,7 +71,7 @@ const hrRouter = {
     {
       path: '/hr/jobs/new',
       name: 'hr-job-create',
-      meta: { title: '新建职位', activeMenu: '/hr', sameRoute: 'hr', permission: [HrRoleConst.OPERATOR] },
+      meta: { title: '新建职位', activeMenu: '/hr', sameRoute: 'hr', permission: [HrRoleConst.ADMIN] },
       component: () => import('@/views/hr/jobs/create.vue'),
     },
     {

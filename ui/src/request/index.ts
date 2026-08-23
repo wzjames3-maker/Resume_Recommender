@@ -66,7 +66,7 @@ instance.interceptors.response.use(
     }
     if (err.response?.status === 404) {
       if (!err.response.config.url.includes('/application/authentication')) {
-        router.push('/404 ')
+        router.push('/404')
       }
     }
     if (err.response?.status === 401) {
@@ -84,6 +84,20 @@ instance.interceptors.response.use(
           ? err.response.data.message
           : 'No permission to access',
       )
+    }
+    if (err.response?.status >= 500) {
+      MsgError(
+        err.response.data && err.response.data.message
+          ? err.response.data.message
+          : `服务异常，请稍后重试 (${err.response.status})`,
+      )
+    } else if (!err.response) {
+      // 网络错误（DNS/连接拒绝/离线等，err.response 为空）
+      if (err.message && err.code !== 'ECONNABORTED') {
+        MsgError(err.message.includes('Network Error') ? '网络异常，请检查网络连接' : err.message)
+      } else if (!err.code) {
+        MsgError('网络异常，请检查网络连接')
+      }
     }
     return Promise.reject(err)
   },

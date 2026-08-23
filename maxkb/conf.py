@@ -72,10 +72,14 @@ class Config(dict):
 
     def get_db_setting(self) -> dict:
         options = {}
-        # PG 连接加密（PRD §8 / DEPLOYMENT.md）：MAXKB_DB_SSLMODE=require 时启用
+        # PG 连接加密（PRD §8 / DEPLOYMENT.md）：MAXKB_DB_SSLMODE=require 时启用，白名单校验防拼写错误
+        _DB_SSLMODE_ALLOWLIST = ("disable", "allow", "prefer", "require", "verify-ca", "verify-full")
         sslmode = self.get("DB_SSLMODE")
         if sslmode:
-            options["sslmode"] = sslmode
+            if str(sslmode).lower() not in _DB_SSLMODE_ALLOWLIST:
+                logger.warning(f"Invalid DB_SSLMODE '{sslmode}' ignored, allowed: {_DB_SSLMODE_ALLOWLIST}")
+            else:
+                options["sslmode"] = str(sslmode).lower()
         return {
             "NAME": self.get("DB_NAME"),
             "HOST": self.get("DB_HOST"),
