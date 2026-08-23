@@ -217,8 +217,6 @@ class UserResourcePermissionSerializer(serializers.Serializer):
         if with_valid:
             self.is_valid(raise_exception=True)
             UserResourcePermissionUserListRequest(data=instance).is_valid(raise_exception=True)
-        workspace_id = self.data.get("workspace_id")
-        user_id = self.data.get("user_id")
         # 用户权限列表
         user_resource_permission_list = native_search(self.get_queryset(instance), get_file_content(
             os.path.join(PROJECT_DIR, "apps", "system_manage", 'sql', sql_map.get(self.data.get('auth_target_type')))))
@@ -230,8 +228,6 @@ class UserResourcePermissionSerializer(serializers.Serializer):
         if with_valid:
             self.is_valid(raise_exception=True)
             UserResourcePermissionUserListRequest(data=instance).is_valid(raise_exception=True)
-        workspace_id = self.data.get("workspace_id")
-        user_id = self.data.get("user_id")
         # 用户对应的资源权限分页列表
         user_resource_permission_page_list = native_page_search(current_page, page_size, self.get_queryset(instance),
                                                                 get_file_content(

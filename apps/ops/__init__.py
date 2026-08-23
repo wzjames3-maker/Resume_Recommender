@@ -6,4 +6,6 @@
     @date：2024/8/16 14:47
     @desc:
 """
-from .celery import app as celery_app
+from .celery import app as celery_app  # noqa: F401 - re-export for Celery autodiscovery
+
+__all__ = ["celery_app"]

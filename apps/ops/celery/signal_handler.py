@@ -15,7 +15,10 @@ from .decorator import get_after_app_ready_tasks, get_after_app_shutdown_clean_t
 from .logger import CeleryThreadTaskFileHandler
 
 logger = logging.getLogger(__file__)
-safe_str = lambda x: x
+
+
+def safe_str(x):
+    return x
 
 
 def init_scheduler():

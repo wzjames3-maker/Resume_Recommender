@@ -194,8 +194,7 @@ class BaseService(object):
         if os.path.isfile(self.log_filepath) and not os.path.isfile(backup_log_path):
             logging.info(f'Rotate log file: {self.log_filepath} => {backup_log_path}')
             shutil.copy(self.log_filepath, backup_log_path)
-            with open(self.log_filepath, 'w') as f:
-                pass
+            open(self.log_filepath, 'w').close()
 
         to_delete_date = now - datetime.timedelta(days=self.LOG_KEEP_DAYS)
         to_delete_dir = os.path.join(LOG_DIR, to_delete_date.strftime('%Y-%m-%d'))
