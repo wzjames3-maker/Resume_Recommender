@@ -27,10 +27,27 @@ MaxKB RAG 内核 + 传统 ATS 流程 + “提议-确认-执行”的 Agent（AI 
 | **企业知识库（RAG 内核）** | 文档解析与切片、`pgvector + tsvector` 双路召回、RRF 融合、rerank、Small-to-Big 精排、对话 API（SSE / OpenAI 兼容协议） |
 | **简历语义检索** | `pgvector + tsvector → RRF(k=60) → bge-reranker-v2-m3 → Small-to-Big`；`recall@5 = 0.92`；支持跨库范围检索，简历原文通过 RAG 检索，人才画像无需人工录入 |
 | **简历库体系** | 总库 + 多业务库、多对多成员关系、同库资源复用、按 `workspace + SHA-256` 去重、库归档与库内上下文 |
-| **招聘流程（ATS）** | `Candidate / Job / CandidateAssignment / Interview / ResumeFile` 完整业务对象；`JobStage` 可配置招聘 Pipeline；状态机守卫（`PENDING_SCREEN → SCREEN_PASSED → INTERVIEWING → OFFER → HIRED` 及受控终止），越权迁移一律拒绝 |
+| **招聘流程（ATS）** | `Candidate`（候选人）`/ Job`（招聘需求）`/ Application`（职位申请流程）`/ Interview`（面试）`/ ResumeFile`（简历文件）完整业务对象；`JobStage` 可配置招聘 Pipeline；状态机守卫（`PENDING_SCREEN → SCREEN_PASSED → INTERVIEWING → OFFER → HIRED` 及受控终止），越权迁移一律拒绝 |
 | **不可变账本与审计** | `ApplicationEvent` 记录每次操作、`HrAuditLog` 全量审计（对象、动作、结果、IP）；误拒绝可由管理员恢复并记录原因 |
 | **AI 助手（Agent）** | D1 简历初筛（默认关闭，按 workspace 灰度）、D2 JD/面试 Copilot、D3 寻源与沟通草稿、D4 Agent 工作台；统一 `HrAgentRun → HrAgentProposal`，`Propose → Confirm → Execute`，AI 不自动淘汰候选人、不发放 Offer |
 | **权限与多租户** | 招聘查看者 / 操作员 / 管理员三级访问资格；所有资源持久化 `workspace_id`，服务端从认证主体派生租户，跨租户资源按不存在处理 |
+
+### 核心业务对象速览
+
+代码与设计文档中大量使用英文对象名，与中文业务的对应关系如下：
+
+| 对象（代码/文档） | 中文 | 一句话说明 |
+|---|---|---|
+| `Candidate` | 候选人 | 人才库里的人：仅登记姓名、手机号、邮箱与状态（`ACTIVE` 有效 / `ARCHIVED` 归档）；简历原文通过 RAG 检索，不手工录技能画像 |
+| `Job` | 招聘需求（职位） | 一项正在招人的需求：部门、城市、职级、计划人数、技能要求、负责人与状态（草稿 / 招聘中 / 暂停 / 关闭） |
+| `Application` | 职位申请流程 | **候选人 × 职位**的关联记录：渠道（投递 / 主动寻访 / 内推 / 猎头推荐）、当前进度（`PENDING_SCREEN` 待筛选 → `SCREEN_PASSED` 筛选通过 → `INTERVIEWING` 面试中 → `OFFER` → `HIRED` 录用 / `REJECTED` 拒绝）、当前负责人；是招聘流程的核心载体 |
+| `Interview` | 面试 | 候选人在某职位的面试轮次、面试官、时间与反馈 |
+| `ResumeFile` | 简历文件 | 上传的简历原件（docx / txt）：按内容哈希去重、异步解析提取文本、进入语义索引供检索；同一切片不重复入库 |
+| `JobStage` | 招聘阶段 | 可配置的招聘 Pipeline 阶段序列 |
+| `ApplicationEvent` | 流程事件 | 每次状态或操作变更的不可变记录（审计账本），可解释、可追溯 |
+| `HrAgentRun` / `HrAgentProposal` | AI 助手运行 / 提议 | AI 助手的执行记录与提交给人工的"提议"，遵循 `Propose → Confirm → Execute`（提议 → 确认 → 执行），AI 不自动决策 |
+
+> 历史说明：早期文档中的 `CandidateAssignment` 即现在的 `Application`（职位申请流程），二者指同一业务对象。
 
 ## 3. 架构概览
 
